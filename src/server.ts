@@ -1,8 +1,9 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { EXTENSION_REPOSITORY } from "./errors.js";
+import { OK, serialize } from "./compact.js";
 import { StarUMLClient } from "./staruml-client.js";
-import { runTool, textResult } from "./tool-result.js";
+import { jsonResult, resourceError, runTool, textResult } from "./tool-result.js";
 
 const SUPPORTED_MERMAID_DIAGRAMS = [
   "classDiagram",
@@ -14,6 +15,19 @@ const SUPPORTED_MERMAID_DIAGRAMS = [
   "stateDiagram",
 ] as const;
 
+export const DIAGRAMS_URI = "staruml://diagrams";
+export const PROJECT_URI = "staruml://project";
+export const DIAGRAM_IMAGE_TEMPLATE = "staruml://diagram/{id}.png";
+
+/** Diagram ids are base64-like and may contain `/`, `+` and `=`, so they are percent-encoded. */
+export function diagramImageUri(id: string): string {
+  return `staruml://diagram/${encodeURIComponent(id)}.png`;
+}
+
+const INSTRUCTIONS =
+  "Results are minified JSON; null and empty fields are omitted and arguments are not echoed. " +
+  "Clients with resource support can read diagram PNGs and project data as resources instead of tool calls.";
+
 export interface ServerConfig {
   apiPort?: number;
   apiHost?: string;
@@ -22,6 +36,9 @@ export interface ServerConfig {
   version?: string;
 }
 
+const id = (what: string) => z.string().min(1).describe(`${what} _id.`);
+const mdjPath = z.string().min(1).describe("Absolute .mdj path.");
+
 export function createServer(config: ServerConfig = {}): McpServer {
   const client = new StarUMLClient({
     host: config.apiHost,
@@ -29,66 +46,53 @@ export function createServer(config: ServerConfig = {}): McpServer {
     extPort: config.extPort,
   });
 
-  const server = new McpServer({
-    name: config.name ?? "staruml-mcp",
-    version: config.version ?? "0.1.0",
-  });
+  const server = new McpServer(
+    { name: config.name ?? "staruml-mcp", version: config.version ?? "0.1.0" },
+    { instructions: INSTRUCTIONS },
+  );
+
+  registerResources(server, client);
 
   server.tool(
     "generate_diagram",
-    `Generate a UML diagram in StarUML from Mermaid code. Supported Mermaid diagram types: ${SUPPORTED_MERMAID_DIAGRAMS.join(", ")}. StarUML must be running with apiServer enabled.`,
+    "Render Mermaid code as a new StarUML diagram.",
     {
       code: z
         .string()
         .min(1)
-        .describe(
-          `Mermaid diagram source code. Must start with one of: ${SUPPORTED_MERMAID_DIAGRAMS.join(", ")}. Example: "flowchart LR\\n  A[Start] --> B[End]"`,
-        ),
+        .describe(`Mermaid source starting with ${SUPPORTED_MERMAID_DIAGRAMS.join("|")}.`),
     },
     async ({ code }) =>
       runTool("generate diagram", async () => {
         await client.generateDiagram(code);
-        return textResult("Diagram successfully generated in StarUML.");
+        return textResult(OK);
       }),
   );
 
   server.tool(
     "get_all_diagrams_info",
-    "Get metadata (id, name, type) for all diagrams in the currently open StarUML project.",
+    `List diagrams (id, type, name) of the open project. Resource: ${DIAGRAMS_URI}.`,
     {},
     async () =>
-      runTool("get all diagrams info", async () => {
-        const data = await client.getAllDiagramsInfo();
-        return textResult(`Diagrams: ${JSON.stringify(data, null, 2)}`);
-      }),
+      runTool("get all diagrams info", async () => jsonResult(await client.getAllDiagramsInfo())),
   );
 
   server.tool(
     "get_current_diagram_info",
-    "Get metadata for the currently active (focused) diagram in StarUML.",
+    "Active diagram (id, type, name), or null.",
     {},
     async () =>
-      runTool("get current diagram info", async () => {
-        const data = await client.getCurrentDiagramInfo();
-        return textResult(
-          data
-            ? `Current diagram: ${JSON.stringify(data, null, 2)}`
-            : "No diagram is currently active.",
-        );
-      }),
+      runTool("get current diagram info", async () =>
+        jsonResult(await client.getCurrentDiagramInfo()),
+      ),
   );
 
+  // StarUML 7.1.1's /get_diagram_image_by_id ignores every field but diagramId (checked with
+  // scale, maxWidth, width and format: identical bytes), so no sizing options are offered.
   server.tool(
     "get_diagram_image_by_id",
-    "Retrieve a PNG image of a diagram by its ID. Use get_all_diagrams_info first to obtain IDs.",
-    {
-      diagramId: z
-        .string()
-        .min(1)
-        .describe(
-          "Diagram ID. Obtain from get_all_diagrams_info tool (each diagram entry has an 'id' field).",
-        ),
-    },
+    `Diagram as PNG. Resource: ${DIAGRAM_IMAGE_TEMPLATE}.`,
+    { diagramId: id("Diagram") },
     async ({ diagramId }) =>
       runTool("get diagram image", async () => {
         const image = await client.getDiagramImageById(diagramId);
@@ -96,289 +100,250 @@ export function createServer(config: ServerConfig = {}): McpServer {
       }),
   );
 
-  // The tools below need staruml-mcp-extension; StarUML's built-in API (7.1.1) only offers
-  // the four endpoints used above.
-  const EXT_NOTE = `Requires staruml-mcp-extension to be installed in StarUML. Install from ${EXTENSION_REPOSITORY}`;
+  // The tools below need staruml-mcp-extension; StarUML's built-in API (7.1.1) only offers the
+  // four endpoints above. Its absence is reported per call with an install hint
+  // (EXTENSION_UNREACHABLE), so descriptions do not repeat it.
 
-  server.tool(
-    "get_all_commands",
-    `List all registered StarUML command IDs (e.g. 'project:save', 'view:fit-to-window', 'alignment:align-left'). Useful to discover what execute_command can trigger. ${EXT_NOTE}`,
-    {},
-    async () =>
-      runTool("get commands", async () => {
-        const data = await client.getAllCommands();
-        return textResult(`Commands: ${JSON.stringify(data, null, 2)}`);
-      }),
+  server.tool("get_all_commands", "List command ids for execute_command.", {}, async () =>
+    runTool("get commands", async () => jsonResult(await client.getAllCommands())),
   );
 
   server.tool(
     "execute_command",
-    `Execute any built-in StarUML command by its ID. Use get_all_commands to discover available IDs. ${EXT_NOTE}`,
+    "Run a StarUML command.",
     {
-      id: z
-        .string()
-        .min(1)
-        .describe("Command ID. Examples: 'project:save', 'view:fit-to-window', 'project:new'"),
-      args: z
-        .array(z.unknown())
-        .optional()
-        .describe("Optional positional arguments passed to the command handler"),
+      id: z.string().min(1).describe("Command id, e.g. project:save."),
+      args: z.array(z.unknown()).optional().describe("Positional command arguments."),
     },
-    async ({ id, args }) =>
-      runTool("execute command", async () => {
-        const data = await client.executeCommand(id, args);
-        return textResult(`Executed: ${JSON.stringify(data, null, 2)}`);
-      }),
+    async (input) =>
+      runTool("execute command", async () =>
+        jsonResult(await client.executeCommand(input.id, input.args), input),
+      ),
   );
 
   server.tool(
     "get_project_info",
-    `Get the current StarUML project's filename and top-level element summary. ${EXT_NOTE}`,
+    `Project filename and root summary. Resource: ${PROJECT_URI}.`,
     {},
-    async () =>
-      runTool("get project info", async () => {
-        const data = await client.getProjectInfo();
-        return textResult(JSON.stringify(data, null, 2));
-      }),
+    async () => runTool("get project info", async () => jsonResult(await client.getProjectInfo())),
   );
 
   server.tool(
     "save_project",
-    `Save the current StarUML project. If filename is given, saves to that path. Otherwise saves to current path. ${EXT_NOTE}`,
-    {
-      filename: z
-        .string()
-        .optional()
-        .describe("Optional absolute path. If omitted, saves to current project path."),
-    },
-    async ({ filename }) =>
-      runTool("save project", async () => {
-        const data = await client.saveProject(filename);
-        return textResult(`Saved: ${JSON.stringify(data)}`);
-      }),
+    "Save the project.",
+    { filename: z.string().optional().describe("Absolute .mdj path; default the current file.") },
+    async (input) =>
+      runTool("save project", async () =>
+        jsonResult(await client.saveProject(input.filename), input),
+      ),
   );
 
   server.tool(
     "save_project_as",
-    `Save the current StarUML project to a new path. ${EXT_NOTE}`,
-    {
-      filename: z.string().min(1).describe("Absolute path for the .mdj file"),
-    },
-    async ({ filename }) =>
-      runTool("save project as", async () => {
-        const data = await client.saveProjectAs(filename);
-        return textResult(`Saved as: ${JSON.stringify(data)}`);
-      }),
+    "Save the project to a new file.",
+    { filename: mdjPath },
+    async (input) =>
+      runTool("save project as", async () =>
+        jsonResult(await client.saveProjectAs(input.filename), input),
+      ),
   );
 
-  server.tool(
-    "new_project",
-    `Create a new empty StarUML project (discards unsaved changes in current project). ${EXT_NOTE}`,
-    {},
-    async () =>
-      runTool("create new project", async () => {
-        await client.newProject();
-        return textResult("New project created.");
-      }),
+  server.tool("new_project", "Open an empty project, discarding unsaved changes.", {}, async () =>
+    runTool("create new project", async () => {
+      await client.newProject();
+      return textResult(OK);
+    }),
   );
 
-  server.tool(
-    "open_project",
-    `Open a StarUML project file (.mdj). ${EXT_NOTE}`,
-    {
-      filename: z.string().min(1).describe("Absolute path to the .mdj project file"),
-    },
-    async ({ filename }) =>
-      runTool("open project", async () => {
-        const data = await client.openProject(filename);
-        return textResult(`Opened: ${JSON.stringify(data)}`);
-      }),
+  server.tool("open_project", "Open a .mdj file.", { filename: mdjPath }, async (input) =>
+    runTool("open project", async () =>
+      jsonResult(await client.openProject(input.filename), input),
+    ),
   );
 
   server.tool(
     "get_element_by_id",
-    `Retrieve a model element by its internal ID. ${EXT_NOTE}`,
-    {
-      id: z.string().min(1).describe("Element _id as stored in the StarUML repository"),
-    },
-    async ({ id }) =>
-      runTool("get element", async () => {
-        const data = await client.getElementById(id);
-        return textResult(JSON.stringify(data, null, 2));
-      }),
+    "Element properties; references are {_id, name}.",
+    { id: id("Element") },
+    async (input) =>
+      runTool("get element", async () => jsonResult(await client.getElementById(input.id))),
   );
 
   server.tool(
     "find_elements",
-    `Find elements by metamodel type and/or name. Examples: type='UMLClass', name='User'. Omit both to return all. ${EXT_NOTE}`,
+    "Find elements by type and/or exact name; no filter returns all.",
     {
-      type: z
-        .string()
-        .optional()
-        .describe("Metamodel type. Examples: 'Project', 'UMLModel', 'UMLClass', 'UMLPackage'"),
-      name: z.string().optional().describe("Exact name match"),
+      type: z.string().optional().describe("Metamodel type, e.g. UMLClass."),
+      name: z.string().optional().describe("Exact name."),
     },
-    async ({ type, name }) =>
-      runTool("find elements", async () => {
-        const data = await client.findElements({ type, name });
-        return textResult(JSON.stringify(data, null, 2));
-      }),
+    async (input) =>
+      runTool("find elements", async () => jsonResult(await client.findElements(input))),
   );
 
   server.tool(
     "create_element",
-    `Create a new UML model element (MODEL ONLY — not placed on any diagram canvas). For native typed diagrams (Use Case, Activity, Class), use create_element_with_view instead so shapes appear in the diagram. The 'type' is a metamodel class name. ${EXT_NOTE}`,
+    "Create a model element without a view; use create_element_with_view to draw it.",
     {
-      type: z.string().min(1).describe("Metamodel type, e.g. 'UMLClass', 'UMLPackage'"),
-      parentId: z.string().min(1).describe("Parent element's _id"),
-      name: z.string().optional().describe("Optional element name"),
+      type: z.string().min(1).describe("Metamodel type, e.g. UMLClass, UMLPackage."),
+      parentId: id("Owner"),
+      name: z.string().optional().describe("Name."),
     },
-    async ({ type, parentId, name }) =>
-      runTool("create element", async () => {
-        const data = await client.createElement({ type, parentId, name });
-        return textResult(`Created: ${JSON.stringify(data, null, 2)}`);
-      }),
+    async (input) =>
+      runTool("create element", async () => jsonResult(await client.createElement(input), input)),
   );
 
   server.tool(
     "create_element_with_view",
-    `Create a model element AND its visual View on a diagram in one call. Use for populating native typed diagrams (UMLUseCaseDiagram, UMLActivityDiagram, UMLClassDiagram, etc.). Type examples: 'UMLActor', 'UMLUseCase', 'UMLAction', 'UMLInitialNode', 'UMLFinalNode', 'UMLDecisionNode', 'UMLClass', 'UMLComponent', 'UMLNode'. Returns view._id (for edge connections) and model._id. ${EXT_NOTE}`,
+    "Create an element and its view on a diagram; returns view and model ids.",
     {
       type: z
         .string()
         .min(1)
-        .describe(
-          "Element metamodel type. Examples: 'UMLActor', 'UMLUseCase', 'UMLAction', 'UMLInitialNode', 'UMLFinalNode', 'UMLDecisionNode', 'UMLMergeNode', 'UMLForkNode', 'UMLJoinNode'",
-        ),
-      parentId: z.string().min(1).describe("Owning model's _id (usually a UMLModel or UMLPackage)"),
-      diagramId: z.string().min(1).describe("Target diagram's _id"),
-      name: z.string().optional().describe("Element label"),
-      x: z.number().optional().describe("Left X coordinate (default 100)"),
-      y: z.number().optional().describe("Top Y coordinate (default 100)"),
-      x2: z.number().optional().describe("Right X coordinate (default x+100)"),
-      y2: z.number().optional().describe("Bottom Y coordinate (default y+50)"),
+        .describe("Metamodel type, e.g. UMLActor, UMLUseCase, UMLAction, UMLClass."),
+      parentId: id("Owning model"),
+      diagramId: id("Diagram"),
+      name: z.string().optional().describe("Name."),
+      x: z.number().optional().describe("Left px; default 100."),
+      y: z.number().optional().describe("Top px; default 100."),
+      x2: z.number().optional().describe("Right px; default x+100."),
+      y2: z.number().optional().describe("Bottom px; default y+50."),
     },
-    async (args) =>
-      runTool("create element with view", async () => {
-        const data = await client.createElementWithView(args);
-        return textResult(`Created: ${JSON.stringify(data, null, 2)}`);
-      }),
+    async (input) =>
+      runTool("create element with view", async () =>
+        jsonResult(await client.createElementWithView(input), input),
+      ),
   );
 
   server.tool(
     "create_edge_with_view",
-    `Connect two existing Views on a diagram with a typed relationship edge. Edge types: 'UMLAssociation' (use case), 'UMLControlFlow' (activity), 'UMLMessage' (sequence), 'UMLGeneralization', 'UMLDependency'. tailViewId is the source, headViewId is the target. Use view IDs from create_element_with_view results. ${EXT_NOTE}`,
+    "Connect two views with a relationship edge.",
     {
       type: z
         .string()
         .min(1)
         .describe(
-          "Edge metamodel type: 'UMLAssociation', 'UMLControlFlow', 'UMLMessage', 'UMLGeneralization', 'UMLDependency'",
+          "Edge type, e.g. UMLAssociation, UMLControlFlow, UMLMessage, UMLGeneralization, UMLDependency.",
         ),
-      parentId: z.string().min(1).describe("Owning model's _id"),
-      diagramId: z.string().min(1).describe("Diagram's _id"),
-      tailViewId: z.string().min(1).describe("Source view _id (from create_element_with_view)"),
-      headViewId: z.string().min(1).describe("Target view _id (from create_element_with_view)"),
-      name: z.string().optional().describe("Optional edge label"),
-      x: z
-        .number()
-        .optional()
-        .describe("Edge tail X coordinate (required for SeqMessage vertical positioning)"),
-      y: z
-        .number()
-        .optional()
-        .describe(
-          "Edge tail Y coordinate (REQUIRED for UMLMessage in sequence diagrams — determines vertical position of the message; without this, all messages stack at same y)",
-        ),
-      x2: z.number().optional().describe("Edge head X coordinate"),
-      y2: z.number().optional().describe("Edge head Y coordinate (defaults to y if omitted)"),
+      parentId: id("Owning model"),
+      diagramId: id("Diagram"),
+      tailViewId: id("Source view"),
+      headViewId: id("Target view"),
+      name: z.string().optional().describe("Label."),
+      x: z.number().optional().describe("Tail px."),
+      y: z.number().optional().describe("Tail px; set per UMLMessage or messages overlap."),
+      x2: z.number().optional().describe("Head px."),
+      y2: z.number().optional().describe("Head px; default y."),
     },
-    async (args) =>
-      runTool("create edge", async () => {
-        const data = await client.createEdgeWithView(args);
-        return textResult(`Created edge: ${JSON.stringify(data, null, 2)}`);
-      }),
+    async (input) =>
+      runTool("create edge", async () => jsonResult(await client.createEdgeWithView(input), input)),
   );
 
   server.tool(
     "update_element",
-    `Set a property on an existing element. ${EXT_NOTE}`,
+    "Set one property of an element.",
     {
-      id: z.string().min(1).describe("Element _id"),
-      field: z
-        .string()
-        .min(1)
-        .describe("Property name, e.g. 'name', 'documentation', 'visibility'"),
-      value: z.unknown().describe("New value"),
+      id: id("Element"),
+      field: z.string().min(1).describe("Property, e.g. name, documentation, visibility."),
+      value: z.unknown().describe("New value."),
     },
-    async ({ id, field, value }) =>
-      runTool("update element", async () => {
-        const data = await client.updateElement({ id, field, value });
-        return textResult(JSON.stringify(data, null, 2));
-      }),
+    async (input) =>
+      runTool("update element", async () => jsonResult(await client.updateElement(input))),
   );
 
-  server.tool(
-    "delete_element",
-    `Delete an element from the project. ${EXT_NOTE}`,
-    {
-      id: z.string().min(1).describe("Element _id to delete"),
-    },
-    async ({ id }) =>
-      runTool("delete element", async () => {
-        const data = await client.deleteElement(id);
-        return textResult(JSON.stringify(data));
-      }),
+  server.tool("delete_element", "Delete an element.", { id: id("Element") }, async (input) =>
+    runTool("delete element", async () => jsonResult(await client.deleteElement(input.id), input)),
   );
 
   server.tool(
     "create_diagram",
-    `Create a typed UML diagram. The 'type' is a metamodel class name (e.g. 'UMLClassDiagram', 'UMLUseCaseDiagram', 'UMLSequenceDiagram', 'UMLActivityDiagram', 'ERDDiagram'). Unlike generate_diagram (Mermaid), this gives a native empty diagram you can populate via create_element. ${EXT_NOTE}`,
+    "Create an empty typed diagram.",
     {
       type: z
         .string()
         .min(1)
-        .describe(
-          "Diagram metamodel type: 'UMLClassDiagram', 'UMLUseCaseDiagram', 'UMLSequenceDiagram', 'UMLActivityDiagram', 'UMLStateDiagram', 'UMLComponentDiagram', 'UMLDeploymentDiagram', 'ERDDiagram'",
-        ),
-      parentId: z
-        .string()
-        .min(1)
-        .describe("Parent element's _id (usually the project or a package)"),
-      name: z.string().optional().describe("Diagram name"),
+        .describe("Diagram type, e.g. UMLClassDiagram, UMLUseCaseDiagram, ERDDiagram."),
+      parentId: id("Owner"),
+      name: z.string().optional().describe("Name."),
     },
-    async ({ type, parentId, name }) =>
-      runTool("create diagram", async () => {
-        const data = await client.createDiagram({ type, parentId, name });
-        return textResult(`Created diagram: ${JSON.stringify(data, null, 2)}`);
-      }),
+    async (input) =>
+      runTool("create diagram", async () => jsonResult(await client.createDiagram(input), input)),
   );
 
-  server.tool(
-    "switch_diagram",
-    `Focus (open tab) a diagram by its ID. ${EXT_NOTE}`,
-    {
-      id: z.string().min(1).describe("Diagram _id"),
-    },
-    async ({ id }) =>
-      runTool("switch diagram", async () => {
-        const data = await client.switchDiagram(id);
-        return textResult(JSON.stringify(data));
-      }),
+  server.tool("switch_diagram", "Open a diagram tab.", { id: id("Diagram") }, async (input) =>
+    runTool("switch diagram", async () => jsonResult(await client.switchDiagram(input.id), input)),
   );
 
-  server.tool(
-    "close_diagram",
-    `Close a diagram tab by its ID. ${EXT_NOTE}`,
-    {
-      id: z.string().min(1).describe("Diagram _id"),
-    },
-    async ({ id }) =>
-      runTool("close diagram", async () => {
-        const data = await client.closeDiagram(id);
-        return textResult(JSON.stringify(data));
-      }),
+  server.tool("close_diagram", "Close a diagram tab.", { id: id("Diagram") }, async (input) =>
+    runTool("close diagram", async () => jsonResult(await client.closeDiagram(input.id), input)),
   );
 
   return server;
+}
+
+function jsonResource(uri: URL, data: unknown): ReadResourceResult {
+  return { contents: [{ uri: uri.href, mimeType: "application/json", text: serialize(data) }] };
+}
+
+/**
+ * Resources let clients that support them pull images and project data on demand, so a PNG is not
+ * inlined as base64 into a tool result. The equivalent tools stay for clients without resources.
+ */
+function registerResources(server: McpServer, client: StarUMLClient): void {
+  server.registerResource(
+    "diagrams",
+    DIAGRAMS_URI,
+    { description: "Diagrams (id, type, name) of the open project.", mimeType: "application/json" },
+    async (uri) => {
+      try {
+        return jsonResource(uri, await client.getAllDiagramsInfo());
+      } catch (error) {
+        throw resourceError("read diagrams", error);
+      }
+    },
+  );
+
+  server.registerResource(
+    "project",
+    PROJECT_URI,
+    { description: "Project filename and root summary.", mimeType: "application/json" },
+    async (uri) => {
+      try {
+        return jsonResource(uri, await client.getProjectInfo());
+      } catch (error) {
+        throw resourceError("read project", error);
+      }
+    },
+  );
+
+  server.registerResource(
+    "diagram-image",
+    new ResourceTemplate(DIAGRAM_IMAGE_TEMPLATE, {
+      // resources/list is called by clients on connect, often before StarUML is up; failing the
+      // whole listing would also hide the static resources, so the template contributes nothing.
+      list: async () => {
+        try {
+          const diagrams = (await client.getAllDiagramsInfo()) as { id: string; name: string }[];
+          return {
+            resources: diagrams.map((d) => ({
+              uri: diagramImageUri(d.id),
+              name: d.name,
+              mimeType: "image/png",
+            })),
+          };
+        } catch {
+          return { resources: [] };
+        }
+      },
+    }),
+    { description: "Diagram rendered as PNG.", mimeType: "image/png" },
+    async (uri, variables) => {
+      try {
+        const diagramId = decodeURIComponent(String(variables.id));
+        const blob = await client.getDiagramImageById(diagramId);
+        return { contents: [{ uri: uri.href, mimeType: "image/png", blob }] };
+      } catch (error) {
+        throw resourceError("read diagram image", error);
+      }
+    },
+  );
 }

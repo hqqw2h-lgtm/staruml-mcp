@@ -12,6 +12,7 @@ import { join } from "node:path";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { main, type RunningServer } from "../../src/index.js";
+import { diagramImageUri } from "../../src/server.js";
 import { closedPort } from "../support/fixture.js";
 import { connect, text, type ConnectedClient } from "../support/mcp.js";
 import { rpc } from "../support/sse.js";
@@ -31,10 +32,9 @@ function ok(result: CallToolResult): string {
   return text(result);
 }
 
-/** Tool texts are `<Prefix>: <json>` or bare JSON. */
+/** Tool texts are minified JSON, or `ok` when nothing is left to report. */
 function payload<T>(result: CallToolResult): T {
-  const body = ok(result);
-  return JSON.parse(body.slice(body.search(/[[{]/))) as T;
+  return JSON.parse(ok(result)) as T;
 }
 
 function failure(result: CallToolResult): { code: string; message: string } {
@@ -65,8 +65,9 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension", ()
 
   beforeAll(async () => {
     mcp = await connect({});
-    const info = payload<{ filename: string | null }>(await mcp.call("get_project_info"));
-    originalFile = info.filename;
+    // A null filename (never saved) is pruned from the result.
+    const info = payload<{ filename?: string }>(await mcp.call("get_project_info"));
+    originalFile = info.filename ?? null;
     ok(await mcp.call("save_project", { filename: snapshot }));
     console.info(`[live] open project saved to ${snapshot}; original file: ${originalFile}`);
     ok(await mcp.call("new_project"));
@@ -84,9 +85,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension", ()
     });
 
     it("reports the current diagram", async () => {
-      expect(ok(await mcp.call("get_current_diagram_info"))).toMatch(
-        /^(Current diagram: |No diagram is currently active\.)/,
-      );
+      expect(ok(await mcp.call("get_current_diagram_info"))).toMatch(/^(\{"id":|null$)/);
     });
 
     it("generates a class diagram from Mermaid", async () => {
@@ -98,7 +97,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension", ()
             code: "classDiagram\n  class LiveA\n  class LiveB\n  LiveA --> LiveB",
           }),
         ),
-      ).toBe("Diagram successfully generated in StarUML.");
+      ).toBe("ok");
 
       const after = payload<{ id: string }[]>(await mcp.call("get_all_diagrams_info"));
       const added = after.filter((d) => !before.some((b) => b.id === d.id));
@@ -130,6 +129,58 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension", ()
     });
   });
 
+  describe("resources", () => {
+    it("lists the generated diagram as a PNG resource", async () => {
+      const { resources } = await mcp.client.listResources();
+
+      expect(resources.map((r) => r.uri)).toEqual(
+        expect.arrayContaining([
+          "staruml://diagrams",
+          "staruml://project",
+          diagramImageUri(generatedDiagramId),
+        ]),
+      );
+    });
+
+    it("reads the diagram PNG as a blob", async () => {
+      const uri = diagramImageUri(generatedDiagramId);
+      const { contents } = await mcp.client.readResource({ uri });
+
+      const image = contents[0] as { uri: string; mimeType: string; blob: string };
+      expect(image).toMatchObject({ uri, mimeType: "image/png" });
+      expect(Buffer.from(image.blob, "base64").subarray(0, 8).toString("hex")).toBe(PNG_SIGNATURE);
+    });
+
+    it("reads the diagram list and project info", async () => {
+      const diagrams = await mcp.client.readResource({ uri: "staruml://diagrams" });
+      const list = JSON.parse((diagrams.contents[0] as { text: string }).text) as { id: string }[];
+      expect(list.map((d) => d.id)).toContain(generatedDiagramId);
+
+      const project = await mcp.client.readResource({ uri: "staruml://project" });
+      const info = JSON.parse((project.contents[0] as { text: string }).text) as {
+        project: { _id: string };
+      };
+      expect(info.project._id).toEqual(expect.any(String));
+    });
+
+    it("StarUML ignores image sizing fields, so the server offers none", async () => {
+      // Evidence for not adding scale/maxWidth to get_diagram_image_by_id (issue #5).
+      const image = async (extra: Record<string, unknown>) => {
+        const res = await fetch("http://localhost:58321/get_diagram_image_by_id", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ diagramId: generatedDiagramId, ...extra }),
+        });
+        return ((await res.json()) as { data: string }).data;
+      };
+      const plain = await image({});
+
+      for (const extra of [{ scale: 3 }, { scale: 0.5 }, { maxWidth: 50 }, { width: 50 }]) {
+        expect(await image(extra)).toBe(plain);
+      }
+    });
+  });
+
   describe("extension (58322)", () => {
     it("lists commands", async () => {
       const listed = payload<{ count: number; ids: string[] }>(await mcp.call("get_all_commands"));
@@ -142,7 +193,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension", ()
     });
 
     it("executes a registered command", async () => {
-      ok(await mcp.call("execute_command", { id: "view:fit-to-window" }));
+      expect(ok(await mcp.call("execute_command", { id: "view:fit-to-window" }))).toBe("ok");
     });
 
     it("rejects an unregistered command with the extension's message", async () => {
@@ -274,9 +325,8 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension", ()
     it("saves, creates and reopens projects", async () => {
       const saved = join(dir, "saved.mdj");
 
-      expect(
-        payload<{ filename: string }>(await mcp.call("save_project", { filename: saved })),
-      ).toEqual({ filename: saved });
+      // The extension answers with the filename it was given, which is not echoed back.
+      expect(ok(await mcp.call("save_project", { filename: saved }))).toBe("ok");
       expect(existsSync(saved)).toBe(true);
       tolerated("save_project", await mcp.call("save_project"));
 
@@ -287,10 +337,10 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension", ()
         await mcp.call("save_project_as", { filename: join(dir, "as.mdj") }),
       );
 
-      expect(ok(await mcp.call("new_project"))).toBe("New project created.");
+      expect(ok(await mcp.call("new_project"))).toBe("ok");
       expect(
-        payload<{ filename: string | null }>(await mcp.call("get_project_info")).filename,
-      ).toBeFalsy();
+        payload<{ filename?: string }>(await mcp.call("get_project_info")).filename,
+      ).toBeUndefined();
 
       ok(await mcp.call("open_project", { filename: saved }));
       expect(payload<{ filename: string }>(await mcp.call("get_project_info")).filename).toBe(

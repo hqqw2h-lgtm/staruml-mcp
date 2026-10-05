@@ -133,6 +133,33 @@ staruml-mcp [options]
 
 To enable extension tools: install `staruml-mcp-extension` in StarUML (Tools → Extension Manager → Install From URL → `https://github.com/ezrabrilliant/staruml-mcp-extension`).
 
+### Results
+
+Tool results are minified JSON. Properties that are `null`, `[]` or `{}` are dropped from every
+object, top-level properties that repeat an argument (such as the `filename` passed to
+`save_project`) are dropped, and a call with nothing left to report returns `ok`. A missing
+property therefore means null or empty. `get_current_diagram_info` returns `null` when no diagram
+is active.
+
+### Resources
+
+Clients that support MCP resources can read these instead of calling the matching tool, which keeps
+diagram PNGs out of tool results:
+
+| URI | Content | Tool equivalent |
+|---|---|---|
+| `staruml://diagrams` | `application/json` list of diagrams | `get_all_diagrams_info` |
+| `staruml://project` | `application/json` project info (needs the extension) | `get_project_info` |
+| `staruml://diagram/{id}.png` | `image/png` blob; `{id}` is percent-encoded, since ids can contain `/`, `+` and `=` | `get_diagram_image_by_id` |
+
+`resources/list` enumerates one `staruml://diagram/{id}.png` per diagram; when StarUML is not
+reachable it lists only the two static resources. A failed read is a JSON-RPC error whose `data`
+holds the same `error` object a failed tool call returns.
+
+StarUML 7.1.1's `/get_diagram_image_by_id` ignores every field except `diagramId` (`scale`,
+`maxWidth`, `width` and `format` return identical bytes; the live suite checks this), so the
+image tool and resource offer no size options.
+
 ### Errors
 
 A failed tool call returns `isError: true` with a one-line cause, a hint where one helps, and
@@ -169,6 +196,7 @@ npm test               # vitest: unit, tool-level and HTTP transport tests
 npm run test:coverage  # same, failing below 100% lines/branches/functions/statements
 npm run test:live      # STARUML_LIVE=1: every tool against a running StarUML + extension
 npm run load-test      # HTTP transport load test (needs npm run build)
+npm run benchmark:tokens # token cost of three scenarios, current vs. 56864ca
 npm run typecheck      # tsc --noEmit for src and tests
 ```
 

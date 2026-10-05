@@ -74,7 +74,7 @@ describe("POST /mcp", () => {
     });
 
     expect(message.result).toEqual({
-      content: [{ type: "text", text: `Diagrams: ${JSON.stringify([{ id: "D1" }], null, 2)}` }],
+      content: [{ type: "text", text: JSON.stringify([{ id: "D1" }]) }],
     });
   });
 

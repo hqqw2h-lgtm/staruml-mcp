@@ -18,7 +18,8 @@ interface ToolCase {
   invalid?: Record<string, unknown>;
 }
 
-const json = (value: unknown): string => JSON.stringify(value, null, 2);
+const json = (value: unknown): string => JSON.stringify(value);
+const ok = [{ type: "text", text: "ok" }];
 const textContent = (value: string) => [{ type: "text", text: value }];
 const element = { _id: "E1", _type: "UMLClass", name: "User" };
 
@@ -30,7 +31,7 @@ const cases: ToolCase[] = [
     slug: "/generate_diagram",
     body: { code: "flowchart LR\n  A --> B" },
     data: undefined,
-    content: textContent("Diagram successfully generated in StarUML."),
+    content: ok,
     action: "generate diagram",
     invalid: { code: "" },
   },
@@ -41,9 +42,7 @@ const cases: ToolCase[] = [
     slug: "/get_all_diagrams_info",
     body: {},
     data: [{ id: "D1", type: "UMLClassDiagram", name: "Main" }],
-    content: textContent(
-      `Diagrams: ${json([{ id: "D1", type: "UMLClassDiagram", name: "Main" }])}`,
-    ),
+    content: textContent(json([{ id: "D1", type: "UMLClassDiagram", name: "Main" }])),
     action: "get all diagrams info",
   },
   {
@@ -53,7 +52,7 @@ const cases: ToolCase[] = [
     slug: "/get_current_diagram_info",
     body: {},
     data: { id: "D1", name: "Main" },
-    content: textContent(`Current diagram: ${json({ id: "D1", name: "Main" })}`),
+    content: textContent(json({ id: "D1", name: "Main" })),
     action: "get current diagram info",
   },
   {
@@ -74,7 +73,7 @@ const cases: ToolCase[] = [
     slug: "/get_all_commands",
     body: {},
     data: ["project:save"],
-    content: textContent(`Commands: ${json(["project:save"])}`),
+    content: textContent(json(["project:save"])),
     action: "get commands",
   },
   {
@@ -83,8 +82,8 @@ const cases: ToolCase[] = [
     args: { id: "view:fit-to-window" },
     slug: "/execute_command",
     body: { id: "view:fit-to-window", args: [] },
-    data: { executed: "view:fit-to-window" },
-    content: textContent(`Executed: ${json({ executed: "view:fit-to-window" })}`),
+    data: { id: "view:fit-to-window", result: null },
+    content: ok,
     action: "execute command",
     invalid: { id: 7 },
   },
@@ -105,7 +104,7 @@ const cases: ToolCase[] = [
     slug: "/save_project",
     body: { filename: "/tmp/a.mdj" },
     data: { filename: "/tmp/a.mdj" },
-    content: textContent(`Saved: ${JSON.stringify({ filename: "/tmp/a.mdj" })}`),
+    content: ok,
     action: "save project",
     invalid: { filename: 1 },
   },
@@ -116,7 +115,7 @@ const cases: ToolCase[] = [
     slug: "/save_project_as",
     body: { filename: "/tmp/b.mdj" },
     data: { filename: "/tmp/b.mdj" },
-    content: textContent(`Saved as: ${JSON.stringify({ filename: "/tmp/b.mdj" })}`),
+    content: ok,
     action: "save project as",
     invalid: { filename: "" },
   },
@@ -127,7 +126,7 @@ const cases: ToolCase[] = [
     slug: "/new_project",
     body: {},
     data: null,
-    content: textContent("New project created."),
+    content: ok,
     action: "create new project",
   },
   {
@@ -137,7 +136,7 @@ const cases: ToolCase[] = [
     slug: "/open_project",
     body: { filename: "/tmp/c.mdj" },
     data: { filename: "/tmp/c.mdj" },
-    content: textContent(`Opened: ${JSON.stringify({ filename: "/tmp/c.mdj" })}`),
+    content: ok,
     action: "open project",
     invalid: {},
   },
@@ -170,7 +169,7 @@ const cases: ToolCase[] = [
     slug: "/create_element",
     body: { type: "UMLClass", parentId: "M1", name: "User" },
     data: element,
-    content: textContent(`Created: ${json(element)}`),
+    content: textContent(json({ _id: "E1", _type: "UMLClass" })),
     action: "create element",
     invalid: { type: "UMLClass" },
   },
@@ -199,7 +198,7 @@ const cases: ToolCase[] = [
       y2: 4,
     },
     data: { view: { _id: "V1" }, model: { _id: "E2" } },
-    content: textContent(`Created: ${json({ view: { _id: "V1" }, model: { _id: "E2" } })}`),
+    content: textContent(json({ view: { _id: "V1" }, model: { _id: "E2" } })),
     action: "create element with view",
     invalid: { type: "UMLActor", parentId: "M1", diagramId: "D1", x: "left" },
   },
@@ -224,7 +223,7 @@ const cases: ToolCase[] = [
       y: 120,
     },
     data: { view: { _id: "V3" } },
-    content: textContent(`Created edge: ${json({ view: { _id: "V3" } })}`),
+    content: textContent(json({ view: { _id: "V3" } })),
     action: "create edge",
     invalid: { type: "UMLAssociation", parentId: "M1", diagramId: "D1", tailViewId: "V1" },
   },
@@ -246,7 +245,7 @@ const cases: ToolCase[] = [
     slug: "/delete_element",
     body: { id: "E1" },
     data: { deleted: "E1", models_deleted: 1, views_deleted: 0 },
-    content: textContent(JSON.stringify({ deleted: "E1", models_deleted: 1, views_deleted: 0 })),
+    content: textContent(json({ deleted: "E1", models_deleted: 1, views_deleted: 0 })),
     action: "delete element",
     invalid: {},
   },
@@ -256,8 +255,8 @@ const cases: ToolCase[] = [
     args: { type: "UMLClassDiagram", parentId: "M1", name: "Domain" },
     slug: "/create_diagram",
     body: { type: "UMLClassDiagram", parentId: "M1", name: "Domain" },
-    data: { _id: "D2" },
-    content: textContent(`Created diagram: ${json({ _id: "D2" })}`),
+    data: { _id: "D2", name: "Domain", type: "UMLClassDiagram" },
+    content: textContent(json({ _id: "D2" })),
     action: "create diagram",
     invalid: { type: "UMLClassDiagram" },
   },
@@ -268,7 +267,7 @@ const cases: ToolCase[] = [
     slug: "/switch_diagram",
     body: { id: "D1" },
     data: { _id: "D1" },
-    content: textContent(JSON.stringify({ _id: "D1" })),
+    content: textContent(json({ _id: "D1" })),
     action: "switch diagram",
     invalid: { id: "" },
   },
@@ -278,8 +277,8 @@ const cases: ToolCase[] = [
     args: { id: "D1" },
     slug: "/close_diagram",
     body: { id: "D1" },
-    data: { _id: "D1" },
-    content: textContent(JSON.stringify({ _id: "D1" })),
+    data: { closed: "D1" },
+    content: textContent(json({ closed: "D1" })),
     action: "close diagram",
     invalid: {},
   },
@@ -313,6 +312,24 @@ describe("tool registry", () => {
   it("registers exactly the documented tools", async () => {
     const { tools } = await mcp.client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(cases.map((c) => c.tool).sort());
+  });
+
+  it("describes every tool and parameter in one short line", async () => {
+    const { tools } = await mcp.client.listTools();
+    for (const tool of tools) {
+      expect(tool.description, tool.name).toMatch(/^[^\n]{1,90}$/);
+      const properties = (tool.inputSchema.properties ?? {}) as Record<
+        string,
+        { description?: string }
+      >;
+      for (const [name, schema] of Object.entries(properties)) {
+        expect(schema.description, `${tool.name}.${name}`).toMatch(/^[^\n]{1,130}$/);
+      }
+    }
+  });
+
+  it("tells clients how results are shaped", () => {
+    expect(mcp.client.getInstructions()).toMatch(/null and empty fields are omitted/);
   });
 
   it("uses default name and version without config", async () => {
@@ -389,23 +406,56 @@ describe("tool-specific responses", () => {
 
     const result = await mcp.call("get_current_diagram_info");
 
-    expect(result.content).toEqual(textContent("No diagram is currently active."));
+    expect(result.content).toEqual(textContent("null"));
   });
 
-  it("execute_command forwards positional args", async () => {
-    extension.reply("/execute_command", { body: { success: true, data: null } });
+  it("execute_command forwards positional args and returns only the command's result", async () => {
+    extension.reply("/execute_command", {
+      body: { success: true, data: { id: "edit:select-all", result: { selected: 2 } } },
+    });
 
-    await mcp.call("execute_command", { id: "edit:select-all", args: [1, "two"] });
+    const result = await mcp.call("execute_command", { id: "edit:select-all", args: [1, "two"] });
 
     expect(extension.requests[0]!.body).toEqual({ id: "edit:select-all", args: [1, "two"] });
+    expect(text(result)).toBe('{"result":{"selected":2}}');
   });
 
-  it("save_project without filename saves in place", async () => {
+  it("save_project without filename saves in place and reports where", async () => {
     extension.reply("/save_project", { body: { success: true, data: { filename: "/a.mdj" } } });
 
-    await mcp.call("save_project");
+    const result = await mcp.call("save_project");
 
     expect(extension.requests[0]!.body).toEqual({});
+    expect(text(result)).toBe('{"filename":"/a.mdj"}');
+  });
+
+  it("find_elements drops null and empty properties of each element", async () => {
+    extension.reply("/find_elements", {
+      body: {
+        success: true,
+        data: {
+          count: 1,
+          elements: [
+            {
+              _id: "C1",
+              _parent: { _id: "P1", name: "Pkg" },
+              name: "A",
+              documentation: "",
+              stereotype: null,
+              tags: [],
+              attributes: [{ _id: "A1", name: "id" }],
+              isAbstract: false,
+            },
+          ],
+        },
+      },
+    });
+
+    const result = await mcp.call("find_elements", { type: "UMLClass" });
+
+    expect(text(result)).toBe(
+      '{"count":1,"elements":[{"_id":"C1","_parent":{"_id":"P1","name":"Pkg"},"name":"A","documentation":"","attributes":[{"_id":"A1","name":"id"}],"isAbstract":false}]}',
+    );
   });
 
   it("get_diagram_image_by_id rejects a non-string image as INVALID_RESPONSE", async () => {
