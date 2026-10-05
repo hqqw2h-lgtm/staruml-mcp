@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { isEntrypoint, main, parseArgs, run } from "../src/index.js";
+import { isEntrypoint, main, parseArgs, run, TOOLS_ENV } from "../src/index.js";
+import { CORE_ENDPOINTS, parseToolSelection } from "../src/tiers.js";
 import packageJson from "../package.json" with { type: "json" };
 import { BUNDLED_MANIFEST } from "../src/manifest.js";
 import { closedPort, UpstreamFixture } from "./support/fixture.js";
@@ -31,14 +32,44 @@ afterEach(() => {
 
 describe("parseArgs", () => {
   it("applies defaults", () => {
-    expect(parseArgs(ARGV0)).toEqual({
+    expect(parseArgs(ARGV0, {})).toEqual({
       transport: "stdio",
       port: 58323,
       apiPort: 58321,
       extPort: 58322,
       apiHost: "http://localhost",
       doctor: false,
+      tools: { all: false, names: new Set(CORE_ENDPOINTS), label: "core" },
     });
+  });
+
+  it("reads the process environment by default", () => {
+    vi.stubEnv(TOOLS_ENV, "all");
+    try {
+      expect(parseArgs(ARGV0).tools.all).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it.each([
+    ["the core tier when neither is set", undefined, undefined, "core"],
+    ["the core tier when the variable is empty", undefined, "", "core"],
+    [`${TOOLS_ENV}`, undefined, "all", "all"],
+    ["--tools over the environment", "core,save_project", "all", "core,save_project"],
+  ])("selects %s", (_, flag, env, label) => {
+    const argv = flag === undefined ? ARGV0 : [...ARGV0, "--tools", flag];
+    expect(parseArgs(argv, { [TOOLS_ENV]: env }).tools).toEqual(parseToolSelection(label));
+  });
+
+  it("names the environment variable when its value is malformed", () => {
+    expect(() => parseArgs(ARGV0, { [TOOLS_ENV]: "core;all" })).toThrow(
+      `Invalid ${TOOLS_ENV}: "core;all".`,
+    );
+  });
+
+  it("rejects a malformed --tools", () => {
+    expect(() => parseArgs([...ARGV0, "--tools", ","], {})).toThrow('Invalid --tools: ",".');
   });
 
   it("reads every option", () => {
@@ -56,6 +87,8 @@ describe("parseArgs", () => {
         "--api-host",
         "http://10.0.0.2",
         "--doctor",
+        "--tools",
+        "all",
       ]),
     ).toEqual({
       transport: "http",
@@ -64,6 +97,7 @@ describe("parseArgs", () => {
       extPort: 65535,
       apiHost: "http://10.0.0.2",
       doctor: true,
+      tools: parseToolSelection("all"),
     });
   });
 
@@ -183,8 +217,32 @@ describe("startup check", () => {
       expect(names).not.toContain("find_elements");
       expect(console.error).toHaveBeenCalledWith(
         expect.stringMatching(
-          /^\[staruml-mcp\] startup check\n.*tools +ok +1 extension tools from the live manifest/s,
+          /^\[staruml-mcp\] startup check\n.*manifest +ok +1 endpoints from the live manifest/s,
         ),
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("lists the tier --tools asks for and reports it", async () => {
+    serveManifest(BUNDLED_MANIFEST.endpoints);
+    const server = await main([
+      ...upstream,
+      "--tools",
+      "all",
+      "--transport",
+      "http",
+      "--port",
+      "0",
+    ]);
+    try {
+      const { message } = await rpc(`http://127.0.0.1:${server.port}`, 1, "tools/list");
+      const names = (message.result!.tools as { name: string }[]).map((t) => t.name);
+      expect(names).toContain("create_diagram");
+      expect(names).not.toContain("call_endpoint");
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringMatching(/\ntier +ok +all: 29 extension tools listed, 0 endpoints through/),
       );
     } finally {
       await server.close();

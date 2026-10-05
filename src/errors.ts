@@ -12,6 +12,10 @@ export const ErrorCode = {
   UpstreamError: "UPSTREAM_ERROR",
   InvalidResponse: "INVALID_RESPONSE",
   Unexpected: "UNEXPECTED_ERROR",
+  // The next two are extension 0.3.0 codes (src/errors.ts there), reused for the same faults
+  // when this server catches them first, so a caller handles both sources alike.
+  UnknownEndpoint: "UNKNOWN_ENDPOINT",
+  InvalidArgument: "INVALID_ARGUMENT",
 } as const;
 
 export type Upstream = "builtin" | "extension";
@@ -59,6 +63,33 @@ export class StarUMLApiError extends Error {
       endpoint: this.slug,
       upstream: this.upstream,
       ...(this.status === undefined ? {} : { status: this.status }),
+      ...(this.hint === undefined ? {} : { hint: this.hint }),
+    };
+  }
+}
+
+/**
+ * A call this server refuses before sending anything: an endpoint the manifest does not have, or
+ * a body its schema rejects.
+ */
+export class ToolInputError extends Error {
+  readonly code: string;
+  readonly endpoint: string | undefined;
+  readonly hint: string | undefined;
+
+  constructor(message: string, options: { code: string; endpoint?: string; hint?: string }) {
+    super(message);
+    this.name = "ToolInputError";
+    this.code = options.code;
+    this.endpoint = options.endpoint;
+    this.hint = options.hint;
+  }
+
+  toJSON(): ErrorDetail {
+    return {
+      code: this.code,
+      message: this.message,
+      ...(this.endpoint === undefined ? {} : { endpoint: this.endpoint }),
       ...(this.hint === undefined ? {} : { hint: this.hint }),
     };
   }

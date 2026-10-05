@@ -1,6 +1,8 @@
 /**
- * Runs every tool against a real StarUML (built-in API on 58321) and staruml-mcp-extension 0.3.x
- * (58322). Enabled with STARUML_LIVE=1; skipped otherwise so CI needs no StarUML.
+ * Runs every tool and every manifest endpoint against a real StarUML (built-in API on 58321) and
+ * staruml-mcp-extension 0.3.x (58322). Enabled with STARUML_LIVE=1; skipped otherwise so CI needs
+ * no StarUML. The server lists the default core tier, so endpoints without a tool are called
+ * through call_endpoint, as an agent would.
  *
  * The suite saves the open project to a temp file, works in a fresh project and reopens the
  * original file at the end. Unsaved changes of the original survive only in the temp copy,
@@ -12,11 +14,12 @@ import { join } from "node:path";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { diagnose, healthy } from "../../src/doctor.js";
-import { CatalogState, HAND_WRITTEN_TOOLS } from "../../src/extension-tools.js";
+import { CatalogState } from "../../src/extension-tools.js";
 import { main, type RunningServer } from "../../src/index.js";
 import { toolName } from "../../src/manifest.js";
-import { diagramImageUri } from "../../src/server.js";
+import { diagramImageUri, ENDPOINTS_URI, METAMODEL_URI } from "../../src/server.js";
 import { StarUMLClient } from "../../src/staruml-client.js";
+import { CORE_ENDPOINTS, parseToolSelection } from "../../src/tiers.js";
 import { closedPort } from "../support/fixture.js";
 import { connect, text, type ConnectedClient } from "../support/mcp.js";
 import { rpc } from "../support/sse.js";
@@ -66,9 +69,14 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
   let packageId: string;
   const ids: Record<string, string> = {};
 
+  let listed: Set<string>;
+
+  /** The tool of that name, or call_endpoint for an endpoint without one. */
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     called.add(name);
-    return mcp.call(name, args);
+    return listed.has(name)
+      ? mcp.call(name, args)
+      : mcp.call("call_endpoint", { name, body: args });
   };
 
   beforeAll(async () => {
@@ -76,6 +84,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     expect(healthy(diagnosis.checks), JSON.stringify(diagnosis.checks)).toBe(true);
     catalog = new CatalogState(diagnosis.catalog);
     mcp = await connect({ catalog });
+    listed = new Set((await mcp.client.listTools()).tools.map((t) => t.name));
     // A null filename (never saved) is pruned from the result.
     const info = payload<{ filename?: string }>(await call("get_project_info"));
     originalFile = info.filename ?? null;
@@ -91,20 +100,70 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
   }, 30_000);
 
   describe("setup", () => {
-    it("reads the live manifest and offers one tool per endpoint", async () => {
+    it("reads the live manifest and lists the core tier", async () => {
       expect(catalog.current.source).toBe("live");
       expect(catalog.current.compiled.manifest.extension.version).toMatch(/^0\.3\./);
       const { tools } = await mcp.client.listTools();
       const endpoints = catalog.current.compiled.manifest.endpoints.map((e) => toolName(e.path));
-      expect(tools.map((t) => t.name).sort()).toEqual([...HAND_WRITTEN_TOOLS, ...endpoints].sort());
-      for (const tool of tools) expect(tool.description, tool.name).toMatch(/^[^\n]{1,100}$/);
+      expect(tools.map((t) => t.name).sort()).toEqual(
+        [
+          "generate_diagram",
+          "get_all_diagrams_info",
+          "get_current_diagram_info",
+          "get_diagram_image_by_id",
+          "doctor",
+          "describe_endpoints",
+          "call_endpoint",
+          ...endpoints.filter((e) => CORE_ENDPOINTS.includes(e)),
+        ].sort(),
+      );
+      for (const tool of tools) {
+        expect(tool.description, tool.name).toMatch(/^[^\n]{1,100}$/);
+        expect(tool.inputSchema, tool.name).not.toHaveProperty("$schema");
+      }
+    });
+
+    it("lists one tool per endpoint with --tools all", async () => {
+      const all = await connect({
+        catalog: new CatalogState(catalog.current, parseToolSelection("all")),
+      });
+      try {
+        const names = (await all.client.listTools()).tools.map((t) => t.name);
+        const endpoints = catalog.current.compiled.manifest.endpoints.map((e) => toolName(e.path));
+        expect(names.length).toBe(5 + endpoints.length);
+        expect(names).toEqual(expect.arrayContaining(endpoints));
+        expect(
+          payload<{ count: number }>(await all.call("get_all_commands")).count,
+        ).toBeGreaterThan(100);
+      } finally {
+        await all.close();
+      }
     });
 
     it("doctor reports every check ok", async () => {
       const report = ok(await call("doctor"));
       expect(report).toMatch(/^node +ok/);
       expect(report).toMatch(/staruml +ok +7\./);
+      expect(report).toMatch(/tier +ok +core: /);
       expect(report).not.toMatch(/ fail /);
+    });
+
+    it("doctor switches the tier and back", async () => {
+      const state = new CatalogState(catalog.current);
+      const other = await connect({ catalog: state });
+      try {
+        expect(ok(await other.call("doctor", { tools: "core,create_diagram" }))).toMatch(
+          /tier +ok +core,create_diagram: 6 extension tools listed/,
+        );
+        const names = (await other.client.listTools()).tools.map((t) => t.name);
+        expect(names).toContain("create_diagram");
+        ok(await other.call("doctor", { tools: "core" }));
+        expect((await other.client.listTools()).tools.map((t) => t.name)).not.toContain(
+          "create_diagram",
+        );
+      } finally {
+        await other.close();
+      }
     });
   });
 
@@ -455,11 +514,19 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     });
 
     it("introspects versions and the debug surface", async () => {
-      const info = payload<{ staruml: { version: string }; extension: { version: string } }>(
-        await call("introspect", { include: [] }),
-      );
+      const info = payload<{
+        staruml: { version: string };
+        extension: { version: string };
+        metamodel?: unknown;
+      }>(await call("introspect"));
       expect(info.staruml.version).toMatch(/^7\./);
       expect(info.extension.version).toMatch(/^0\.3\./);
+      expect(info.metamodel).toBeUndefined();
+
+      const typed = payload<{ metamodel: Record<string, unknown> }>(
+        await call("introspect", { types: ["UMLClass"] }),
+      );
+      expect(Object.keys(typed.metamodel)).toEqual(["UMLClass"]);
 
       expect(payload<{ app_keys: string[] }>(await call("debug")).app_keys).toContain("project");
     });
@@ -509,9 +576,52 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       });
     });
 
-    it("called every listed tool", async () => {
+    it("called every listed tool and every endpoint", async () => {
       const { tools } = await mcp.client.listTools();
-      expect(tools.map((t) => t.name).filter((n) => !called.has(n))).toEqual([]);
+      const endpoints = catalog.current.compiled.manifest.endpoints.map((e) => toolName(e.path));
+      const generic = ["describe_endpoints", "call_endpoint"];
+      expect(
+        [...tools.map((t) => t.name), ...endpoints].filter(
+          (n) => !called.has(n) && !generic.includes(n),
+        ),
+      ).toEqual([]);
+    });
+  });
+
+  describe("extended tier", () => {
+    it("describe_endpoints indexes the unlisted endpoints and describes them", async () => {
+      const index = payload<Record<string, Record<string, string>>>(
+        await mcp.call("describe_endpoints"),
+      );
+      expect(index.project).toHaveProperty("save_project");
+      expect(index.element).not.toHaveProperty("find_elements");
+
+      const described = payload<Record<string, { request: { required?: string[] } }>>(
+        await mcp.call("describe_endpoints", { names: ["create_diagram"] }),
+      );
+      expect(described.create_diagram!.request.required).toContain("type");
+    });
+
+    it("call_endpoint rejects a bad body before StarUML sees it", async () => {
+      expect(
+        failure(await mcp.call("call_endpoint", { name: "create_diagram", body: { parentId: 1 } })),
+      ).toMatchObject({ code: "INVALID_ARGUMENT" });
+      expect(failure(await mcp.call("call_endpoint", { name: "nope", body: {} }))).toMatchObject({
+        code: "UNKNOWN_ENDPOINT",
+      });
+    });
+
+    it("serves the metamodel and endpoint catalogues as resources", async () => {
+      const metamodel = await mcp.client.readResource({ uri: METAMODEL_URI });
+      const types = JSON.parse((metamodel.contents[0] as { text: string }).text) as {
+        metamodel: Record<string, unknown>;
+      };
+      expect(Object.keys(types.metamodel).length).toBeGreaterThan(100);
+
+      const endpoints = await mcp.client.readResource({ uri: ENDPOINTS_URI });
+      expect(JSON.parse((endpoints.contents[0] as { text: string }).text)).toEqual(
+        catalog.current.compiled.manifest,
+      );
     });
   });
 
@@ -519,7 +629,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     it("tells a missing extension apart from a stopped StarUML", async () => {
       const noExtension = await connect({ extPort: await closedPort() });
       try {
-        const error = failure(await noExtension.call("get_project_info"));
+        const error = failure(await noExtension.call("find_elements", { type: "Project" }));
         expect(error.code).toBe("EXTENSION_UNREACHABLE");
         expect(ok(await noExtension.call("doctor"))).toMatch(/extension +fail +no answer at/);
       } finally {
@@ -541,8 +651,10 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
     it("lists the live tools and calls one through /mcp", async () => {
       const base = `http://127.0.0.1:${server.port}`;
-      const listed = await rpc(base, 1, "tools/list");
-      expect((listed.message.result!.tools as unknown[]).length).toBeGreaterThan(30);
+      const list = await rpc(base, 1, "tools/list");
+      expect((list.message.result!.tools as { name: string }[]).map((t) => t.name)).toContain(
+        "call_endpoint",
+      );
 
       const { message } = await rpc(base, 2, "tools/call", {
         name: "find_elements",

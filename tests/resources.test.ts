@@ -1,5 +1,6 @@
 import { McpError } from "@modelcontextprotocol/sdk/types.js";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { BUNDLED_MANIFEST } from "../src/manifest.js";
 import { diagramImageUri } from "../src/server.js";
 import { closedPort, UpstreamFixture } from "./support/fixture.js";
 import { connect, type ConnectedClient } from "./support/mcp.js";
@@ -66,6 +67,16 @@ describe("resources/list", () => {
         mimeType: "application/json",
       }),
       expect.objectContaining({
+        uri: "staruml://introspect/metamodel",
+        name: "metamodel",
+        mimeType: "application/json",
+      }),
+      expect.objectContaining({
+        uri: "staruml://introspect/endpoints",
+        name: "endpoints",
+        mimeType: "application/json",
+      }),
+      expect.objectContaining({
         uri: "staruml://diagram/AAAAAAGhCh%2F2wd1CFIY%3D.png",
         name: "Main",
         mimeType: "image/png",
@@ -86,6 +97,8 @@ describe("resources/list", () => {
         "staruml://diagrams",
         "staruml://project",
         "staruml://project/tree",
+        "staruml://introspect/metamodel",
+        "staruml://introspect/endpoints",
       ]);
     } finally {
       await down.close();
@@ -272,6 +285,49 @@ describe("staruml://project/tree", () => {
     const error = await readError("staruml://project/tree");
 
     expect(error.data).toMatchObject({ error: { code: "NO_PROJECT", status: 409 } });
+  });
+});
+
+describe("staruml://introspect/metamodel", () => {
+  it("reads the metamodel section alone and keeps empty schema values", async () => {
+    const data = {
+      staruml: { version: "7.1.1", apiVersion: "7.1.1" },
+      extension: { name: "staruml-mcp-extension", version: "0.3.0" },
+      metamodel: { UMLClass: { kind: "class", super: null, supers: [], attributes: [] } },
+    };
+    extension.reply("/introspect", { body: { success: true, data } });
+
+    const { contents } = await mcp.client.readResource({ uri: "staruml://introspect/metamodel" });
+
+    expect(extension.requests.map((r) => r.body)).toEqual([{ include: ["metamodel"] }]);
+    expect(contents).toEqual([
+      {
+        uri: "staruml://introspect/metamodel",
+        mimeType: "application/json",
+        text: JSON.stringify(data),
+      },
+    ]);
+  });
+
+  it("fails with the extension's error", async () => {
+    extension.reply("/introspect", {
+      status: 500,
+      body: { success: false, code: "INTERNAL", error: "boom" },
+    });
+
+    const error = await readError("staruml://introspect/metamodel");
+
+    expect(error.message).toContain("Failed to read metamodel: boom");
+    expect(error.data).toMatchObject({ error: { code: "INTERNAL", status: 500 } });
+  });
+});
+
+describe("staruml://introspect/endpoints", () => {
+  it("serves the manifest the server uses, schemas intact, without calling StarUML", async () => {
+    const { contents } = await mcp.client.readResource({ uri: "staruml://introspect/endpoints" });
+
+    expect(JSON.parse((contents[0] as { text: string }).text)).toEqual(BUNDLED_MANIFEST);
+    expect(extension.requests).toEqual([]);
   });
 });
 

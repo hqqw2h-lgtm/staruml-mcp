@@ -4,7 +4,7 @@ import {
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import { serialize } from "./compact.js";
-import { ErrorCode, StarUMLApiError, type ErrorDetail } from "./errors.js";
+import { ErrorCode, StarUMLApiError, ToolInputError, type ErrorDetail } from "./errors.js";
 
 export function textResult(text: string): CallToolResult {
   return { content: [{ type: "text", text }] };
@@ -17,7 +17,7 @@ export function jsonResult(data: unknown, input: Record<string, unknown> = {}): 
 
 function describeError(action: string, error: unknown): { text: string; detail: ErrorDetail } {
   const detail: ErrorDetail =
-    error instanceof StarUMLApiError
+    error instanceof StarUMLApiError || error instanceof ToolInputError
       ? error.toJSON()
       : {
           code: ErrorCode.Unexpected,

@@ -1,7 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { HAND_WRITTEN_TOOLS } from "../src/extension-tools.js";
+import { CatalogState } from "../src/extension-tools.js";
 import { BUNDLED_MANIFEST, listedRequestSchema, toolName } from "../src/manifest.js";
-import { createServer } from "../src/server.js";
+import { createServer, type ServerConfig } from "../src/server.js";
+import { parseToolSelection } from "../src/tiers.js";
 import { closedPort, UpstreamFixture } from "./support/fixture.js";
 import { connect, text, type ConnectedClient } from "./support/mcp.js";
 import { invalidArgs, sampleArgs, withExplicitDefaults } from "./support/schema.js";
@@ -72,8 +73,14 @@ const cases: ToolCase[] = [
   },
 ];
 
+/**
+ * Every endpoint with a tool of its own (`--tools all`); /introspect is listed as the summary
+ * tool, tested in tiers.test.ts.
+ */
+const ENDPOINTS = BUNDLED_MANIFEST.endpoints.filter((e) => e.path !== "/introspect");
+
 /** One case per manifest endpoint: required arguments only, an element summary as the answer. */
-const generated: ToolCase[] = BUNDLED_MANIFEST.endpoints.map((entry) => {
+const generated: ToolCase[] = ENDPOINTS.map((entry) => {
   const args = sampleArgs(entry.request);
   return {
     tool: toolName(entry.path),
@@ -99,9 +106,13 @@ function fixtureFor(upstream: Upstream): UpstreamFixture {
   return upstream === "builtin" ? builtin : extension;
 }
 
+/** A server listing every endpoint as a tool. */
+const connectAll = (config: ServerConfig) =>
+  connect({ ...config, catalog: new CatalogState(undefined, parseToolSelection("all")) });
+
 beforeAll(async () => {
   await Promise.all([builtin.start(), extension.start()]);
-  mcp = await connect({ apiHost: HOST, apiPort: builtin.port, extPort: extension.port });
+  mcp = await connectAll({ apiHost: HOST, apiPort: builtin.port, extPort: extension.port });
 });
 
 afterEach(() => {
@@ -115,12 +126,24 @@ afterAll(async () => {
 });
 
 describe("tool registry", () => {
-  it("registers the hand-written tools and one tool per manifest endpoint", async () => {
+  it("lists the built-in tools and, with --tools all, one tool per manifest endpoint", async () => {
     const { tools } = await mcp.client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(
-      [...HAND_WRITTEN_TOOLS, ...BUNDLED_MANIFEST.endpoints.map((e) => toolName(e.path))].sort(),
+      [
+        "doctor",
+        "generate_diagram",
+        "get_all_diagrams_info",
+        "get_current_diagram_info",
+        "get_diagram_image_by_id",
+        ...BUNDLED_MANIFEST.endpoints.map((e) => toolName(e.path)),
+      ].sort(),
     );
     expect(BUNDLED_MANIFEST.endpoints).toHaveLength(29);
+  });
+
+  it("lists no $schema on any input schema", async () => {
+    const { tools } = await mcp.client.listTools();
+    for (const tool of tools) expect(tool.inputSchema, tool.name).not.toHaveProperty("$schema");
   });
 
   it("describes every tool, generated ones included, in one line of at most 100 characters", async () => {
@@ -137,20 +160,15 @@ describe("tool registry", () => {
     }
   });
 
-  it.each(BUNDLED_MANIFEST.endpoints)(
-    "lists $path's request schema as the manifest defines it",
-    async (entry) => {
-      const { tools } = await mcp.client.listTools();
-      const tool = tools.find((t) => t.name === toolName(entry.path))!;
+  it.each(ENDPOINTS)("lists $path's request schema as the manifest defines it", async (entry) => {
+    const { tools } = await mcp.client.listTools();
+    const tool = tools.find((t) => t.name === toolName(entry.path))!;
 
-      // The SDK stamps draft-07; the manifest's 2020-12 subset means the same in both drafts.
-      const { $schema, ...listed } = tool.inputSchema as Record<string, unknown>;
-      expect($schema).toBe("http://json-schema.org/draft-07/schema#");
-      const { schema, passthrough } = listedRequestSchema(entry);
-      const expected = withExplicitDefaults(schema) as Record<string, unknown>;
-      expect(listed).toEqual(passthrough ? { ...expected, additionalProperties: {} } : expected);
-    },
-  );
+    const listed = tool.inputSchema as Record<string, unknown>;
+    const { schema, passthrough } = listedRequestSchema(entry);
+    const expected = withExplicitDefaults(schema) as Record<string, unknown>;
+    expect(listed).toEqual(passthrough ? { ...expected, additionalProperties: {} } : expected);
+  });
 
   it.each(BUNDLED_MANIFEST.endpoints)("annotates $path from its manifest flags", async (entry) => {
     const { tools } = await mcp.client.listTools();
@@ -484,8 +502,8 @@ describe("connectivity failures", () => {
 
   beforeAll(async () => {
     refused = await closedPort();
-    both = await connect({ apiHost: HOST, apiPort: refused, extPort: refused });
-    extOnly = await connect({ apiHost: HOST, apiPort: builtin.port, extPort: refused });
+    both = await connectAll({ apiHost: HOST, apiPort: refused, extPort: refused });
+    extOnly = await connectAll({ apiHost: HOST, apiPort: builtin.port, extPort: refused });
   });
 
   afterAll(async () => {

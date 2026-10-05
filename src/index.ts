@@ -12,9 +12,10 @@ import { Command } from "commander";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { diagnose, formatReport, healthy } from "./doctor.js";
-import { CatalogState } from "./extension-tools.js";
+import { CatalogState, tierCheck } from "./extension-tools.js";
 import { createServer, type ServerConfig } from "./server.js";
 import { StarUMLClient } from "./staruml-client.js";
+import { DEFAULT_TOOLS, parseToolSelection, type ToolSelection } from "./tiers.js";
 import packageJson from "../package.json" with { type: "json" };
 
 const TRANSPORTS = ["stdio", "http"] as const;
@@ -27,7 +28,11 @@ export interface CliOptions {
   extPort: number;
   apiHost: string;
   doctor: boolean;
+  tools: ToolSelection;
 }
+
+/** Read when `--tools` is absent, for clients that pass environment but no arguments. */
+export const TOOLS_ENV = "STARUML_MCP_TOOLS";
 
 export interface Stdio {
   stdin: Readable;
@@ -43,7 +48,10 @@ export interface RunningServer {
 export type McpServerFactory = (config: ServerConfig) => ReturnType<typeof createServer>;
 
 /** `argv` follows `process.argv`: the first two entries are the node binary and the script. */
-export function parseArgs(argv: readonly string[]): CliOptions {
+export function parseArgs(
+  argv: readonly string[],
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): CliOptions {
   const program = new Command();
   program
     .name("staruml-mcp")
@@ -59,6 +67,10 @@ export function parseArgs(argv: readonly string[]): CliOptions {
       "http://localhost",
     )
     .option("--doctor", "Check the StarUML setup, print a report and exit (1 on failure)", false)
+    .option(
+      "--tools <tiers>",
+      `Extension tools to list: core, all or comma-separated names (env ${TOOLS_ENV}; default ${DEFAULT_TOOLS})`,
+    )
     .parse([...argv]);
 
   const raw = program.opts<{
@@ -68,7 +80,9 @@ export function parseArgs(argv: readonly string[]): CliOptions {
     extPort: string;
     apiHost: string;
     doctor: boolean;
+    tools?: string;
   }>();
+  const fromEnv = env[TOOLS_ENV];
 
   return {
     transport: validateTransport(raw.transport),
@@ -78,6 +92,10 @@ export function parseArgs(argv: readonly string[]): CliOptions {
     extPort: parsePort(raw.extPort, "--ext-port", 1),
     apiHost: raw.apiHost,
     doctor: raw.doctor,
+    tools:
+      raw.tools !== undefined
+        ? parseToolSelection(raw.tools)
+        : parseToolSelection(fromEnv || DEFAULT_TOOLS, TOOLS_ENV),
   };
 }
 
@@ -92,7 +110,8 @@ export async function main(
     extPort: options.extPort,
   });
   const { checks, catalog } = await diagnose(client);
-  const report = formatReport(checks);
+  const state = new CatalogState(catalog, options.tools);
+  const report = formatReport([...checks, tierCheck(state)]);
 
   if (options.doctor) {
     stdio.stdout.write(`${report}\n`);
@@ -108,7 +127,7 @@ export async function main(
     extPort: options.extPort,
     name: packageJson.name,
     version: packageJson.version,
-    catalog: new CatalogState(catalog),
+    catalog: state,
   };
 
   if (options.transport === "stdio") {

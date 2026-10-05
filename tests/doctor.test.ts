@@ -1,9 +1,10 @@
 import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { diagnose, formatReport, healthy, type Check } from "../src/doctor.js";
-import { CatalogState, HAND_WRITTEN_TOOLS } from "../src/extension-tools.js";
+import { CatalogState } from "../src/extension-tools.js";
 import { BUNDLED_MANIFEST, type ManifestEntry } from "../src/manifest.js";
 import { StarUMLClient } from "../src/staruml-client.js";
+import { parseToolSelection } from "../src/tiers.js";
 import { closedPort, UpstreamFixture } from "./support/fixture.js";
 import { connect, text } from "./support/mcp.js";
 
@@ -66,7 +67,7 @@ describe("diagnose", () => {
       { name: "staruml api", status: "ok", detail: `${HOST}:${builtin.port}` },
       { name: "extension", status: "ok", detail: `0.3.0 at ${HOST}:${extension.port}` },
       { name: "staruml", status: "ok", detail: "7.1.1" },
-      { name: "tools", status: "ok", detail: "29 extension tools from the live manifest" },
+      { name: "manifest", status: "ok", detail: "29 endpoints from the live manifest" },
     ]);
     expect(catalog).toMatchObject({ source: "live", enabled: true });
     expect(extension.requests).toContainEqual({
@@ -111,7 +112,7 @@ describe("diagnose", () => {
       detail: `no answer at ${HOST}:${refused}`,
       remedy: "Start StarUML; the extension listens while StarUML runs.",
     });
-    expect(check(checks, "tools").detail).toBe("29 extension tools from the bundled manifest");
+    expect(check(checks, "manifest").detail).toBe("29 endpoints from the bundled manifest");
     expect(catalog).toMatchObject({ source: "bundled", enabled: true });
     expect(checks.map((c) => c.name)).not.toContain("staruml");
   });
@@ -152,7 +153,7 @@ describe("diagnose", () => {
         "Install staruml-mcp-extension 0.3.x from https://github.com/ezrabrilliant/staruml-mcp-extension (Tools > Extension Manager > Install From Url), then restart StarUML.",
     });
     expect(catalog.enabled).toBe(false);
-    expect(check(checks, "tools").detail).toBe("0 extension tools from the bundled manifest");
+    expect(check(checks, "manifest").detail).toBe("0 endpoints from the bundled manifest");
   });
 
   it("refuses an extension that names /introspect UNKNOWN_ENDPOINT even if its banner looks compatible", async () => {
@@ -247,11 +248,11 @@ describe("diagnose", () => {
 
     const { checks } = await diagnose(client(), { nodeVersion: NODE });
 
-    expect(check(checks, "tools")).toEqual({
-      name: "tools",
+    expect(check(checks, "manifest")).toEqual({
+      name: "manifest",
       status: "warn",
       detail:
-        "29 extension tools from the live manifest; skipped /broken (request schema is not an object schema)",
+        "29 endpoints from the live manifest; skipped /broken (request schema is not an object schema)",
     });
   });
 });
@@ -289,7 +290,7 @@ describe("doctor tool", () => {
       .filter((e) => e.path !== "/debug")
       .concat({ ...BUNDLED_MANIFEST.endpoints[0]!, path: "/batch", description: "Run many." });
     serve("0.3.0", live);
-    const catalog = new CatalogState();
+    const catalog = new CatalogState(undefined, parseToolSelection("all"));
     const mcp = await connect({
       apiHost: HOST,
       apiPort: builtin.port,
@@ -304,7 +305,10 @@ describe("doctor tool", () => {
 
       expect(result.isError).toBeFalsy();
       expect(text(result)).toMatch(/^node +ok/);
-      expect(text(result)).toContain("29 extension tools from the live manifest");
+      expect(text(result)).toContain("manifest     ok    29 endpoints from the live manifest");
+      expect(text(result)).toContain(
+        "tier         ok    all: 29 extension tools listed, 0 endpoints through call_endpoint",
+      );
       const after = await names(mcp);
       expect(after).toContain("batch");
       expect(after).not.toContain("debug");
@@ -323,7 +327,12 @@ describe("doctor tool", () => {
   it("re-registers a tool whose definition changed", async () => {
     const [first, ...rest] = BUNDLED_MANIFEST.endpoints;
     serve("0.3.0", [{ ...first!, description: "Changed upstream." }, ...rest]);
-    const mcp = await connect({ apiHost: HOST, apiPort: builtin.port, extPort: extension.port });
+    const mcp = await connect({
+      apiHost: HOST,
+      apiPort: builtin.port,
+      extPort: extension.port,
+      catalog: new CatalogState(undefined, parseToolSelection("all")),
+    });
     try {
       await mcp.call("doctor");
 
@@ -341,7 +350,60 @@ describe("doctor tool", () => {
       const result = await mcp.call("doctor");
 
       expect(text(result)).toContain("is incompatible; this server needs 0.3.x");
-      expect((await names(mcp)).sort()).toEqual([...HAND_WRITTEN_TOOLS].sort());
+      expect((await names(mcp)).sort()).toEqual([
+        "doctor",
+        "generate_diagram",
+        "get_all_diagrams_info",
+        "get_current_diagram_info",
+        "get_diagram_image_by_id",
+      ]);
+      expect(text(result)).toContain("tier         ok    core: 0 extension tools listed");
+    } finally {
+      await mcp.close();
+    }
+  });
+
+  it("switches the listed tier on request and notifies the client", async () => {
+    serve();
+    const catalog = new CatalogState();
+    const mcp = await connect({
+      apiHost: HOST,
+      apiPort: builtin.port,
+      extPort: extension.port,
+      catalog,
+    });
+    const changed = changes(mcp);
+    try {
+      expect(await names(mcp)).not.toContain("create_diagram");
+
+      const result = await mcp.call("doctor", { tools: "core,create_diagram,nope" });
+
+      expect(catalog.selection.label).toBe("core,create_diagram,nope");
+      expect(await names(mcp)).toContain("create_diagram");
+      expect(text(result)).toMatch(
+        /tier +warn +core,create_diagram,nope: 6 extension tools .*; unknown: nope\n +fix +Check the names/,
+      );
+      await vi.waitFor(() => expect(changed()).toBeGreaterThan(0));
+    } finally {
+      await mcp.close();
+    }
+  });
+
+  it("rejects a malformed tier without changing the listing", async () => {
+    const catalog = new CatalogState();
+    const mcp = await connect({ apiHost: HOST, apiPort: refused, extPort: refused, catalog });
+    try {
+      const result = await mcp.call("doctor", { tools: "core,Bad Name" });
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toEqual({
+        error: {
+          code: "INVALID_ARGUMENT",
+          message:
+            'Invalid tools: "core,Bad Name". Use core, all, or comma-separated tool names such as core,create_diagram.',
+        },
+      });
+      expect(catalog.selection.label).toBe("core");
     } finally {
       await mcp.close();
     }

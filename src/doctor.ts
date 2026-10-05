@@ -167,12 +167,12 @@ function starumlCheck(version: string): Check {
 function finish(checks: Check[], catalog: ExtensionCatalog): Diagnosis {
   const { tools, skipped } = catalog.compiled;
   const count = catalog.enabled ? tools.length : 0;
-  const detail = `${count} extension tools from the ${catalog.source} manifest`;
+  const detail = `${count} endpoints from the ${catalog.source} manifest`;
   checks.push(
     skipped.length === 0
-      ? { name: "tools", status: "ok", detail }
+      ? { name: "manifest", status: "ok", detail }
       : {
-          name: "tools",
+          name: "manifest",
           status: "warn",
           detail: `${detail}; skipped ${skipped.map((s) => `${s.path} (${s.reason})`).join(", ")}`,
         },

@@ -5,12 +5,14 @@ import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/typ
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   bundledCatalog,
+  CatalogState,
   syncExtensionTools,
   type ExtensionCatalog,
   type RegisteredExtensionTools,
 } from "../src/extension-tools.js";
 import { BUNDLED_MANIFEST, compileManifest, type ManifestEntry } from "../src/manifest.js";
 import { StarUMLClient } from "../src/staruml-client.js";
+import { parseToolSelection } from "../src/tiers.js";
 import { UpstreamFixture } from "./support/fixture.js";
 
 const HOST = "http://127.0.0.1";
@@ -34,6 +36,9 @@ const live = (endpoints: ManifestEntry[]): ExtensionCatalog => ({
   enabled: true,
 });
 
+const ALL = parseToolSelection("all");
+const state = (catalog: ExtensionCatalog, selection = ALL) => new CatalogState(catalog, selection);
+
 describe("syncExtensionTools", () => {
   let server: McpServer;
   let client: Client;
@@ -48,7 +53,7 @@ describe("syncExtensionTools", () => {
   beforeAll(async () => {
     server = new McpServer({ name: "t", version: "0" });
     registered = new Map();
-    syncExtensionTools(server, upstream, bundledCatalog(), registered);
+    syncExtensionTools(server, upstream, state(bundledCatalog()), registered);
     client = new Client({ name: "t", version: "0" });
     client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
       changes++;
@@ -75,7 +80,7 @@ describe("syncExtensionTools", () => {
       { ...first!, path: "/batch" },
     ];
 
-    syncExtensionTools(server, upstream, live(next), registered);
+    syncExtensionTools(server, upstream, state(live(next)), registered);
 
     expect(await names()).toContain("batch");
     expect(await names()).not.toContain("debug");
@@ -86,20 +91,38 @@ describe("syncExtensionTools", () => {
 
   it("leaves unchanged tools alone", async () => {
     const before = new Map(registered);
-    const same = [...registered.values()].map((r) => r.fingerprint);
 
-    syncExtensionTools(
-      server,
-      upstream,
-      live(same.map((f) => JSON.parse(f) as ManifestEntry)),
-      registered,
-    );
+    const entries = [...registered.entries()]
+      .filter(([name]) => name !== "introspect")
+      .map(([, r]) => JSON.parse(r.fingerprint) as ManifestEntry);
+    const introspect = BUNDLED_MANIFEST.endpoints.find((e) => e.path === "/introspect")!;
+
+    syncExtensionTools(server, upstream, state(live([...entries, introspect])), registered);
 
     for (const [name, entry] of registered) expect(entry.tool).toBe(before.get(name)!.tool);
   });
 
+  it("swaps tools for describe_endpoints and call_endpoint when the selection narrows", async () => {
+    changes = 0;
+
+    syncExtensionTools(
+      server,
+      upstream,
+      state(bundledCatalog(), parseToolSelection("find_elements")),
+      registered,
+    );
+
+    expect(await names()).toEqual(["call_endpoint", "describe_endpoints", "find_elements"]);
+    await vi.waitFor(() => expect(changes).toBeGreaterThan(0));
+  });
+
   it("lists no extension tools for a disabled catalog", async () => {
-    syncExtensionTools(server, upstream, { ...bundledCatalog(), enabled: false }, registered);
+    syncExtensionTools(
+      server,
+      upstream,
+      state({ ...bundledCatalog(), enabled: false }),
+      registered,
+    );
 
     expect(await names()).toEqual([]);
     expect(registered.size).toBe(0);

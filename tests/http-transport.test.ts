@@ -4,8 +4,6 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createHttpHandler } from "../src/index.js";
 import { createServer, type ServerConfig } from "../src/server.js";
-import { HAND_WRITTEN_TOOLS } from "../src/extension-tools.js";
-import { BUNDLED_MANIFEST } from "../src/manifest.js";
 import { UpstreamFixture } from "./support/fixture.js";
 import { INITIALIZE_PARAMS, MCP_HEADERS, rpc } from "./support/sse.js";
 
@@ -59,12 +57,16 @@ describe("POST /mcp", () => {
     });
   });
 
-  it("lists all tools without a session", async () => {
+  it("lists the core tier without a session", async () => {
     const { message } = await rpc(server, 2, "tools/list");
 
-    const tools = message.result!.tools as { name: string }[];
-    expect(tools).toHaveLength(HAND_WRITTEN_TOOLS.size + BUNDLED_MANIFEST.endpoints.length);
-    expect(tools.map((t) => t.name)).toContain("generate_diagram");
+    const tools = message.result!.tools as { name: string; inputSchema: object }[];
+    expect(tools).toHaveLength(12);
+    expect(tools.map((t) => t.name)).toEqual(
+      expect.arrayContaining(["generate_diagram", "find_elements", "call_endpoint"]),
+    );
+    // On the wire, not only through the in-memory transport.
+    for (const tool of tools) expect(tool.inputSchema).not.toHaveProperty("$schema");
   });
 
   it("calls a tool against StarUML", async () => {

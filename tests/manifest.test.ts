@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   annotationsOf,
   BUNDLED_MANIFEST,
@@ -10,8 +11,11 @@ import {
   listedRequestSchema,
   MAX_DESCRIPTION_LENGTH,
   parseManifest,
+  strictRequestSchema,
   terseDescription,
   toolName,
+  unstamped,
+  withoutTrivialKeywords,
   type Manifest,
   type ManifestEntry,
 } from "../src/manifest.js";
@@ -194,6 +198,74 @@ describe("inputSchema", () => {
     expect(() => inputSchema({ schema: { type: "string" }, passthrough: false })).toThrow(
       "request schema is not an object schema",
     );
+  });
+});
+
+describe("strictRequestSchema", () => {
+  const request = {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    properties: { id: { type: "string" }, fields: { type: "array", items: { type: "string" } } },
+    required: ["id"],
+  };
+
+  it("accepts every manifest parameter, the projection of a writing endpoint included", () => {
+    expect(strictRequestSchema(entry({ request })).parse({ id: "a", fields: ["name"] })).toEqual({
+      id: "a",
+      fields: ["name"],
+    });
+  });
+
+  it("rejects keys the manifest does not define", () => {
+    const parsed = strictRequestSchema(entry({ request })).safeParse({ id: "a", Id: "b" });
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error!.issues[0]).toMatchObject({ code: "unrecognized_keys", keys: ["Id"] });
+  });
+});
+
+describe("unstamped", () => {
+  it("lists without $schema", () => {
+    const schema = unstamped(z.object({ id: z.string() }));
+
+    expect(z.toJSONSchema(schema, { target: "draft-7" })).toEqual({
+      $schema: undefined,
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+      additionalProperties: false,
+    });
+    expect(JSON.stringify(z.toJSONSchema(schema))).not.toContain("$schema");
+  });
+});
+
+describe("withoutTrivialKeywords", () => {
+  it("drops string propertyNames and empty additionalProperties at any depth", () => {
+    expect(
+      withoutTrivialKeywords({
+        type: "object",
+        properties: {
+          props: { type: "object", propertyNames: { type: "string" }, additionalProperties: {} },
+          list: { type: "array", items: [{ type: "object", additionalProperties: {} }] },
+        },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        props: { type: "object" },
+        list: { type: "array", items: [{ type: "object" }] },
+      },
+    });
+  });
+
+  it("keeps constraining forms of both keywords", () => {
+    const schema = {
+      type: "object",
+      propertyNames: { pattern: "^[a-z]+$" },
+      additionalProperties: false,
+    };
+
+    expect(withoutTrivialKeywords(schema)).toEqual(schema);
   });
 });
 

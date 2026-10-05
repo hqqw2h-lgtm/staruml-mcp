@@ -42,7 +42,11 @@ export interface GeneratedTool {
   name: string;
   path: string;
   description: string;
+  /** What the tool lists and validates: {@link listedRequestSchema}. */
   inputSchema: z.ZodObject;
+  /** The whole request schema, unknown keys rejected; what call_endpoint validates against. */
+  requestSchema: z.ZodObject;
+  entry: ManifestEntry;
   annotations: ToolAnnotations;
   /** Identifies the manifest entry, so an unchanged tool is not re-registered. */
   fingerprint: string;
@@ -77,7 +81,7 @@ const SHARED_DESCRIPTIONS: Record<string, string> = {
 export const PROJECTION_INSTRUCTIONS =
   "Element results are summaries {_id,_type,name,_parent}. Every tool returning elements also " +
   "accepts fields (attribute names), summary:false (all saved attributes) and depth (expand owned " +
-  "elements), listed or not. find_elements pages with limit/cursor (nextCursor).";
+  "elements), listed or not.";
 
 const SENTENCE_END = /(?<!\be\.g|\bi\.e)\.\s+/;
 
@@ -135,17 +139,61 @@ export function listedRequestSchema(entry: ManifestEntry): ListedSchema {
 }
 
 /**
+ * `schema` without keywords that hold for every JSON value they apply to: `propertyNames:
+ * {type: "string"}` (object keys are strings) and `additionalProperties: {}` (the default; JSON
+ * Schema 2020-12, 10.3.2.3). zod writes both for every record, and they are a third of the tokens
+ * of a record parameter in describe_endpoints.
+ */
+export function withoutTrivialKeywords(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(withoutTrivialKeywords);
+  if (typeof schema !== "object" || schema === null) return schema;
+  const out: JsonSchema = {};
+  for (const [key, value] of Object.entries(schema)) {
+    const json = JSON.stringify(value);
+    if (key === "propertyNames" && json === '{"type":"string"}') continue;
+    if (key === "additionalProperties" && json === "{}") continue;
+    out[key] = withoutTrivialKeywords(value);
+  }
+  return out;
+}
+
+/**
  * zod's `fromJSONSchema` (zod 4.2+) turns an object without `additionalProperties` into a loose
  * object, which lists `additionalProperties: {}`. The extension strips unknown keys either way, so
  * the root is rebuilt from its shape: strict as the manifest lists it, or loose when parameters
  * were left out of the listing and must still pass.
  */
 export function inputSchema({ schema, passthrough }: ListedSchema): z.ZodObject {
+  const { shape } = objectSchema(schema);
+  return unstamped(passthrough ? z.looseObject(shape) : z.object(shape));
+}
+
+/**
+ * The manifest's request schema with unknown keys rejected. The extension would drop them
+ * silently, so a misspelt parameter sent through call_endpoint would otherwise do nothing visible.
+ */
+export function strictRequestSchema(entry: ManifestEntry): z.ZodObject {
+  const { $schema: _ignored, ...request } = entry.request;
+  return z.strictObject(objectSchema(request).shape);
+}
+
+function objectSchema(schema: JsonSchema): z.ZodObject {
   const converted = z.fromJSONSchema(schema);
   if (!(converted instanceof z.ZodObject)) {
     throw new Error("request schema is not an object schema");
   }
-  return passthrough ? z.looseObject(converted.shape) : z.object(converted.shape);
+  return converted;
+}
+
+/**
+ * Keeps the MCP SDK from stamping `$schema` on the listed input schema. McpServer (1.29) lists
+ * a zod 4 object through `toJSONSchema(schema, {target: "draft-7"})`, which writes the draft-07
+ * URL first and then copies the root schema's metadata over it; an undefined `$schema` there is
+ * dropped by JSON serialization. The URL costs 13 tokens per tool, and the MCP spec (2025-06-18,
+ * Tool.inputSchema) does not ask for it.
+ */
+export function unstamped<T extends z.ZodObject>(schema: T): T {
+  return schema.meta({ $schema: undefined });
 }
 
 export function annotationsOf(entry: ManifestEntry): ToolAnnotations {
@@ -178,6 +226,8 @@ export function compileManifest(
         path: entry.path,
         description: terseDescription(entry.description),
         inputSchema: inputSchema(listedRequestSchema(entry)),
+        requestSchema: strictRequestSchema(entry),
+        entry,
         annotations: annotationsOf(entry),
         fingerprint: JSON.stringify(entry),
       });
