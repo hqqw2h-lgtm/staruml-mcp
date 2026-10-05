@@ -100,13 +100,21 @@ export class SessionStore {
     if (session.transport.sessionId === undefined) await server.close();
   }
 
-  /** Answers a request for session `id`; false when there is no such session. */
-  async handle(id: string, req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  /**
+   * Answers a request for session `id`; false when there is no such session. `body` is the
+   * parsed POST body, undefined for GET and DELETE.
+   */
+  async handle(
+    id: string,
+    req: IncomingMessage,
+    res: ServerResponse,
+    body?: unknown,
+  ): Promise<boolean> {
     const session = this.sessions.get(id);
     if (session === undefined) return false;
     this.sessions.delete(id);
     this.sessions.set(id, session);
-    await this.serve(session, req, res);
+    await this.serve(session, req, res, body);
     return true;
   }
 

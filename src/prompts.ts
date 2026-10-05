@@ -62,7 +62,7 @@ export function modelCodebase(state: CatalogState, args: ModelCodebaseArgs): Get
       "(generalization, realization, composition, aggregation, association, dependency). Split a " +
       "larger system into one diagram per package, and extend a diagram with upsert: true.",
     `${args.path === undefined ? 3 : 4}. Check the result: ` +
-      `${call("describe_diagram", "{diagramId}")} and ` +
+      `${call("describe_diagram", `{diagram: "${name}"}`)} and ` +
       `${call("validate_model", "{scope: <the diagram's _parent>}")}; fix what they show with ` +
       "build_diagram upsert or update_element, then summarise the model in a few sentences.",
   ];
@@ -78,20 +78,20 @@ export function modelCodebase(state: CatalogState, args: ModelCodebaseArgs): Get
   );
 }
 
-/** Read the diagram three cheap ways, then review it without changing anything. */
-export function reviewDiagram(state: CatalogState, diagramId: string | undefined): GetPromptResult {
-  const which =
-    diagramId === undefined
-      ? "the diagram open in StarUML (get_current_diagram_info gives its id)"
-      : `diagram ${diagramId}`;
-  const id = diagramId === undefined ? "<id>" : diagramId;
+/**
+ * Read the diagram three cheap ways, then review it without changing anything. `diagram` is an
+ * id or a path; `@current` names the diagram open in StarUML wherever a diagram is taken.
+ */
+export function reviewDiagram(state: CatalogState, diagram: string | undefined): GetPromptResult {
+  const which = diagram === undefined ? "the diagram open in StarUML" : `diagram ${diagram}`;
+  const ref = diagram ?? "@current";
   return message(
     [
       `Review ${which}.`,
       "",
-      `1. ${invocation(state, "describe_diagram", `{diagramId: "${id}"}`)} for its nodes, members and edges.`,
+      `1. ${invocation(state, "describe_diagram", `{diagram: "${ref}"}`)} for its nodes, members and edges.`,
       `2. ${invocation(state, "validate_model", "{scope: <the diagram's _parent>}")} for StarUML's rule violations; get_element_by_id gives the _parent.`,
-      `3. diagram_as_text({id: "${id}"}) when the exact notation matters.`,
+      `3. diagram_as_text({diagram: "${ref}"}) when the exact notation matters.`,
       "",
       "Report modelling problems (each validation finding with its element, missing types or " +
         "multiplicities, misused relationship kinds, naming), what a reader would find unclear, " +
@@ -109,7 +109,7 @@ const ModelCodebaseArgs = {
 };
 
 const ReviewDiagramArgs = {
-  diagramId: z.string().optional().describe("Diagram _id; default the current diagram."),
+  diagram: z.string().optional().describe("Diagram id or path; default the current diagram."),
 };
 
 /** A registered prompt's callback; every argument of these prompts is an optional string. */
@@ -134,7 +134,7 @@ export function registerPrompts(server: McpServer, state: CatalogState): void {
         description: "Describe, validate and read a diagram as text, then review it.",
         argsSchema: ReviewDiagramArgs,
       },
-      ({ diagramId }) => reviewDiagram(state, diagramId),
+      ({ diagram }) => reviewDiagram(state, diagram),
     ),
   };
   // GetPromptRequest's arguments are optional (MCP 2025-06-18, schema.ts), but McpServer 1.29

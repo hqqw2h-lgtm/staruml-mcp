@@ -1,8 +1,8 @@
-import { createServer as createHttpServer, type Server } from "node:http";
+import { createServer as createHttpServer, request as httpRequest, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { createHttpHandler } from "../src/index.js";
+import { createHttpHandler, MAX_BODY_BYTES } from "../src/index.js";
 import { createServer, type ServerConfig } from "../src/server.js";
 import { UpstreamFixture } from "./support/fixture.js";
 import { INITIALIZE_PARAMS, MCP_HEADERS, rpc } from "./support/sse.js";
@@ -41,6 +41,64 @@ afterAll(async () => {
   httpServer.closeAllConnections();
   await new Promise((resolve) => httpServer.close(resolve));
   await Promise.all([builtin.stop(), extension.stop()]);
+});
+
+/**
+ * POSTs `size` bytes to /mcp in 64 KiB chunks, stopping when the server answers; resolves with
+ * the status, the Connection header and the body. The server may close the socket before the
+ * last chunk, so write errors are expected and ignored.
+ */
+function postBytes(size: number): Promise<{ status: number; connection: string; body: string }> {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest(`${server}/mcp`, { method: "POST", headers: MCP_HEADERS }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk: string) => (body += chunk));
+      res.on("end", () =>
+        resolve({ status: res.statusCode!, connection: String(res.headers.connection), body }),
+      );
+    });
+    req.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EPIPE" && error.code !== "ECONNRESET") reject(error);
+    });
+    const chunk = Buffer.alloc(64 * 1024, "x");
+    let sent = 0;
+    const write = () => {
+      while (sent < size && !req.destroyed) {
+        const part = chunk.subarray(0, Math.min(chunk.length, size - sent));
+        sent += part.length;
+        if (!req.write(part)) return void req.once("drain", write);
+      }
+      req.end();
+    };
+    write();
+  });
+}
+
+describe("request body limit", () => {
+  it("refuses a body over 4 MiB with 413 and closes the connection", async () => {
+    const { status, connection, body } = await postBytes(MAX_BODY_BYTES + 1);
+
+    expect(status).toBe(413);
+    expect(connection).toBe("close");
+    expect(JSON.parse(body)).toEqual({
+      jsonrpc: "2.0",
+      error: { code: -32600, message: `Request body exceeds ${MAX_BODY_BYTES} bytes` },
+      id: null,
+    });
+  });
+
+  it("reads a body just under the limit", async () => {
+    const message = { jsonrpc: "2.0", id: 7, method: "tools/list", params: { _meta: { pad: "" } } };
+    const pad = MAX_BODY_BYTES - Buffer.byteLength(JSON.stringify(message));
+    message.params._meta.pad = "x".repeat(pad);
+
+    const res = await request(server).post("/mcp").set(MCP_HEADERS).send(JSON.stringify(message));
+
+    expect(Buffer.byteLength(JSON.stringify(message))).toBe(MAX_BODY_BYTES);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('"id":7');
+  });
 });
 
 describe("POST /mcp", () => {
@@ -90,7 +148,7 @@ describe("POST /mcp", () => {
 
     const { message } = await rpc(server, 4, "tools/call", {
       name: "delete_element",
-      arguments: { id: "X" },
+      arguments: { ref: "X" },
     });
 
     expect(message.error).toBeUndefined();

@@ -113,7 +113,7 @@ describe("access token", () => {
         "To turn the check off, clear Preferences > MCP Extension > Access Token.",
       );
       // The bundled tools stay listed, so their calls carry the hint too.
-      expect(report).toMatch(/manifest +ok +61 endpoints from the bundled manifest/);
+      expect(report).toMatch(/manifest +ok +69 endpoints from the bundled manifest/);
     });
     expect(extension.requests.map((r) => r.path)).toEqual(["/"]);
   });

@@ -13,7 +13,7 @@ export const EXPORT_DIAGRAM_DESCRIPTION =
   "Export a diagram as PNG, JPEG or SVG, inline or to a file.";
 
 const LISTED: Record<string, string> = {
-  id: "Diagram _id; default the current one.",
+  diagram: "Diagram id or path; default the current one.",
   format: "Default png.",
   scale: "PNG/JPEG pixels per unit; default 1.",
   background: "CSS colour, e.g. #fff; default transparent.",

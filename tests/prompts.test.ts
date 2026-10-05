@@ -65,8 +65,8 @@ describe("prompts/list", () => {
         description: "Describe, validate and read a diagram as text, then review it.",
         arguments: [
           {
-            name: "diagramId",
-            description: "Diagram _id; default the current diagram.",
+            name: "diagram",
+            description: "Diagram id or path; default the current diagram.",
             required: false,
           },
         ],
@@ -90,7 +90,7 @@ describe("model-codebase", () => {
         "1. Run doctor. If the extension check fails, stop and report its fix line.",
         '2. call_endpoint({name: "list_code_generators", body: {}}). If a generator for java is installed, call_endpoint({name: "reverse_code", body: {language: "java", path: "/work/shop/src"}}) reads the source into the model and adds overview diagrams; get_all_diagrams_info lists them. If none is installed, read the source yourself and continue with step 3.',
         '3. Unless reverse engineering drew what is needed, make one build_diagram({kind: "class", name: "Shop", spec: {classes, relations}}) with the central classes (about 5 to 15), their key attributes and operations, and their relations (generalization, realization, composition, aggregation, association, dependency). Split a larger system into one diagram per package, and extend a diagram with upsert: true.',
-        "4. Check the result: describe_diagram({diagramId}) and validate_model({scope: <the diagram's _parent>}); fix what they show with build_diagram upsert or update_element, then summarise the model in a few sentences.",
+        '4. Check the result: describe_diagram({diagram: "Shop"}) and validate_model({scope: <the diagram\'s _parent>}); fix what they show with build_diagram upsert or update_element, then summarise the model in a few sentences.',
       ].join("\n"),
     );
   });
@@ -120,13 +120,13 @@ describe("model-codebase", () => {
 
 describe("review-diagram", () => {
   it("reviews a named diagram with the core tier's tools", async () => {
-    expect(await promptText(REVIEW_DIAGRAM, { diagramId: "D1" })).toBe(
+    expect(await promptText(REVIEW_DIAGRAM, { diagram: "Model/Shop/Main" })).toBe(
       [
-        "Review diagram D1.",
+        "Review diagram Model/Shop/Main.",
         "",
-        '1. describe_diagram({diagramId: "D1"}) for its nodes, members and edges.',
+        '1. describe_diagram({diagram: "Model/Shop/Main"}) for its nodes, members and edges.',
         "2. validate_model({scope: <the diagram's _parent>}) for StarUML's rule violations; get_element_by_id gives the _parent.",
-        '3. diagram_as_text({id: "D1"}) when the exact notation matters.',
+        '3. diagram_as_text({diagram: "Model/Shop/Main"}) when the exact notation matters.',
         "",
         "Report modelling problems (each validation finding with its element, missing types or multiplicities, misused relationship kinds, naming), what a reader would find unclear, and a concrete fix for each as a build_diagram upsert or update_element call. Change nothing until asked.",
       ].join("\n"),
@@ -140,13 +140,11 @@ describe("review-diagram", () => {
     try {
       const text = await promptText(REVIEW_DIAGRAM, {}, narrow);
 
+      expect(text).toContain("Review the diagram open in StarUML.");
       expect(text).toContain(
-        "Review the diagram open in StarUML (get_current_diagram_info gives its id).",
+        '1. call_endpoint({name: "describe_diagram", body: {diagram: "@current"}})',
       );
-      expect(text).toContain(
-        '1. call_endpoint({name: "describe_diagram", body: {diagramId: "<id>"}})',
-      );
-      expect(text).toContain('3. diagram_as_text({id: "<id>"})');
+      expect(text).toContain('3. diagram_as_text({diagram: "@current"})');
     } finally {
       await narrow.close();
     }

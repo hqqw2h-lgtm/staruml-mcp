@@ -93,9 +93,9 @@ const INVALID: Record<string, Record<string, unknown>> = {
   "/build_diagram": { upsert: "yes" },
   "/export_diagram": { scale: 9 },
   "/find_elements": { type: 5 },
-  "/update_element": { id: 5 },
+  "/update_element": { ref: 5 },
   "/search_types": { query: 5 },
-  "/describe_diagram": { diagramId: 5 },
+  "/describe_diagram": { diagram: 5 },
   "/validate_model": { scope: 5 },
 };
 
@@ -129,7 +129,12 @@ const generated: ToolCase[] = ENDPOINTS.map((entry) => {
 
 const all = [...cases, ...generated];
 
-const UNDESCRIBED = new Set(["set_editor_state.gridVisible", "set_editor_state.snapToGrid"]);
+const UNDESCRIBED = new Set([
+  "set_editor_state.gridVisible",
+  "set_editor_state.snapToGrid",
+  "diff_diagram.mermaid",
+  "diff_diagram.format",
+]);
 
 const HOST = "http://127.0.0.1";
 const builtin = new UpstreamFixture();
@@ -174,7 +179,7 @@ describe("tool registry", () => {
         ...BUNDLED_MANIFEST.endpoints.map((e) => toolName(e.path)),
       ].sort(),
     );
-    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(61);
+    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(69);
   });
 
   it("lists no $schema on any input schema", async () => {
@@ -192,7 +197,7 @@ describe("tool registry", () => {
       >;
       for (const [name, schema] of Object.entries(properties)) {
         const label = `${tool.name}.${name}`;
-        // Extension 0.3.0 leaves these two booleans undescribed; their names say what they do.
+        // Extension 0.3.0 leaves these undescribed; their names say what they do.
         if (UNDESCRIBED.has(label)) expect(schema.description, label).toBeUndefined();
         else expect(schema.description, label).toMatch(/^[^\n]+$/);
       }
@@ -239,6 +244,7 @@ describe("tool registry", () => {
       "new_project",
       "open_project",
       "redo",
+      "restore_snapshot",
       "save_project",
       "save_project_as",
       "set_documentation",
@@ -373,7 +379,7 @@ describe("extension 0.3.0 contract", () => {
 
     const result = await mcp.call("create_element_with_view", {
       type: "UMLClass",
-      diagramId: "D1",
+      diagram: "D1",
       name: "Order",
       x: 10,
       y: 20,
@@ -394,7 +400,7 @@ describe("extension 0.3.0 contract", () => {
 
   it("forwards the unlisted projection of a writing tool", async () => {
     extension.reply("/set_documentation", { body: { success: true, data: summary } });
-    const args = { elementId: "E1", documentation: "Doc.", fields: ["documentation"], depth: 0 };
+    const args = { ref: "E1", documentation: "Doc.", fields: ["documentation"], depth: 0 };
 
     await mcp.call("set_documentation", args);
 
@@ -409,13 +415,13 @@ describe("extension 0.3.0 contract", () => {
     expect(withProjection.map((t) => t.name)).toEqual([]);
 
     extension.reply("/get_element_by_id", { body: { success: true, data: summary } });
-    const args = { id: "E1", fields: ["documentation"], depth: 1, summary: false };
+    const args = { ref: "E1", fields: ["documentation"], depth: 1, summary: false };
     await mcp.call("get_element_by_id", args);
     expect(extension.requests[0]!.body).toEqual(args);
   });
 
   it("rejects a wrong-typed field before the extension sees it", async () => {
-    const result = await mcp.call("get_views_of", { id: 10 });
+    const result = await mcp.call("get_views_of", { ref: 10 });
 
     expect(result.isError).toBe(true);
     expect(text(result)).toMatch(/Input validation error/);
@@ -432,8 +438,8 @@ describe("extension 0.3.0 contract", () => {
 
     const result = await mcp.call("create_relationship", {
       type: "UMLGeneralization",
-      tailId: "A",
-      headId: "B",
+      tail: "A",
+      head: "B",
     });
 
     expect(result.isError).toBe(true);
@@ -458,7 +464,7 @@ describe("extension 0.3.0 contract", () => {
     });
 
     const result = await mcp.call("add_tag", {
-      elementId: "E1",
+      ref: "E1",
       name: "n",
       kind: "string",
       value: "v",
@@ -538,7 +544,7 @@ describe("tool-specific responses", () => {
   });
 
   it("reports ENDPOINT_NOT_FOUND with an upgrade hint when the extension lacks an endpoint", async () => {
-    const result = await mcp.call("close_diagram", { id: "D1" });
+    const result = await mcp.call("close_diagram", { diagram: "D1" });
 
     expect(result.structuredContent).toMatchObject({
       error: { code: "ENDPOINT_NOT_FOUND", status: 404, message: "No handler for /close_diagram" },

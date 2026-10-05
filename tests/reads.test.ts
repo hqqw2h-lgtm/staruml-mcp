@@ -63,16 +63,16 @@ describe("short listings", () => {
       "describe_diagram",
       DESCRIBE_DIAGRAM_DESCRIPTION,
       {
-        diagramId: { type: "string", description: "Diagram _id." },
+        diagram: { type: "string", description: "Diagram id or path." },
         maxChars: { description: "Default 4000." },
       },
-      ["diagramId"],
+      ["diagram"],
     ],
     [
       "validate_model",
       VALIDATE_MODEL_DESCRIPTION,
       {
-        scope: { type: "string", description: "Element _id: only it and what it owns." },
+        scope: { type: "string", description: "Element id or path: only it and what it owns." },
         limit: { description: "Default 200." },
       },
       undefined,
@@ -103,19 +103,19 @@ describe("short listings", () => {
     },
   );
 
-  it("lists update_element's operations compressed, id required", async () => {
+  it("lists update_element's operations compressed, ref required", async () => {
     const tool = await listed("update_element");
 
     expect(tool.description).toBe(UPDATE_ELEMENT_DESCRIPTION);
     expect(Object.keys(tool.inputSchema.properties!)).toEqual([
-      "id",
+      "ref",
       "op",
       "field",
       "value",
       "index",
-      "parentId",
+      "parent",
     ]);
-    expect(tool.inputSchema.required).toEqual(["id"]);
+    expect(tool.inputSchema.required).toEqual(["ref"]);
     expect((tool.inputSchema.properties!.op as { enum: string[] }).enum).toEqual([
       "set",
       "add",
@@ -146,22 +146,28 @@ describe("short listings", () => {
     ],
     [
       "describe_diagram",
-      { diagramId: "" },
-      "diagramId: Too small: expected string to have >=1 characters",
+      { diagram: "" },
+      "diagram: Too small: expected string to have >=1 characters",
     ],
     [
       "describe_diagram",
-      { diagramId: "D1", maxChars: 50 },
+      { diagram: "Model/Main", maxChars: 50 },
       "maxChars: Too small: expected number to be >=200",
     ],
     ["validate_model", { limit: 2000 }, "limit: Too big: expected number to be <=1000"],
     ["find_elements", { limit: "10" }, "limit: Invalid input: expected number, received string"],
     [
       "update_element",
-      { id: "E1", op: "reorder", index: -1 },
+      { ref: "Model/Order", op: "reorder", index: -1 },
       "index: Too small: expected number to be >=0",
     ],
-    ["update_element", { id: "E1", bogus: 1 }, 'body: Unrecognized key: "bogus"'],
+    ["update_element", { ref: "E1", bogus: 1 }, 'body: Unrecognized key: "bogus"'],
+    [
+      "export_diagram",
+      { diagram: "D1", id: "D1" },
+      "id: an alias of diagram, which is given too; pass diagram only",
+    ],
+    ["export_diagram", { id: 5 }, "id: Invalid input: expected string, received number"],
   ])("checks %s %j against the whole request schema", async (name, args, message) => {
     const result = await mcp.call(name, args);
 
@@ -174,6 +180,16 @@ describe("short listings", () => {
       },
     });
     expect(extension.requests).toEqual([]);
+  });
+});
+
+describe("aliases", () => {
+  it("sends an unlisted alias of a short-listed tool under its canonical name", async () => {
+    extension.reply("/export_diagram", { body: { success: true, data: { format: "svg" } } });
+
+    await mcp.call("export_diagram", { id: "Model/Main", format: "svg" });
+
+    expect(extension.requests[0]!.body).toEqual({ diagram: "Model/Main", format: "svg" });
   });
 });
 
@@ -214,9 +230,9 @@ describe("describe_diagram", () => {
       },
     });
 
-    const result = await mcp.call("describe_diagram", { diagramId: "D1", maxChars: 1000 });
+    const result = await mcp.call("describe_diagram", { diagram: "Main", maxChars: 1000 });
 
-    expect(extension.requests[0]!.body).toEqual({ diagramId: "D1", maxChars: 1000 });
+    expect(extension.requests[0]!.body).toEqual({ diagram: "Main", maxChars: 1000 });
     expect(result.content).toEqual([{ type: "text", text: TEXT }]);
   });
 

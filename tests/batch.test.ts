@@ -306,7 +306,7 @@ describe("batch tool", () => {
     expect(result.structuredContent).toMatchObject({
       error: {
         code: "INVALID_ARGUMENT",
-        message: "ops.0.body.id: Invalid input: expected string, received undefined",
+        message: "ops.0.body.ref: Invalid input: expected string, received undefined",
       },
     });
     expect(extension.requests).toEqual([]);
@@ -338,8 +338,9 @@ describe("export_diagram", () => {
       body: { success: true, data: { ...meta, format, mimeType, base64: "iVBORw0KGgo=" } },
     });
 
-    const result = await mcp.call("export_diagram", { id: "D1", format });
+    const result = await mcp.call("export_diagram", { diagram: "Model/Main", format });
 
+    expect(extension.requests[0]!.body).toEqual({ diagram: "Model/Main", format });
     expect(result.content).toEqual([
       { type: "image", data: "iVBORw0KGgo=", mimeType },
       { type: "text", text: '{"diagram":"D1","width":640,"height":480,"bytes":1234}' },
@@ -377,7 +378,7 @@ describe("export_diagram", () => {
     const properties = tool.inputSchema.properties as Record<string, Record<string, unknown>>;
 
     expect(tool.description).toBe(EXPORT_DIAGRAM_DESCRIPTION);
-    expect(Object.keys(properties)).toEqual(["id", "format", "scale", "background", "path"]);
+    expect(Object.keys(properties)).toEqual(["diagram", "format", "scale", "background", "path"]);
     expect(properties.background).toEqual({
       description: "CSS colour, e.g. #fff; default transparent.",
     });

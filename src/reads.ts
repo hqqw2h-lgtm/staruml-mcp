@@ -39,13 +39,13 @@ export function searchTypesInput(entry: ManifestEntry): z.ZodObject {
 const BOUNDS = new Set(["maxChars", "limit"]);
 
 export function describeDiagramInput(entry: ManifestEntry): z.ZodObject {
-  return shortInput(entry, { diagramId: "Diagram _id.", maxChars: "Default 4000." }, BOUNDS);
+  return shortInput(entry, { diagram: "Diagram id or path.", maxChars: "Default 4000." }, BOUNDS);
 }
 
 export function validateModelInput(entry: ManifestEntry): z.ZodObject {
   return shortInput(
     entry,
-    { scope: "Element _id: only it and what it owns.", limit: "Default 200." },
+    { scope: "Element id or path: only it and what it owns.", limit: "Default 200." },
     BOUNDS,
   );
 }

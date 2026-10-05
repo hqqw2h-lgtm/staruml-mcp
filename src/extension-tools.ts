@@ -21,8 +21,12 @@ import {
 } from "./elements.js";
 import {
   BUNDLED_MANIFEST,
+  canonicalBody,
   compileManifest,
+  issuePath,
   listedRequestSchema,
+  nonEmpty,
+  unlisted,
   unstamped,
   untrivial,
   withoutTrivialKeywords,
@@ -336,17 +340,21 @@ function registerShortListed(
 }
 
 /**
- * `body` checked against the endpoint's whole request schema, unknown keys rejected, and for
- * /batch every op against its own endpoint's.
+ * `body` with its aliases renamed, checked against the endpoint's whole request schema, unknown
+ * keys rejected, and for /batch every op against its own endpoint's. An issue names a field as
+ * the caller wrote it, alias or canonical.
  */
 function validated(
   state: CatalogState,
   tool: GeneratedTool,
-  body: Record<string, unknown>,
+  input: Record<string, unknown>,
 ): Record<string, unknown> {
+  const { body, used } = canonicalBody(tool, input);
   const parsed = tool.requestSchema.safeParse(body);
   if (!parsed.success) {
-    const issues = parsed.error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`);
+    const issues = parsed.error.issues.map(
+      (i) => `${issuePath(i.path, used).join(".") || "body"}: ${i.message}`,
+    );
     throw new ToolInputError(issues.join("; "), {
       code: ErrorCode.InvalidArgument,
       endpoint: tool.path,
@@ -368,7 +376,7 @@ const IntrospectSummaryInput = unstamped(
       .array(z.enum(["factory", "metamodel", "toolbox"]))
       .optional()
       .describe("Default none; metamodel when types is given."),
-    types: z.array(z.string().min(1)).optional().describe("Only these metamodel types."),
+    types: z.array(nonEmpty()).optional().describe("Only these metamodel types."),
     inherited: z.boolean().optional().describe("With inherited attributes."),
   }),
 );
@@ -414,8 +422,12 @@ export function readIntrospect(
 
 const DescribeInput = unstamped(
   z.object({
-    names: z.array(z.string().min(1)).optional().describe("Endpoints to describe in full."),
-    group: z.enum(ENDPOINT_GROUPS).optional().describe("Describe every endpoint of a group."),
+    names: z.array(nonEmpty()).optional().describe("Endpoints to describe in full."),
+    // The index without arguments names the groups; listing them as an enum cost 30 tokens.
+    group: unlisted(z.enum(ENDPOINT_GROUPS), "enum")
+      .meta({ type: "string" })
+      .optional()
+      .describe("Describe every endpoint of a group the index names."),
   }),
 );
 
@@ -472,7 +484,7 @@ export function describe(
 
 const CallInput = unstamped(
   z.object({
-    name: z.string().min(1).describe("Endpoint name from describe_endpoints."),
+    name: nonEmpty().describe("Endpoint name from describe_endpoints."),
     body: untrivial(z.record(z.string(), z.unknown()))
       .optional()
       .describe("Request body; default {}."),

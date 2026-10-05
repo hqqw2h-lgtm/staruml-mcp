@@ -238,6 +238,20 @@ describe("sessions", () => {
     });
   });
 
+  it("answers a session's request that is not JSON with a parse error, keeping the session", async () => {
+    const { base, handler } = await listen();
+    const session = await initialize(base);
+
+    const res = await request(base)
+      .post("/mcp")
+      .set({ ...MCP_HEADERS, "Mcp-Session-Id": session })
+      .send("{not json");
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toEqual({ code: -32700, message: "Parse error: Invalid JSON" });
+    expect(handler.sessions.has(session)).toBe(true);
+  });
+
   it("leaves a GET without a session to the stateless transport", async () => {
     const { base } = await listen();
 

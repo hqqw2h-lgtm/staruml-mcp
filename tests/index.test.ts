@@ -364,7 +364,7 @@ describe("startup check", () => {
       expect(names).toContain("create_diagram");
       expect(names).not.toContain("call_endpoint");
       expect(console.error).toHaveBeenCalledWith(
-        expect.stringMatching(/\ntier +ok +all: 61 extension tools listed, 0 endpoints through/),
+        expect.stringMatching(/\ntier +ok +all: 69 extension tools listed, 0 endpoints through/),
       );
     } finally {
       await server.close();

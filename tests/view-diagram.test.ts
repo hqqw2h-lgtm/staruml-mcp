@@ -8,7 +8,7 @@ import {
   VIEWER_MIME_TYPE,
   VIEWER_URI,
 } from "../src/viewer.js";
-import { UpstreamFixture } from "./support/fixture.js";
+import { closedPort, UpstreamFixture } from "./support/fixture.js";
 import { connect, text, UI_CAPABILITIES, type ConnectedClient } from "./support/mcp.js";
 
 const HOST = "http://127.0.0.1";
@@ -99,12 +99,12 @@ describe("view_diagram for a client that renders MCP Apps", () => {
   it("exports the SVG for the viewer and tells the model only what was shown", async () => {
     serveSvg();
 
-    const result = await ui.call("view_diagram", { id: "D1" });
+    const result = await ui.call("view_diagram", { diagram: "Model/Main" });
 
     expect(result.isError).toBeFalsy();
     expect(extension.requests).toEqual([
-      { method: "POST", path: "/export_diagram", body: { id: "D1", format: "svg" } },
-      { method: "POST", path: "/get_element_by_id", body: { id: "D1" } },
+      { method: "POST", path: "/export_diagram", body: { diagram: "Model/Main", format: "svg" } },
+      { method: "POST", path: "/get_element_by_id", body: { ref: "D1" } },
     ]);
     expect(result.structuredContent).toEqual({
       diagram: "D1",
@@ -189,18 +189,55 @@ describe("view_diagram for a client that renders MCP Apps", () => {
 });
 
 describe("view_diagram for a client without MCP Apps", () => {
-  it("returns the PNG image block get_diagram_image_by_id returns", async () => {
+  it("returns the PNG image block get_diagram_image_by_id returns for the id a path names", async () => {
     builtin.reply("/get_diagram_image_by_id", { body: { success: true, data: PNG } });
+    serveSvg();
 
-    const result = await plain.call("view_diagram", { id: "D1" });
+    const result = await plain.call("view_diagram", { diagram: "Model/Main" });
 
     expect(result).toEqual({
       content: [{ type: "image", data: PNG, mimeType: "image/png" }],
     });
+    expect(extension.requests).toEqual([
+      { method: "POST", path: "/get_element_by_id", body: { ref: "Model/Main" } },
+    ]);
     expect(builtin.requests).toEqual([
       { method: "POST", path: "/get_diagram_image_by_id", body: { diagramId: "D1" } },
     ]);
-    expect(extension.requests).toEqual([]);
+  });
+
+  it("passes the reference on as an id when the extension does not answer", async () => {
+    builtin.reply("/get_diagram_image_by_id", { body: { success: true, data: PNG } });
+    const mcp = await connect({ ...config(), extPort: await closedPort() });
+    try {
+      const result = await mcp.call("view_diagram", { id: "D1" });
+
+      expect(result.content).toEqual([{ type: "image", data: PNG, mimeType: "image/png" }]);
+      expect(builtin.requests.at(-1)).toEqual({
+        method: "POST",
+        path: "/get_diagram_image_by_id",
+        body: { diagramId: "D1" },
+      });
+    } finally {
+      await mcp.close();
+    }
+  });
+
+  it("reports a path the extension cannot resolve", async () => {
+    extension.reply("/get_element_by_id", {
+      status: 409,
+      body: {
+        success: false,
+        code: "AMBIGUOUS_REF",
+        error: "Element Main names 2 elements; pass one of their ids or a longer path",
+      },
+    });
+
+    const result = await plain.call("view_diagram", { diagram: "Main" });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({ error: { code: "AMBIGUOUS_REF" } });
+    expect(builtin.requests).toEqual([]);
   });
 
   it("looks up the current diagram without an id", async () => {
@@ -226,12 +263,12 @@ describe("view_diagram for a client without MCP Apps", () => {
     expect(result.isError).toBe(true);
     expect(text(result)).toBe(
       "Failed to view diagram: No diagram is open in StarUML. [INVALID_ARGUMENT]\n" +
-        "Hint: Pass id; get_all_diagrams_info lists the diagrams.",
+        "Hint: Pass diagram; get_all_diagrams_info lists the diagrams.",
     );
   });
 
-  it("rejects an empty id before calling StarUML", async () => {
-    const result = await plain.call("view_diagram", { id: "" });
+  it("rejects an empty diagram before calling StarUML", async () => {
+    const result = await plain.call("view_diagram", { diagram: "" });
 
     expect(result.isError).toBe(true);
     expect(text(result)).toMatch(/Input validation error/);

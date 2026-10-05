@@ -22,7 +22,7 @@ import {
   type TextFormat,
 } from "./diagram-text.js";
 import { generateDiagram } from "./generate-diagram.js";
-import { PROJECTION_INSTRUCTIONS, unstamped } from "./manifest.js";
+import { nonEmpty, PROJECTION_INSTRUCTIONS, unstamped, untrivial } from "./manifest.js";
 import { readProjectTree } from "./project-tree.js";
 import { registerPrompts } from "./prompts.js";
 import { StarUMLClient } from "./staruml-client.js";
@@ -87,14 +87,11 @@ export interface ServerConfig {
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const;
 
-const id = (what: string) => z.string().min(1).describe(`${what} _id.`);
+const id = (what: string) => nonEmpty().describe(`${what} _id.`);
 
 const GenerateDiagramInput = unstamped(
   z.object({
-    code: z
-      .string()
-      .min(1)
-      .describe(`Mermaid: ${SUPPORTED_MERMAID_DIAGRAMS.join("|")}.`),
+    code: nonEmpty().describe(`Mermaid: ${SUPPORTED_MERMAID_DIAGRAMS.join("|")}.`),
     name: z.string().optional().describe("Diagram name; default the Mermaid title."),
     kind: z.enum(["activity", "usecase"]).optional().describe("Build a flowchart as this kind."),
   }),
@@ -102,16 +99,28 @@ const GenerateDiagramInput = unstamped(
 
 const DiagramImageInput = unstamped(z.object({ diagramId: id("Diagram") }));
 
-const ViewDiagramInput = unstamped(
-  z.object({ id: id("Diagram").optional().describe("Diagram _id; default the current one.") }),
-);
+/**
+ * A diagram reference: an id, or with the extension a path (`Model/Shop/Main`, a diagram's name,
+ * `@current`). `id`, the name before extension 0.3.0 took paths, still passes unlisted through
+ * the loose root, as the extension keeps its own old names as aliases.
+ */
+const diagramRef = nonEmpty().optional().describe("Diagram id or path; default the current one.");
+
+const ViewDiagramInput = unstamped(untrivial(z.looseObject({ diagram: diagramRef })));
 
 const DiagramAsTextInput = unstamped(
-  z.object({
-    id: id("Diagram").optional().describe("Diagram _id; default the current one."),
-    format: z.enum(TEXT_FORMATS).optional().describe("Default mermaid."),
-  }),
+  untrivial(
+    z.looseObject({
+      diagram: diagramRef,
+      format: z.enum(TEXT_FORMATS).optional().describe("Default mermaid."),
+    }),
+  ),
 );
+
+/** `diagram`, or the unlisted `id` it replaced. */
+function diagramArgument(input: { diagram?: string; id?: unknown }): string | undefined {
+  return input.diagram ?? (typeof input.id === "string" ? input.id : undefined);
+}
 
 const DoctorInput = unstamped(
   z.object({
@@ -220,10 +229,11 @@ export function createServer(config: ServerConfig = {}): McpServer {
       annotations: READ_ONLY,
       _meta: VIEWER_TOOL_META,
     },
-    async ({ id }) =>
+    async (input) =>
       runTool("view diagram", () => {
         const inline = viewerRead || declaresUi(server.server.getClientCapabilities());
-        return viewDiagram(client, extensionTool(catalog, "export_diagram"), id, inline);
+        const diagram = diagramArgument(input);
+        return viewDiagram(client, extensionTool(catalog, "export_diagram"), diagram, inline);
       }),
   );
 
@@ -234,9 +244,14 @@ export function createServer(config: ServerConfig = {}): McpServer {
       inputSchema: DiagramAsTextInput,
       annotations: READ_ONLY,
     },
-    async ({ id, format = "mermaid" }) =>
+    async (input) =>
       runTool("write diagram as text", () =>
-        diagramAsText(client, extensionTool(catalog, "export_text"), id, format),
+        diagramAsText(
+          client,
+          extensionTool(catalog, "export_text"),
+          diagramArgument(input),
+          input.format ?? "mermaid",
+        ),
       ),
   );
 

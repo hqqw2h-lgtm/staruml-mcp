@@ -31,13 +31,13 @@ interface TextExport {
 }
 
 /**
- * `/export_text` of diagram `id`, or of the current one. `tool` is the endpoint of the current
- * catalog, undefined when the extension lacks it or is incompatible.
+ * `/export_text` of `diagram` (an id or a path), or of the current one. `tool` is the endpoint of
+ * the current catalog, undefined when the extension lacks it or is incompatible.
  */
 export async function exportText(
   client: StarUMLClient,
   tool: GeneratedTool | undefined,
-  id: string | undefined,
+  diagram: string | undefined,
   format: TextFormat,
 ): Promise<TextExport> {
   if (tool === undefined) {
@@ -49,26 +49,26 @@ export async function exportText(
       },
     );
   }
-  const diagramId = id ?? (await currentDiagramId(client));
-  return (await client.callExtension(tool.path, { diagramId, format })) as TextExport;
+  const ref = diagram ?? (await currentDiagramId(client));
+  return (await client.callExtension(tool.path, { diagram: ref, format })) as TextExport;
 }
 
 /**
  * The text in a block of its own, so its newlines and quotes are not JSON-escaped (an eleven-line
  * class diagram from StarUML 7.1.1 is 45 o200k_base tokens as text, 56 as a JSON string), then the
- * diagram's id unless the caller passed it, its kind and the warnings. The text names the diagram
- * (Mermaid front matter, PlantUML `title`).
+ * diagram's id unless the caller passed that id, its kind and the warnings. The text names the
+ * diagram (Mermaid front matter, PlantUML `title`).
  */
 export async function diagramAsText(
   client: StarUMLClient,
   tool: GeneratedTool | undefined,
-  id: string | undefined,
+  diagram: string | undefined,
   format: TextFormat,
 ): Promise<CallToolResult> {
-  const out = await exportText(client, tool, id, format);
+  const out = await exportText(client, tool, diagram, format);
   const about = serialize(
     { id: out.diagram._id, kind: out.kind, warnings: out.warnings },
-    id === undefined ? {} : { id },
+    diagram === undefined ? {} : { id: diagram },
   );
   return {
     content: [

@@ -85,7 +85,7 @@ describe("parseToolSelection", () => {
 });
 
 describe("endpointGroup", () => {
-  it("groups every endpoint of the 61-endpoint manifest", () => {
+  it("groups every endpoint of the 69-endpoint manifest", () => {
     const groups: Record<string, string[]> = {};
     for (const e of BUNDLED_MANIFEST.endpoints) {
       (groups[endpointGroup(toolName(e.path))] ??= []).push(toolName(e.path));
@@ -113,7 +113,12 @@ describe("endpointGroup", () => {
         "set_documentation",
         "get_relationships_of",
         "get_refs_to",
+        "divide_fragment",
         "batch",
+        "uml_lint",
+        "snapshot",
+        "diff_since",
+        "restore_snapshot",
       ],
       diagram: [
         "create_element_with_view",
@@ -130,6 +135,7 @@ describe("endpointGroup", () => {
         "resize_node",
         "set_view_style",
         "set_z_order",
+        "create_view_of",
         "export_diagram",
         "export_diagrams",
         "export_pdf",
@@ -137,6 +143,8 @@ describe("endpointGroup", () => {
         "export_text",
         "build_diagram",
         "describe_diagram",
+        "lint_diagram",
+        "diff_diagram",
       ],
       feature: [
         "add_attribute",
@@ -334,6 +342,11 @@ describe("describe_endpoints", () => {
       "set_documentation",
       "get_relationships_of",
       "get_refs_to",
+      "divide_fragment",
+      "uml_lint",
+      "snapshot",
+      "diff_since",
+      "restore_snapshot",
     ]);
   });
 
@@ -378,11 +391,12 @@ describe("call_endpoint", () => {
     });
 
     expect(result.isError).toBeFalsy();
+    // parentId is extension 0.3.0's alias of parent, sent under the canonical name.
     expect(extension.requests).toEqual([
       {
         method: "POST",
         path: "/create_diagram",
-        body: { type: "UMLClassDiagram", parentId: "M1", name: "Main" },
+        body: { type: "UMLClassDiagram", parent: "M1", name: "Main" },
       },
     ]);
     // The name echoes the body and is dropped, as with a dedicated tool.
@@ -400,7 +414,7 @@ describe("call_endpoint", () => {
 
   it("accepts the projection a writing endpoint does not list", async () => {
     extension.reply("/set_documentation", { body: { success: true, data: summary } });
-    const body = { elementId: "E1", documentation: "Doc.", fields: ["documentation"], depth: 0 };
+    const body = { ref: "Model/Order", documentation: "Doc.", fields: ["documentation"], depth: 0 };
 
     await mcp.call("call_endpoint", { name: "set_documentation", body });
 

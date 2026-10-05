@@ -277,6 +277,10 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                   }
                 },
                 "required": [
@@ -432,6 +436,10 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                   }
                 },
                 "required": [
@@ -520,6 +528,10 @@
                   "string",
                   "null"
                 ]
+              },
+              "path": {
+                "type": "string",
+                "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
               }
             },
             "required": [
@@ -539,17 +551,17 @@
     },
     {
       "path": "/get_element_by_id",
-      "description": "Read one element by id.",
+      "description": "Read one element by id or path ('Model/Shop/Order', 'Order.total', 'Order#pay()', a diagram name, '@current').",
       "readOnly": true,
       "destructive": false,
       "request": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "id": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Element id."
+            "description": "Element. Id or path."
           },
           "summary": {
             "type": "boolean",
@@ -568,10 +580,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "id"
+          "ref"
         ]
       },
       "response": {
@@ -597,6 +616,10 @@
               "string",
               "null"
             ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
           }
         },
         "required": [
@@ -690,6 +713,10 @@
                     "string",
                     "null"
                   ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                 }
               },
               "required": [
@@ -730,10 +757,10 @@
             "minLength": 1,
             "description": "A model id of /introspect factory.modelIds, e.g. 'UMLClass'."
           },
-          "parentId": {
+          "parent": {
             "type": "string",
             "minLength": 1,
-            "description": "Owner element id."
+            "description": "Owner element. Id or path."
           },
           "name": {
             "type": "string",
@@ -752,6 +779,10 @@
             "additionalProperties": {},
             "description": "Initial attribute values by name, as /introspect lists them: plain values for prim/enum attributes, an id or {$ref: id} for references, arrays of those for reference lists."
           },
+          "allowDuplicateNames": {
+            "type": "boolean",
+            "description": "Default false: a classifier, package, diagram, attribute, literal, entity or column named like a sibling of its kind is refused with DUPLICATE_NAME, since paths could not tell them apart."
+          },
           "summary": {
             "type": "boolean",
             "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
@@ -769,11 +800,18 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "parentId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of parent.",
+            "x-alias-of": "parent",
+            "deprecated": true
           }
         },
         "required": [
           "type",
-          "parentId"
+          "parent"
         ]
       },
       "response": {
@@ -799,6 +837,10 @@
               "string",
               "null"
             ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
           }
         },
         "required": [
@@ -818,10 +860,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "id": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Element id."
+            "description": "Element. Id or path."
           },
           "op": {
             "type": "string",
@@ -832,7 +874,7 @@
               "reorder",
               "relocate"
             ],
-            "description": "set (default): field = value. add/remove: value is one or more element ids for the reference list `field`. reorder: move the item `value` of list `field` to `index`. relocate: move the element to owner `parentId`, keeping its list field."
+            "description": "set (default): field = value. add/remove: value is one or more element ids for the reference list `field`. reorder: move the item `value` of list `field` to `index`. relocate: move the element to owner `parent`, keeping its list field."
           },
           "field": {
             "type": "string",
@@ -848,10 +890,10 @@
             "maximum": 9007199254740991,
             "description": "reorder: target position, counted after the item is taken out."
           },
-          "parentId": {
+          "parent": {
             "type": "string",
             "minLength": 1,
-            "description": "relocate: the new owner."
+            "description": "relocate: the new owner. Id or path."
           },
           "summary": {
             "type": "boolean",
@@ -870,10 +912,24 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
+          },
+          "parentId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of parent.",
+            "x-alias-of": "parent",
+            "deprecated": true
           }
         },
         "required": [
-          "id"
+          "ref"
         ]
       },
       "response": {
@@ -899,6 +955,10 @@
               "string",
               "null"
             ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
           }
         },
         "required": [
@@ -918,14 +978,21 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Element. Id or path."
+          },
           "id": {
             "type": "string",
             "minLength": 1,
-            "description": "Element id."
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "id"
+          "ref"
         ]
       },
       "response": {
@@ -933,7 +1000,8 @@
         "type": "object",
         "properties": {
           "deleted": {
-            "type": "string"
+            "type": "string",
+            "description": "Id of the element deleted."
           },
           "models_deleted": {
             "type": "integer",
@@ -956,7 +1024,7 @@
     },
     {
       "path": "/create_element_with_view",
-      "description": "Create a model element and its view on a diagram, e.g. a UMLClass shown on a UMLClassDiagram. Pass containerViewId for elements placed on or inside another view: ports and parts on a class, pins on an action, tasks in a BPMN lane, lifelines in a timing frame.",
+      "description": "Create a model element and its view on a diagram, e.g. a UMLClass shown on a UMLClassDiagram. Pass container for elements placed on or inside another view: ports and parts on a class, pins on an action, tasks in a BPMN lane, lifelines in a timing frame.",
       "readOnly": false,
       "destructive": false,
       "request": {
@@ -968,20 +1036,20 @@
             "minLength": 1,
             "description": "A model-and-view id of /introspect factory.modelAndViewIds, e.g. 'UMLClass', 'ERDEntity', or a toolbox item id, which applies the item's presets, e.g. 'UMLInitialState', 'UMLCompositeState', 'C4ContainerDatabase'."
           },
-          "diagramId": {
+          "diagram": {
             "type": "string",
             "minLength": 1,
-            "description": "Diagram to place the view on."
+            "description": "Diagram to place the view on. Id or path."
           },
-          "parentId": {
+          "parent": {
             "type": "string",
             "minLength": 1,
-            "description": "Owner of the new model element; default the diagram's owner, as the diagram editor does. Items placed on a host view (toolbox option parasitic, e.g. ports and pins) are filed under the host's model by StarUML regardless."
+            "description": "Owner of the new model element; default the diagram's owner, as the diagram editor does. Items placed on a host view (toolbox option parasitic, e.g. ports and pins) are filed under the host's model by StarUML regardless. Id or path."
           },
-          "containerViewId": {
+          "container": {
             "type": "string",
             "minLength": 1,
-            "description": "View that hosts or contains the new view."
+            "description": "View that hosts or contains the new view; a model stands for its view on the diagram. Id or path."
           },
           "name": {
             "type": "string",
@@ -1011,6 +1079,10 @@
             "type": "number",
             "description": "Bottom edge, default y + 50."
           },
+          "allowDuplicateNames": {
+            "type": "boolean",
+            "description": "Default false: a classifier, package, diagram, attribute, literal, entity or column named like a sibling of its kind is refused with DUPLICATE_NAME, since paths could not tell them apart."
+          },
           "summary": {
             "type": "boolean",
             "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
@@ -1028,11 +1100,32 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
+          },
+          "parentId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of parent.",
+            "x-alias-of": "parent",
+            "deprecated": true
+          },
+          "containerViewId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of container.",
+            "x-alias-of": "container",
+            "deprecated": true
           }
         },
         "required": [
           "type",
-          "diagramId"
+          "diagram"
         ]
       },
       "response": {
@@ -1061,6 +1154,10 @@
                   "string",
                   "null"
                 ]
+              },
+              "path": {
+                "type": "string",
+                "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
               }
             },
             "required": [
@@ -1094,6 +1191,10 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                   }
                 },
                 "required": [
@@ -1131,29 +1232,29 @@
             "minLength": 1,
             "description": "A model-and-view id of /introspect factory.modelAndViewIds whose entry has a relationship kind, e.g. 'UMLAssociation', an edge id such as 'NoteLink', or a toolbox item id such as 'UMLComposition' or 'UMLAsyncMessage'."
           },
-          "diagramId": {
+          "diagram": {
             "type": "string",
             "minLength": 1,
-            "description": "Diagram to place the edge on."
+            "description": "Diagram to place the edge on. Id or path."
           },
-          "parentId": {
+          "parent": {
             "type": "string",
             "minLength": 1,
-            "description": "Passed to the factory as the diagram editor does; default the diagram's owner. Most relationship factories file the relationship under the tail model regardless."
+            "description": "Passed to the factory as the diagram editor does; default the diagram's owner. Most relationship factories file the relationship under the tail model regardless. Id or path."
           },
-          "tailViewId": {
+          "tail": {
             "type": "string",
             "minLength": 1,
-            "description": "View at the source end."
+            "description": "View at the source end; a model stands for its view on the diagram. Id or path."
           },
-          "headViewId": {
+          "head": {
             "type": "string",
             "minLength": 1,
-            "description": "View at the target end."
+            "description": "View at the target end; a model stands for its view on the diagram. Id or path."
           },
           "name": {
             "type": "string",
-            "description": "Relationship name."
+            "description": "The relationship's own name, drawn as a plain label on the edge (without the visibility mark); role names go in tailName/headName."
           },
           "properties": {
             "type": "object",
@@ -1178,6 +1279,14 @@
             },
             "additionalProperties": {},
             "description": "Undirected relationships only: attributes of end2."
+          },
+          "tailName": {
+            "type": "string",
+            "description": "Undirected relationships only: the role name of end1 (tailEnd.name)."
+          },
+          "headName": {
+            "type": "string",
+            "description": "Undirected relationships only: the role name of end2 (headEnd.name)."
           },
           "x1": {
             "type": "number",
@@ -1212,13 +1321,41 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
+          },
+          "parentId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of parent.",
+            "x-alias-of": "parent",
+            "deprecated": true
+          },
+          "tailViewId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of tail.",
+            "x-alias-of": "tail",
+            "deprecated": true
+          },
+          "headViewId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of head.",
+            "x-alias-of": "head",
+            "deprecated": true
           }
         },
         "required": [
           "type",
-          "diagramId",
-          "tailViewId",
-          "headViewId"
+          "diagram",
+          "tail",
+          "head"
         ]
       },
       "response": {
@@ -1247,6 +1384,10 @@
                   "string",
                   "null"
                 ]
+              },
+              "path": {
+                "type": "string",
+                "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
               }
             },
             "required": [
@@ -1280,6 +1421,10 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                   }
                 },
                 "required": [
@@ -1305,7 +1450,7 @@
     },
     {
       "path": "/create_relationship",
-      "description": "Create a relationship between two elements with its ends set: source/target for directed kinds (Generalization, Dependency, Realization, InterfaceRealization, Include, Extend, Transition, ControlFlow, ObjectFlow, Message, flows of the other diagram families), end1/end2 for undirected ones (Association with end name, navigability, aggregation, multiplicity; Link; ERD relationship; connectors). With diagramId the edge view is created too, through StarUML's own factory and its connection rules; tail/head may then be view ids or ids of models shown on that diagram.",
+      "description": "Create a relationship between two elements with its ends set: source/target for directed kinds (Generalization, Dependency, Realization, InterfaceRealization, Include, Extend, Transition, ControlFlow, ObjectFlow, Message, flows of the other diagram families), end1/end2 for undirected ones (Association with end name, navigability, aggregation, multiplicity; Link; ERD relationship; connectors). With a diagram the edge view is created too, through StarUML's own factory and its connection rules; tail/head may then be view ids or ids of models shown on that diagram.",
       "readOnly": false,
       "destructive": false,
       "request": {
@@ -1315,27 +1460,27 @@
           "type": {
             "type": "string",
             "minLength": 1,
-            "description": "With diagramId: a model-and-view id (see /introspect factory.modelAndView) or a toolbox item id that presets one, e.g. 'UMLComposition', 'UMLReplyMessage', 'ERDRelationshipOneToMany'. Without: a metamodel class whose relationship kind is directed or undirected."
+            "description": "With a diagram: a model-and-view id (see /introspect factory.modelAndView) or a toolbox item id that presets one, e.g. 'UMLComposition', 'UMLReplyMessage', 'ERDRelationshipOneToMany'. Without: a metamodel class whose relationship kind is directed or undirected."
           },
-          "tailId": {
+          "tail": {
             "type": "string",
             "minLength": 1,
-            "description": "Source end: a model, or a view on the diagram."
+            "description": "Source end: a model, or a view on the diagram. Id or path."
           },
-          "headId": {
+          "head": {
             "type": "string",
             "minLength": 1,
-            "description": "Target end: a model, or a view on the diagram."
+            "description": "Target end: a model, or a view on the diagram. Id or path."
           },
-          "diagramId": {
+          "diagram": {
             "type": "string",
             "minLength": 1,
-            "description": "Diagram to draw the relationship on."
+            "description": "Diagram to draw the relationship on. Id or path."
           },
-          "parentId": {
+          "parent": {
             "type": "string",
             "minLength": 1,
-            "description": "Owner of the relationship. With a diagram it is passed to the factory as the diagram editor does (default the diagram's owner); most relationship factories file the relationship under the tail model regardless. Without a diagram the default is the tail's owner when that has a list for this type (messages, edges, transitions), else the tail model."
+            "description": "Owner of the relationship. With a diagram it is passed to the factory as the diagram editor does (default the diagram's owner); most relationship factories file the relationship under the tail model regardless. Without a diagram the default is the tail's owner when that has a list for this type (messages, edges, transitions), else the tail model. Id or path."
           },
           "field": {
             "type": "string",
@@ -1344,7 +1489,7 @@
           },
           "name": {
             "type": "string",
-            "description": "Relationship name."
+            "description": "The relationship's own name, drawn as a plain label on the edge (without the visibility mark); role names go in tailName/headName."
           },
           "properties": {
             "type": "object",
@@ -1369,6 +1514,14 @@
             },
             "additionalProperties": {},
             "description": "Undirected relationships only: attributes of end2."
+          },
+          "tailName": {
+            "type": "string",
+            "description": "Undirected relationships only: the role name of end1 (tailEnd.name)."
+          },
+          "headName": {
+            "type": "string",
+            "description": "Undirected relationships only: the role name of end2 (headEnd.name)."
           },
           "x1": {
             "type": "number",
@@ -1403,12 +1556,40 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "tailId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of tail.",
+            "x-alias-of": "tail",
+            "deprecated": true
+          },
+          "headId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of head.",
+            "x-alias-of": "head",
+            "deprecated": true
+          },
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
+          },
+          "parentId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of parent.",
+            "x-alias-of": "parent",
+            "deprecated": true
           }
         },
         "required": [
           "type",
-          "tailId",
-          "headId"
+          "tail",
+          "head"
         ]
       },
       "response": {
@@ -1439,6 +1620,10 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                   }
                 },
                 "required": [
@@ -1478,6 +1663,10 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                   }
                 },
                 "required": [
@@ -1510,10 +1699,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "ownerId": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Classifier id."
+            "description": "Classifier. Id or path."
           },
           "name": {
             "type": "string",
@@ -1594,6 +1783,10 @@
             "additionalProperties": {},
             "description": "Initial attribute values by name, as /introspect lists them: plain values for prim/enum attributes, an id or {$ref: id} for references, arrays of those for reference lists."
           },
+          "allowDuplicateNames": {
+            "type": "boolean",
+            "description": "Default false: a classifier, package, diagram, attribute, literal, entity or column named like a sibling of its kind is refused with DUPLICATE_NAME, since paths could not tell them apart."
+          },
           "summary": {
             "type": "boolean",
             "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
@@ -1611,10 +1804,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "ownerId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "ownerId",
+          "ref",
           "name"
         ]
       },
@@ -1641,6 +1841,10 @@
               "string",
               "null"
             ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
           }
         },
         "required": [
@@ -1660,10 +1864,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "ownerId": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Classifier id."
+            "description": "Classifier. Id or path."
           },
           "name": {
             "type": "string",
@@ -1814,10 +2018,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "ownerId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "ownerId",
+          "ref",
           "name"
         ]
       },
@@ -1844,6 +2055,10 @@
               "string",
               "null"
             ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
           }
         },
         "required": [
@@ -1863,10 +2078,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "operationId": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Operation id."
+            "description": "Operation. Id or path."
           },
           "name": {
             "type": "string",
@@ -1943,10 +2158,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "operationId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "operationId",
+          "ref",
           "name"
         ]
       },
@@ -1973,6 +2195,10 @@
               "string",
               "null"
             ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
           }
         },
         "required": [
@@ -1992,10 +2218,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "enumerationId": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "UMLEnumeration id."
+            "description": "UMLEnumeration. Id or path."
           },
           "name": {
             "type": "string",
@@ -2012,6 +2238,10 @@
             },
             "additionalProperties": {},
             "description": "Initial attribute values by name, as /introspect lists them: plain values for prim/enum attributes, an id or {$ref: id} for references, arrays of those for reference lists."
+          },
+          "allowDuplicateNames": {
+            "type": "boolean",
+            "description": "Default false: a classifier, package, diagram, attribute, literal, entity or column named like a sibling of its kind is refused with DUPLICATE_NAME, since paths could not tell them apart."
           },
           "summary": {
             "type": "boolean",
@@ -2030,10 +2260,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "enumerationId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "enumerationId",
+          "ref",
           "name"
         ]
       },
@@ -2060,6 +2297,10 @@
               "string",
               "null"
             ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
           }
         },
         "required": [
@@ -2079,10 +2320,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "ownerId": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Templated element id."
+            "description": "Templated element. Id or path."
           },
           "name": {
             "type": "string",
@@ -2153,10 +2394,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "ownerId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "ownerId",
+          "ref",
           "name"
         ]
       },
@@ -2183,6 +2431,10 @@
               "string",
               "null"
             ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
           }
         },
         "required": [
@@ -2202,10 +2454,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "instanceId": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Instance id, e.g. a UMLObject."
+            "description": "Instance, e.g. a UMLObject. Id or path."
           },
           "name": {
             "type": "string",
@@ -2261,10 +2513,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "instanceId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "instanceId"
+          "ref"
         ]
       },
       "response": {
@@ -2290,6 +2549,10 @@
               "string",
               "null"
             ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
           }
         },
         "required": [
@@ -2309,10 +2572,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "elementId": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Element to tag."
+            "description": "Element to tag. Id or path."
           },
           "name": {
             "type": "string",
@@ -2361,10 +2624,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "elementId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "elementId",
+          "ref",
           "name",
           "kind",
           "value"
@@ -2393,6 +2663,10 @@
               "string",
               "null"
             ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
           }
         },
         "required": [
@@ -2412,10 +2686,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "elementId": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Element id."
+            "description": "Element. Id or path."
           },
           "stereotype": {
             "anyOf": [
@@ -2461,10 +2735,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "elementId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "elementId",
+          "ref",
           "stereotype"
         ]
       },
@@ -2491,6 +2772,10 @@
               "string",
               "null"
             ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
           }
         },
         "required": [
@@ -2510,10 +2795,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "elementId": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Element id."
+            "description": "Element. Id or path."
           },
           "documentation": {
             "type": "string",
@@ -2536,10 +2821,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "elementId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "elementId",
+          "ref",
           "documentation"
         ]
       },
@@ -2566,6 +2858,10 @@
               "string",
               "null"
             ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
           }
         },
         "required": [
@@ -2590,14 +2886,18 @@
             "minLength": 1,
             "description": "A diagram id of app.factory.getDiagramIds(), e.g. 'UMLClassDiagram', 'UMLSequenceDiagram', 'ERDDiagram'."
           },
-          "parentId": {
+          "parent": {
             "type": "string",
             "minLength": 1,
-            "description": "Owner, usually a UMLModel or UMLPackage."
+            "description": "Owner, usually a UMLModel or UMLPackage. Id or path."
           },
           "name": {
             "type": "string",
             "description": "Diagram name; StarUML generates one if omitted."
+          },
+          "allowDuplicateNames": {
+            "type": "boolean",
+            "description": "Default false: a classifier, package, diagram, attribute, literal, entity or column named like a sibling of its kind is refused with DUPLICATE_NAME, since paths could not tell them apart."
           },
           "summary": {
             "type": "boolean",
@@ -2616,11 +2916,18 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "parentId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of parent.",
+            "x-alias-of": "parent",
+            "deprecated": true
           }
         },
         "required": [
           "type",
-          "parentId"
+          "parent"
         ]
       },
       "response": {
@@ -2646,6 +2953,10 @@
               "string",
               "null"
             ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
           }
         },
         "required": [
@@ -2665,14 +2976,21 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
+          "diagram": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram. Id or path."
+          },
           "id": {
             "type": "string",
             "minLength": 1,
-            "description": "Diagram id."
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
           }
         },
         "required": [
-          "id"
+          "diagram"
         ]
       },
       "response": {
@@ -2698,14 +3016,21 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
+          "diagram": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram. Id or path."
+          },
           "id": {
             "type": "string",
             "minLength": 1,
-            "description": "Diagram id."
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
           }
         },
         "required": [
-          "id"
+          "diagram"
         ]
       },
       "response": {
@@ -2731,10 +3056,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "id": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Model element id."
+            "description": "Model element. Id or path."
           },
           "summary": {
             "type": "boolean",
@@ -2753,10 +3078,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "id"
+          "ref"
         ]
       },
       "response": {
@@ -2792,6 +3124,10 @@
                     "string",
                     "null"
                   ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                 }
               },
               "required": [
@@ -2819,10 +3155,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "id": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "View id."
+            "description": "View. Id or path."
           },
           "summary": {
             "type": "boolean",
@@ -2841,10 +3177,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "id"
+          "ref"
         ]
       },
       "response": {
@@ -2880,6 +3223,10 @@
                     "string",
                     "null"
                   ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                 }
               },
               "required": [
@@ -2907,10 +3254,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "id": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Model element id."
+            "description": "Model element. Id or path."
           },
           "summary": {
             "type": "boolean",
@@ -2929,10 +3276,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "id"
+          "ref"
         ]
       },
       "response": {
@@ -2968,6 +3322,10 @@
                     "string",
                     "null"
                   ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                 }
               },
               "required": [
@@ -2995,10 +3353,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "id": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Element id."
+            "description": "Element. Id or path."
           },
           "summary": {
             "type": "boolean",
@@ -3017,10 +3375,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "id"
+          "ref"
         ]
       },
       "response": {
@@ -3056,6 +3421,10 @@
                     "string",
                     "null"
                   ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                 }
               },
               "required": [
@@ -3083,10 +3452,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "id": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "View id."
+            "description": "View; a model stands for its only view. Id or path."
           },
           "edgeType": {
             "type": "string",
@@ -3110,10 +3479,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "id"
+          "ref"
         ]
       },
       "response": {
@@ -3149,6 +3525,10 @@
                     "string",
                     "null"
                   ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                 }
               },
               "required": [
@@ -3176,15 +3556,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "id": {
+          "diagram": {
             "type": "string",
             "minLength": 1,
-            "description": "Diagram id; default the current diagram."
-          },
-          "diagramId": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Same as id."
+            "description": "Diagram; default the current diagram. Id or path."
           },
           "preset": {
             "type": "string",
@@ -3256,6 +3631,20 @@
           "fit": {
             "type": "boolean",
             "description": "Size node views to their content before the layout; one more undo step."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
+          },
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
           }
         }
       },
@@ -3319,10 +3708,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "diagramId": {
+          "diagram": {
             "type": "string",
             "minLength": 1,
-            "description": "Diagram id; default the current diagram."
+            "description": "Diagram; default the current diagram. Id or path."
           },
           "lineStyle": {
             "type": "string",
@@ -3333,6 +3722,13 @@
               "curve"
             ],
             "description": "Line style for every edge."
+          },
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
           }
         },
         "required": [
@@ -3373,14 +3769,14 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "ids": {
+          "refs": {
             "minItems": 1,
             "type": "array",
             "items": {
               "type": "string",
               "minLength": 1
             },
-            "description": "View ids, all on one diagram."
+            "description": "Views, all on one diagram, by id or path; a model stands for its only view."
           },
           "dx": {
             "type": "number",
@@ -3389,6 +3785,11 @@
           "dy": {
             "type": "number",
             "description": "Vertical offset in diagram units."
+          },
+          "container": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Also put the views inside this view and their models inside its model, as dropping them on it does: states in a composite state (its region), classes in a package. Id or path."
           },
           "summary": {
             "type": "boolean",
@@ -3407,10 +3808,28 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "ids": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Alias of refs.",
+            "x-alias-of": "refs",
+            "deprecated": true
+          },
+          "containerViewId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of container.",
+            "x-alias-of": "container",
+            "deprecated": true
           }
         },
         "required": [
-          "ids",
+          "refs",
           "dx",
           "dy"
         ]
@@ -3447,6 +3866,10 @@
                     "string",
                     "null"
                   ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                 }
               },
               "required": [
@@ -3474,10 +3897,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "id": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Node view id."
+            "description": "Node view; a model stands for its only view. Id or path."
           },
           "left": {
             "type": "number",
@@ -3514,10 +3937,17 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
-          "id"
+          "ref"
         ]
       },
       "response": {
@@ -3543,6 +3973,10 @@
               "string",
               "null"
             ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
           }
         },
         "required": [
@@ -3562,14 +3996,14 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "ids": {
+          "refs": {
             "minItems": 1,
             "type": "array",
             "items": {
               "type": "string",
               "minLength": 1
             },
-            "description": "View ids, all on one diagram."
+            "description": "Views, all on one diagram, by id or path; a model stands for its only view."
           },
           "fillColor": {
             "type": "string",
@@ -3639,10 +4073,21 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "ids": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Alias of refs.",
+            "x-alias-of": "refs",
+            "deprecated": true
           }
         },
         "required": [
-          "ids"
+          "refs"
         ]
       },
       "response": {
@@ -3677,6 +4122,10 @@
                     "string",
                     "null"
                   ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                 }
               },
               "required": [
@@ -3704,14 +4153,14 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "ids": {
+          "refs": {
             "minItems": 1,
             "type": "array",
             "items": {
               "type": "string",
               "minLength": 1
             },
-            "description": "View ids, all on one diagram."
+            "description": "Views, all on one diagram, by id or path; a model stands for its only view."
           },
           "position": {
             "type": "string",
@@ -3720,10 +4169,21 @@
               "back"
             ],
             "description": "Where to move the views."
+          },
+          "ids": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Alias of refs.",
+            "x-alias-of": "refs",
+            "deprecated": true
           }
         },
         "required": [
-          "ids",
+          "refs",
           "position"
         ]
       },
@@ -3745,6 +4205,268 @@
         "required": [
           "diagram",
           "order"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/divide_fragment",
+      "description": "Set where each operand of a combined fragment (alt, par, ...) begins, instead of the equal split StarUML gives operands, as one undoable operation.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Combined fragment view. Id or path."
+          },
+          "at": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "Diagram y of the top of each operand after the first, increasing, inside the fragment."
+          },
+          "summary": {
+            "type": "boolean",
+            "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Attribute names to return besides _id and _type, e.g. ['name', 'attributes']; '_parent' is accepted. Names an element lacks are omitted."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8,
+            "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
+          }
+        },
+        "required": [
+          "ref",
+          "at"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "string",
+            "description": "Id of the diagram the views are on."
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string",
+                  "description": "Metamodel class name."
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "_parent": {
+                  "description": "Owner id; null for the project.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
+                }
+              },
+              "required": [
+                "_id",
+                "_type"
+              ],
+              "additionalProperties": {},
+              "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+            }
+          }
+        },
+        "required": [
+          "diagram",
+          "views"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/create_view_of",
+      "description": "Show an existing model element on a diagram, as dragging it from the model explorer does: StarUML also draws its relationships to elements already shown there. An element already on the diagram answers its view unchanged; a relationship needs both ends shown.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Model element. Id or path."
+          },
+          "diagram": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram to show it on. Id or path."
+          },
+          "x": {
+            "type": "number",
+            "description": "Left edge, default 100."
+          },
+          "y": {
+            "type": "number",
+            "description": "Top edge, default 100."
+          },
+          "summary": {
+            "type": "boolean",
+            "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Attribute names to return besides _id and _type, e.g. ['name', 'attributes']; '_parent' is accepted. Names an element lacks are omitted."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8,
+            "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "modelId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
+          },
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
+          }
+        },
+        "required": [
+          "ref",
+          "diagram"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "view": {
+            "type": "object",
+            "properties": {
+              "_id": {
+                "type": "string"
+              },
+              "_type": {
+                "type": "string",
+                "description": "Metamodel class name."
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "_parent": {
+                "description": "Owner id; null for the project.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
+              }
+            },
+            "required": [
+              "_id",
+              "_type"
+            ],
+            "additionalProperties": {},
+            "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "_id": {
+                    "type": "string"
+                  },
+                  "_type": {
+                    "type": "string",
+                    "description": "Metamodel class name."
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "_parent": {
+                    "description": "Owner id; null for the project.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
+                  }
+                },
+                "required": [
+                  "_id",
+                  "_type"
+                ],
+                "additionalProperties": {},
+                "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for view-only ids such as Note or NoteLink."
+          }
+        },
+        "required": [
+          "view",
+          "model"
         ],
         "additionalProperties": false
       }
@@ -3806,6 +4528,10 @@
                     "string",
                     "null"
                   ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                 }
               },
               "required": [
@@ -3840,6 +4566,10 @@
                     "string",
                     "null"
                   ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                 }
               },
               "required": [
@@ -3867,21 +4597,21 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "viewIds": {
+          "views": {
             "type": "array",
             "items": {
               "type": "string",
               "minLength": 1
             },
-            "description": "Views to select, all on one diagram."
+            "description": "Views to select, all on one diagram, by id or path; a model stands for its only view."
           },
-          "modelIds": {
+          "models": {
             "type": "array",
             "items": {
               "type": "string",
               "minLength": 1
             },
-            "description": "Model elements to select besides the views' models."
+            "description": "Model elements to select besides the views' models, by id or path."
           },
           "summary": {
             "type": "boolean",
@@ -3900,6 +4630,26 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "viewIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Alias of views.",
+            "x-alias-of": "views",
+            "deprecated": true
+          },
+          "modelIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Alias of models.",
+            "x-alias-of": "models",
+            "deprecated": true
           }
         }
       },
@@ -3931,6 +4681,10 @@
                     "string",
                     "null"
                   ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                 }
               },
               "required": [
@@ -3965,6 +4719,10 @@
                     "string",
                     "null"
                   ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                 }
               },
               "required": [
@@ -4066,10 +4824,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "diagramId": {
+          "diagram": {
             "type": "string",
             "minLength": 1,
-            "description": "Diagram to open and show first."
+            "description": "Diagram to open and show first. Id or path."
           },
           "zoom": {
             "type": "number",
@@ -4098,6 +4856,13 @@
           },
           "snapToGrid": {
             "type": "boolean"
+          },
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
           }
         }
       },
@@ -4174,9 +4939,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "id": {
+          "diagram": {
             "type": "string",
-            "description": "Diagram id; default the current diagram."
+            "minLength": 1,
+            "description": "Diagram; default the current diagram. Id or path."
           },
           "format": {
             "type": "string",
@@ -4201,6 +4967,13 @@
           "path": {
             "type": "string",
             "description": "Absolute file to write; overwritten, parent directories created. Omit to receive the image in the response."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
           }
         }
       },
@@ -4263,14 +5036,14 @@
             "type": "string",
             "description": "Absolute directory to write into; created if missing. Files of the same name are overwritten."
           },
-          "ids": {
+          "diagrams": {
             "minItems": 1,
             "type": "array",
             "items": {
               "type": "string",
               "minLength": 1
             },
-            "description": "Diagram ids; default every diagram in the project."
+            "description": "Diagrams, by id or path,; default every diagram in the project."
           },
           "format": {
             "type": "string",
@@ -4291,6 +5064,17 @@
             "type": "string",
             "pattern": "^(#[0-9a-f]{3,8}|[a-z]+)$",
             "description": "As for /export_diagram."
+          },
+          "ids": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Alias of diagrams.",
+            "x-alias-of": "diagrams",
+            "deprecated": true
           }
         },
         "required": [
@@ -4369,14 +5153,14 @@
             "type": "string",
             "description": "Absolute .pdf file to write; overwritten."
           },
-          "ids": {
+          "diagrams": {
             "minItems": 1,
             "type": "array",
             "items": {
               "type": "string",
               "minLength": 1
             },
-            "description": "Diagram ids in page order; default every diagram in the project."
+            "description": "Diagrams, by id or path, in page order; default every diagram in the project."
           },
           "size": {
             "type": "string",
@@ -4394,6 +5178,17 @@
           "showName": {
             "type": "boolean",
             "description": "Print each diagram's path name; default true."
+          },
+          "ids": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Alias of diagrams.",
+            "x-alias-of": "diagrams",
+            "deprecated": true
           }
         },
         "required": [
@@ -4471,10 +5266,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "diagramId": {
+          "diagram": {
             "type": "string",
             "minLength": 1,
-            "description": "Diagram id."
+            "description": "Diagram. Id or path."
           },
           "format": {
             "type": "string",
@@ -4483,10 +5278,17 @@
               "plantuml"
             ],
             "description": "Text format."
+          },
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
           }
         },
         "required": [
-          "diagramId",
+          "diagram",
           "format"
         ]
       },
@@ -4527,7 +5329,9 @@
               "statemachine",
               "erd",
               "flowchart",
-              "mindmap"
+              "mindmap",
+              "requirement",
+              "c4"
             ],
             "description": "The /build_diagram kind; use case and activity diagrams are written as Mermaid flowcharts and need it to be built again."
           },
@@ -4641,10 +5445,10 @@
             ],
             "description": "Generator language: java, cpp, csharp or python."
           },
-          "baseId": {
+          "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "Element to generate from: a package or model generates its whole tree, a class or interface one file."
+            "description": "Element to generate from: a package or model generates its whole tree, a class or interface one file. Id or path."
           },
           "path": {
             "type": "string",
@@ -4657,11 +5461,18 @@
             },
             "additionalProperties": {},
             "description": "Generator options by name, e.g. {indentSpaces: 2, javaDoc: false} for Java; the rest come from the generator's preferences (see /list_code_generators)."
+          },
+          "baseId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
           }
         },
         "required": [
           "language",
-          "baseId",
+          "ref",
           "path"
         ]
       },
@@ -4763,7 +5574,8 @@
                   "type": "string"
                 },
                 "_type": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Metamodel class name."
                 },
                 "name": {
                   "type": [
@@ -4772,17 +5584,23 @@
                   ]
                 },
                 "_parent": {
+                  "description": "Owner id; null for the project.",
                   "type": [
                     "string",
                     "null"
                   ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
                 }
               },
               "required": [
                 "_id",
                 "_type"
               ],
-              "additionalProperties": false
+              "additionalProperties": {},
+              "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
             },
             "description": "The added elements whose owner existed before, e.g. the top-level packages."
           }
@@ -4913,7 +5731,7 @@
           },
           "atomic": {
             "type": "boolean",
-            "description": "Default true. Atomic batches refuse /undo, /redo, /new_project, /open_project, /save_project*, /execute_command, /export_pdf, /export_html, /export_diagrams, /generate_code, /reverse_code and /build_diagram."
+            "description": "Default true. Atomic batches refuse /undo, /redo, /restore_snapshot, /new_project, /open_project, /save_project*, /execute_command, /export_pdf, /export_html, /export_diagrams, /generate_code, /reverse_code and /build_diagram."
           }
         },
         "required": [
@@ -4984,7 +5802,7 @@
     },
     {
       "path": "/build_diagram",
-      "description": "Build a whole diagram in one call from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap) or from Mermaid (classDiagram, sequenceDiagram, flowchart, erDiagram, stateDiagram, mindmap; a flowchart also as activity or usecase; /export_text writes this Mermaid back). One undo step; laid out by Format > Layout where the kind allows. upsert updates the diagram of the same name instead of adding another. Answers the ids of what it made, not the model.",
+      "description": "Build a whole diagram in one call from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap, requirement, c4) or from text: Mermaid (classDiagram, sequenceDiagram, flowchart, erDiagram, stateDiagram with composite state blocks, mindmap, requirementDiagram, C4Context/C4Container/C4Component; notes and classDef/style colours; a flowchart also as activity or usecase; /export_text writes this Mermaid back), PlantUML, SQL DDL or JSON Schema. One undo step; laid out by Format > Layout where the kind allows. Elements named like existing ones are shown again rather than copied (reuse). upsert updates the diagram of the same name instead of adding another, and prune removes what the spec no longer has. Answers the ids of what it made, not the model.",
       "readOnly": false,
       "destructive": false,
       "request": {
@@ -5001,9 +5819,11 @@
               "statemachine",
               "erd",
               "flowchart",
-              "mindmap"
+              "mindmap",
+              "requirement",
+              "c4"
             ],
-            "description": "Diagram kind; required with spec. With mermaid it is read from the header, and 'activity' or 'usecase' reads a flowchart as that kind."
+            "description": "Diagram kind; required with spec. With text it is read from the source; 'activity' or 'usecase' reads a Mermaid flowchart as that kind, 'erd' JSON Schema as an ERD, and any kind picks the PlantUML reader."
           },
           "spec": {
             "type": "object",
@@ -5011,21 +5831,36 @@
               "type": "string"
             },
             "additionalProperties": {},
-            "description": "class: {packages, classes: [{name, kind: class|interface|enum|abstract, package, stereotype, attributes: ['+id: long'], operations: ['+total(): double'], literals}], relations: [{from, to, type: association|directed|aggregation|composition|generalization|realization|dependency, name, fromMultiplicity, toMultiplicity}]}. sequence: {participants, messages: [{from, to, text, kind: sync|async|reply|create|delete}], fragments: [{operator: alt|opt|loop|..., guard, from, to}] (message indices)}. usecase: {system, actors, useCases, relations: [{from, to, type: association|include|extend|generalization}]}. activity: {lanes, nodes: [{id, name, type: action|initial|final|flowFinal|decision|merge|fork|join|object, lane}], flows: [{from, to, guard}]}. statemachine: {states: [{id, name, type: state|initial|final|choice|fork|join}], transitions: [{from, to, trigger, guard, effect}]}. erd: {entities: [{name, columns: ['id int PK', ...]}], relationships: [{from, to, fromCardinality, toCardinality: '0..1'|'1'|'0..*'|'1..*', name, identifying}]}. flowchart: {nodes: [{id, name, shape: process|decision|terminator|data|document|predefined|alternate|database|manualInput|preparation|connector|delay|display}], flows: [{from, to, label}]}. mindmap: {root: {name, children: [...]}}. Names may contain '\\n' or '<br/>' for line breaks; edges name nodes by name, or by id where nodes have one."
+            "description": "class: {packages, classes: [{name, kind: class|interface|enum|abstract, package, stereotype, attributes: ['+id: long'], operations: ['+total(): double'], literals}], relations: [{from, to, type: association|directed|aggregation|composition|generalization|realization|dependency, name, fromMultiplicity, toMultiplicity}] (an aggregation or composition's from is the whole, which gets the diamond)}. sequence: {participants, messages: [{from, to, text, kind: sync|async|reply|create|delete}], fragments: [{operator: alt|opt|loop|..., guard, operands: ['else'], operandStarts, from, to}] (message indices)}. usecase: {system, actors, useCases, relations: [{from, to, type: association|include|extend|generalization}]}. activity: {lanes, nodes: [{id, name, type: action|initial|final|flowFinal|decision|merge|fork|join|object, lane}], flows: [{from, to, guard}]}. statemachine: {states: [{id, name, type: state|initial|final|choice|fork|join, parent: composite state}], transitions: [{from, to, trigger, guard, effect}]}. erd: {entities: [{name, columns: ['id int PK', ...]}], relationships: [{from, to, fromCardinality, toCardinality: '0..1'|'1'|'0..*'|'1..*', name, identifying}]}. flowchart: {nodes: [{id, name, shape: process|decision|terminator|data|document|predefined|alternate|database|manualInput|preparation|connector|delay|display}], flows: [{from, to, label}]}. mindmap: {root: {name, children: [...]}}. requirement: {requirements: [{name, type: requirement|functional|interface|performance|physical|design, id, text, risk, verifyMethod}], elements: [{name, type, docRef}], relations: [{from, to, type: contains|copies|derives|satisfies|verifies|refines|traces}]}. c4: {elements: [{id, name, type: person|system|container|component, kind (container kind, e.g. database), technology, description, external}], relations: [{from, to, label, technology, description}]}. Every kind also takes notes: [{text, on: node(s); sequence: side: left|right|over, at: message index}] and styles: {node: {fillColor, lineColor, fontColor}}. Names may contain '\\n' or '<br/>' for line breaks; edges name nodes by name, or by id where nodes have one."
           },
           "mermaid": {
             "type": "string",
             "minLength": 1,
             "description": "Mermaid source instead of spec. The diagram is named by 'name', else front matter 'title:' or a 'title' line."
           },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram source instead of spec, in format: Mermaid, PlantUML (class, sequence, use case, activity, state, IE entity, mind map, C4-PlantUML), SQL DDL (an ERD from CREATE TABLE and foreign keys) or JSON Schema (a class diagram, or an ERD with kind erd). Constructs a StarUML diagram cannot hold are refused as UNSUPPORTED_SYNTAX."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "mermaid",
+              "plantuml",
+              "sql",
+              "jsonschema"
+            ],
+            "description": "Format of text (or mermaid); detected when omitted: @start... is PlantUML, a JSON object JSON Schema, CREATE TABLE SQL, anything else Mermaid."
+          },
           "name": {
             "type": "string",
             "description": "Diagram name."
           },
-          "parentId": {
+          "parent": {
             "type": "string",
             "minLength": 1,
-            "description": "Owner of the diagram; default the project, where StarUML adds the container the kind needs (a model, interaction, activity, state machine, data model, flowchart or mind map)."
+            "description": "Owner of the diagram; default the project, where StarUML adds the container the kind needs (a model, interaction, activity, state machine, data model, flowchart or mind map). Id or path."
           },
           "direction": {
             "type": "string",
@@ -5057,7 +5892,30 @@
           },
           "upsert": {
             "type": "boolean",
-            "description": "Update the diagram with this name and kind under the parent if there is one: nodes already on it (same type and name) gain missing members and changed properties, missing nodes and edges are added, nothing is removed."
+            "description": "Update the diagram with this name and kind under the parent if there is one: nodes already on it (same type and name) gain missing members, changed properties and colours, missing nodes and edges are added, and nothing is removed unless prune is set."
+          },
+          "prune": {
+            "type": "boolean",
+            "description": "With upsert: delete the nodes, notes and edges on the diagram that the spec does not have, in the same undo step. An element shown on other diagrams too, or owning one the spec keeps, loses only its view here."
+          },
+          "allowDuplicateNames": {
+            "type": "boolean",
+            "description": "Default false: a classifier, package, diagram, attribute, literal, entity or column named like a sibling of its kind is refused with DUPLICATE_NAME, since paths could not tell them apart."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "Answer what the build would do, with plan listing its creates, updates and deletes (paths, or '$name' placeholders for what it makes) and the exact /batch ops, and change nothing. ids and the diagram carry the placeholders."
+          },
+          "reuse": {
+            "type": "boolean",
+            "description": "Default true: a class, interface, enum, package, actor, use case, entity, requirement or C4 element named like one elsewhere in the project is that element shown again (Model Explorer drag and drop), not a copy; a path ('Model/Billing/Invoice') or 'Owner::Name' picks one by its owners. false always makes new elements."
+          },
+          "parentId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of parent.",
+            "x-alias-of": "parent",
+            "deprecated": true
           }
         }
       },
@@ -5113,6 +5971,35 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991,
             "description": "Existing nodes and edges left as they were."
+          },
+          "shown": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Nodes among created that show elements which existed elsewhere in the project."
+          },
+          "deleted": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "With prune: elements and views deleted."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What was built differently than written."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "mermaid",
+              "plantuml",
+              "sql",
+              "jsonschema"
+            ],
+            "description": "The format text was read as."
           },
           "layout": {
             "type": "string",
@@ -5178,6 +6065,152 @@
               ],
               "additionalProperties": false
             }
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "Set when nothing was changed."
+          },
+          "plan": {
+            "type": "object",
+            "properties": {
+              "ops": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "as": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "body"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "The /batch ops applying the plan runs, in order."
+              },
+              "creates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "updates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "deletes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "ops",
+              "creates",
+              "updates",
+              "deletes"
+            ],
+            "additionalProperties": false,
+            "description": "With dryRun: what applying runs."
           }
         },
         "required": [
@@ -5317,27 +6350,34 @@
     },
     {
       "path": "/describe_diagram",
-      "description": "A compact text summary of a diagram: its nodes with their members and its edges as 'tail -[Type \"name\"]-> head', cut to maxChars. Cheaper to read than the element tree.",
+      "description": "A compact text summary of a diagram: its nodes with their members and its edges as 'tail (end) -[Type \"name\"]-> (end) head', where an association or ERD end shows its aggregation (shared, composite), multiplicity or cardinality and role name; cut to maxChars. Cheaper to read than the element tree.",
       "readOnly": true,
       "destructive": false,
       "request": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "diagramId": {
+          "diagram": {
             "type": "string",
             "minLength": 1,
-            "description": "Diagram id."
+            "description": "Diagram. Id or path."
           },
           "maxChars": {
             "type": "integer",
             "minimum": 200,
             "maximum": 200000,
             "description": "Longest text to return; default 4000. Lines past it are counted, not shown."
+          },
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
           }
         },
         "required": [
-          "diagramId"
+          "diagram"
         ]
       },
       "response": {
@@ -5408,7 +6448,7 @@
           "scope": {
             "type": "string",
             "minLength": 1,
-            "description": "Only problems on this element and what it owns; default the project."
+            "description": "Only problems on this element and what it owns; default the project. Id or path."
           },
           "limit": {
             "type": "integer",
@@ -5475,6 +6515,928 @@
           "count",
           "rules",
           "problems"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/lint_diagram",
+      "description": "Check how a diagram reads: node views stacked at one point (L001) or overlapping (L002), outside the canvas (L003), edges running through unrelated nodes (L004), names wider than their box (L005), nodes with no edge (L006) and crowded areas (L007). Each finding names the views by id and path, with a severity, a one-line fix and an autofix request to send as is.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram; default the current diagram. Id or path."
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Rules to run, by id (L001) or name (overlap); default all."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Most findings to list, most severe first; default 100. count is always the full number."
+          },
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "object",
+            "properties": {
+              "_id": {
+                "type": "string"
+              },
+              "_type": {
+                "type": "string",
+                "description": "Metamodel class name."
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "_parent": {
+                "description": "Owner id; null for the project.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
+              }
+            },
+            "required": [
+              "_id",
+              "_type"
+            ],
+            "additionalProperties": {},
+            "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+          },
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Findings in all."
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "warning": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "info": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "error",
+              "warning",
+              "info"
+            ],
+            "additionalProperties": false
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rule": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "error",
+                    "warning",
+                    "info"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                },
+                "ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Views the finding is about."
+                },
+                "paths": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "fix": {
+                  "type": "string"
+                },
+                "autofix": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "body": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "body"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "A request that fixes it: POST body to path. Null where only a person can decide."
+                }
+              },
+              "required": [
+                "rule",
+                "name",
+                "severity",
+                "message",
+                "ids",
+                "paths",
+                "fix",
+                "autofix"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "diagram",
+          "count",
+          "counts",
+          "truncated",
+          "findings"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/uml_lint",
+      "description": "Check the model for modelling mistakes StarUML's own validation does not look for: association ends without multiplicity (U001) or navigability (U002), attributes without a type (U003), relationships missing an end (U004), abstract classes without a subclass (U005), interfaces nobody realizes (U006), sequence messages that name no operation of the receiver (U007), use cases without an actor (U008), state machines without an initial (U009) or final state (U010), ERD entities without a primary key (U011) and names off the naming convention (U012). Each finding has a rule id, the element's id and path, and a one-line fix. Read-only.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Only this element and what it owns; default the project. Id or path."
+          },
+          "rules": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "info"
+              ]
+            },
+            "description": "Per rule id or name: off, or the severity to report it with, e.g. {U002: 'off', naming: 'warning'}."
+          },
+          "naming": {
+            "type": "object",
+            "properties": {
+              "classifier": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean",
+                    "const": false
+                  }
+                ]
+              },
+              "attribute": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean",
+                    "const": false
+                  }
+                ]
+              },
+              "operation": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean",
+                    "const": false
+                  }
+                ]
+              },
+              "literal": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean",
+                    "const": false
+                  }
+                ]
+              },
+              "package": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean",
+                    "const": false
+                  }
+                ]
+              }
+            },
+            "description": "Naming convention per kind: PascalCase, camelCase, UPPER_CASE, snake_case, lowercase, a regular expression, or false to skip. Defaults: classifier PascalCase, attribute and operation camelCase, literal UPPER_CASE, package skipped."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Most findings to list, most severe first; default 100. count is always the full number."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Findings in all."
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "warning": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "info": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "error",
+              "warning",
+              "info"
+            ],
+            "additionalProperties": false
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rule": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "error",
+                    "warning",
+                    "info"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "fix": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "rule",
+                "name",
+                "severity",
+                "message",
+                "id",
+                "path",
+                "fix"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "count",
+          "counts",
+          "truncated",
+          "findings"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/diff_diagram",
+      "description": "Compare a diagram with a spec or diagram text (as /build_diagram takes them) and list what differs: nodes and edges the spec adds, elements and views on the diagram it lacks, and nodes whose members, properties or colours it changes. This is what /build_diagram with upsert and prune would do; nothing is changed.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram to compare. Id or path."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "class",
+              "sequence",
+              "usecase",
+              "activity",
+              "statemachine",
+              "erd",
+              "flowchart",
+              "mindmap",
+              "requirement",
+              "c4"
+            ],
+            "description": "Diagram kind; required with spec, else read from text."
+          },
+          "spec": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "A /build_diagram spec."
+          },
+          "mermaid": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram source, as /build_diagram reads it."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "mermaid",
+              "plantuml",
+              "sql",
+              "jsonschema"
+            ]
+          },
+          "reuse": {
+            "type": "boolean",
+            "description": "As /build_diagram's reuse, default true: a new node named like an element elsewhere counts as showing that element."
+          },
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of diagram.",
+            "x-alias-of": "diagram",
+            "deprecated": true
+          }
+        },
+        "required": [
+          "diagram"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "object",
+            "properties": {
+              "_id": {
+                "type": "string"
+              },
+              "_type": {
+                "type": "string",
+                "description": "Metamodel class name."
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "_parent": {
+                "description": "Owner id; null for the project.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
+              }
+            },
+            "required": [
+              "_id",
+              "_type"
+            ],
+            "additionalProperties": {},
+            "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+          },
+          "kind": {
+            "type": "string"
+          },
+          "identical": {
+            "type": "boolean",
+            "description": "The diagram already shows the spec."
+          },
+          "added": {
+            "type": "object",
+            "properties": {
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Nodes of the spec not on the diagram."
+              },
+              "edges": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Edges of the spec not on the diagram, 'from -> to'."
+              }
+            },
+            "required": [
+              "nodes",
+              "edges"
+            ],
+            "additionalProperties": false
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type",
+                "path"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Elements (or, where they are shown elsewhere too, views) on the diagram that the spec lacks."
+          },
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "node": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "changes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "node",
+                "path",
+                "changes"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "unchanged": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Nodes and edges that match."
+          }
+        },
+        "required": [
+          "diagram",
+          "kind",
+          "identical",
+          "added",
+          "removed",
+          "changed",
+          "unchanged"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/snapshot",
+      "description": "Record a checkpoint of the model under a label: every element's attributes, and the place in the undo history. /diff_since lists what changed after it, /restore_snapshot goes back to it. Kept in memory, at most 20, until StarUML restarts; a label taken again is replaced.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Name to refer to it by; default snapshot-<n>."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "takenAt": {
+            "type": "string",
+            "description": "ISO time."
+          },
+          "elements": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Model elements recorded (views are not)."
+          }
+        },
+        "required": [
+          "label",
+          "takenAt",
+          "elements"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/diff_since",
+      "description": "List the model elements added, changed (with the attributes that differ) and removed since a /snapshot, with their paths. Views are not compared.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The snapshot's label."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5000,
+            "description": "Most items per list; default 200. counts are always the full numbers."
+          }
+        },
+        "required": [
+          "snapshot"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "type": "string"
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "added": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "changed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "removed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "added",
+              "changed",
+              "removed"
+            ],
+            "additionalProperties": false
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type",
+                "name",
+                "path"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Attributes whose value differs."
+                }
+              },
+              "required": [
+                "_id",
+                "_type",
+                "name",
+                "path",
+                "fields"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type",
+                "name",
+                "path"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "snapshot",
+          "counts",
+          "truncated",
+          "added",
+          "changed",
+          "removed"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/restore_snapshot",
+      "description": "Undo back to a /snapshot in one step: every operation recorded after it is undone, and one /redo brings them all back. Refused as SNAPSHOT_STALE when the undo history no longer reaches the snapshot (it was undone past, cut by StarUML's history limit, or another project is open).",
+      "readOnly": false,
+      "destructive": true,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The snapshot's label."
+          }
+        },
+        "required": [
+          "snapshot"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "type": "string"
+          },
+          "undone": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Operations undone."
+          },
+          "remaining": {
+            "type": "object",
+            "properties": {
+              "added": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "changed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "removed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "added",
+              "changed",
+              "removed"
+            ],
+            "additionalProperties": false,
+            "description": "What still differs from the snapshot afterwards; all zero unless something changed outside the undo history."
+          }
+        },
+        "required": [
+          "snapshot",
+          "undone",
+          "remaining"
         ],
         "additionalProperties": false
       }

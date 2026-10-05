@@ -329,23 +329,29 @@ export function createHttpHandler(
     }
 
     try {
-      const sessionId = req.headers["mcp-session-id"];
-      if (sessions.enabled && typeof sessionId === "string") {
-        // The spec (2025-06-18, Session Management, item 4) has the client start a new session
-        // on 404, which is what an expired or evicted session needs.
-        if (!(await sessions.handle(sessionId, req, res))) {
-          sendJson(res, 404, jsonRpcError(-32001, "Session not found"));
-        }
-        return;
-      }
       let body: unknown;
       if (req.method === "POST") {
+        const text = await readBody(req, MAX_BODY_BYTES);
+        if (text === undefined) {
+          res.setHeader("Connection", "close");
+          sendJson(res, 413, jsonRpcError(-32600, `Request body exceeds ${MAX_BODY_BYTES} bytes`));
+          return;
+        }
         try {
-          body = JSON.parse(await readBody(req));
+          body = JSON.parse(text);
         } catch {
           sendJson(res, 400, jsonRpcError(-32700, "Parse error: Invalid JSON"));
           return;
         }
+      }
+      const sessionId = req.headers["mcp-session-id"];
+      if (sessions.enabled && typeof sessionId === "string") {
+        // The spec (2025-06-18, Session Management, item 4) has the client start a new session
+        // on 404, which is what an expired or evicted session needs.
+        if (!(await sessions.handle(sessionId, req, res, body))) {
+          sendJson(res, 404, jsonRpcError(-32001, "Session not found"));
+        }
+        return;
       }
       const initializes = Array.isArray(body)
         ? body.some(isInitializeRequest)
@@ -385,11 +391,36 @@ async function stateless(
   await transport.handleRequest(req, res, body);
 }
 
-async function readBody(req: IncomingMessage): Promise<string> {
-  let text = "";
-  req.setEncoding("utf8");
-  for await (const chunk of req) text += chunk as string;
-  return text;
+/**
+ * The largest request body read, the cap MCP SDK 1.29 sets on a message where it reads bodies
+ * itself (`MAXIMUM_MESSAGE_SIZE = "4mb"`, server/sse.js). The Streamable HTTP transport reads
+ * none when handed a parsed body, and reads its own without a cap, so every POST is read here.
+ * The largest real request, a build_diagram spec of a few hundred nodes, is tens of KiB.
+ */
+export const MAX_BODY_BYTES = 4 * 1024 * 1024;
+
+/**
+ * The body as UTF-8, or undefined once it grows past `limit` bytes. The rest is left unread and
+ * the 413 closes the connection, so an oversized body is neither buffered nor drained.
+ */
+function readBody(req: IncomingMessage, limit: number): Promise<string | undefined> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    const onData = (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > limit) {
+        req.off("data", onData);
+        req.pause();
+        resolve(undefined);
+        return;
+      }
+      chunks.push(chunk);
+    };
+    req.on("data", onData);
+    req.once("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.once("error", reject);
+  });
 }
 
 /** A JSON-RPC error without a request id, as the SDK's transport writes its own. */

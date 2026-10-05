@@ -45,6 +45,26 @@ extension's endpoints, so run it after the user upgrades the extension.
 A user may also start the server's prompts `model-codebase` (reverse-engineer a source directory
 or build class diagrams from a description) and `review-diagram`; they spell out the same calls.
 
+### Ids and paths
+
+Every field that takes an element (`ref`, `refs`, `diagram`, `diagrams`, `tail`, `head`,
+`parent`, `container`, `views`, `models`, `scope`) takes its `_id` or a path, so there is rarely a
+need to look an id up first:
+
+| Path | Names |
+|---|---|
+| `Model/Shop/Order`, `Shop/Order`, `Order` | owners from the project down, or the trailing steps when only one element ends so |
+| `Order.total` | a member: attribute, literal, column, slot, parameter |
+| `Order#pay()`, `Order#pay(int, String)` | an operation; the types pick an overload |
+| `Main` | a diagram by name |
+| `Order@Main` | the view of `Order` on diagram `Main` |
+| `@current`, `@project` | the diagram open in StarUML; the project |
+
+A `\` escapes `/ . # @ ( ) ,` inside a name. Element results carry the `path` each element
+resolves by. A path that fits several elements is refused as `AMBIGUOUS_REF` with the candidates'
+ids and paths; pass one of those or a longer path. Use paths for what already exists and `$name`
+references (section 5) for what a batch creates.
+
 ## 3. build_diagram: one spec per kind
 
 `kind` is required with `spec`. Nodes are named by `name`; edges refer to nodes by name, or by
@@ -255,14 +275,13 @@ The server checks every op's body and every reference before anything is sent.
 ```json batch
 {
   "ops": [
-    { "path": "/get_project_info", "as": "p" },
-    { "path": "/create_element", "body": { "type": "UMLModel", "parentId": "$p.project", "name": "Billing" }, "as": "m" },
-    { "path": "/create_diagram", "body": { "type": "UMLClassDiagram", "parentId": "$m", "name": "Billing" }, "as": "d" },
-    { "path": "/create_element_with_view", "body": { "type": "UMLClass", "parentId": "$m", "diagramId": "$d", "name": "Invoice", "x": 80, "y": 80 }, "as": "inv" },
-    { "path": "/create_element_with_view", "body": { "type": "UMLClass", "parentId": "$m", "diagramId": "$d", "name": "Line", "x": 360, "y": 80 }, "as": "line" },
-    { "path": "/add_attribute", "body": { "ownerId": "$inv.model", "name": "total", "type": "double" } },
-    { "path": "/create_edge_with_view", "body": { "type": "UMLAssociation", "diagramId": "$d", "tailViewId": "$inv.view", "headViewId": "$line.view" } },
-    { "path": "/update_element", "body": { "id": "$line.model", "field": "isAbstract", "value": true } }
+    { "path": "/create_element", "body": { "type": "UMLModel", "parent": "@project", "name": "Billing" }, "as": "m" },
+    { "path": "/create_diagram", "body": { "type": "UMLClassDiagram", "parent": "$m", "name": "Billing classes" }, "as": "d" },
+    { "path": "/create_element_with_view", "body": { "type": "UMLClass", "parent": "$m", "diagram": "$d", "name": "Invoice", "x": 80, "y": 80 }, "as": "inv" },
+    { "path": "/create_element_with_view", "body": { "type": "UMLClass", "parent": "$m", "diagram": "$d", "name": "Line", "x": 360, "y": 80 }, "as": "line" },
+    { "path": "/add_attribute", "body": { "ref": "Billing/Invoice", "name": "total", "type": "double" } },
+    { "path": "/create_edge_with_view", "body": { "type": "UMLAssociation", "diagram": "$d", "tail": "$inv.view", "head": "$line.view" } },
+    { "path": "/update_element", "body": { "ref": "Billing/Line", "field": "isAbstract", "value": true } }
   ]
 }
 ```
@@ -296,13 +315,13 @@ summary is about 270 tokens, a PNG about 1,600 (an estimate, billed as an image)
 dump with `summary: false` about 4,400.
 
 ```json diagram_as_text
-{}
+{ "diagram": "Ordering" }
 ```
 
-`diagram_as_text` writes the current diagram (or `id`) as Mermaid, or as PlantUML with
+`diagram_as_text` writes a diagram (default the current one) as Mermaid, or as PlantUML with
 `format: "plantuml"`, then a line with its `kind` and any `warnings` about what the text cannot
 carry. The Mermaid is the form `build_diagram` reads back: edit it and pass it as `mermaid`, with
-`kind` for use case and activity diagrams, to rebuild. `describe_diagram({diagramId})` lists the
+`kind` for use case and activity diagrams, to rebuild. `describe_diagram({diagram})` lists the
 nodes with their members and the edges as `"tail" -[Type "name"]-> "head"`, without
 multiplicities or composition; `staruml://diagram/{id}.mmd` and `.puml` serve the text as
 resources.
@@ -318,7 +337,7 @@ word, each with an example request body; use it instead of guessing a `type`.
 {}
 ```
 
-`validate_model` runs StarUML's validation rules over the project, or `scope` (an element id and
+`validate_model` runs StarUML's validation rules over the project, or `scope` (an element and
 what it owns), and lists each problem with its element and rule id.
 
 ```json find_elements
@@ -329,7 +348,7 @@ what it owns), and lists each problem with its element and rule id.
 {}
 ```
 
-`view_diagram` shows the current diagram (or `id`): an interactive SVG viewer with pan, zoom and
+`view_diagram` shows the current diagram (or `diagram`): an interactive SVG viewer with pan, zoom and
 dark mode in clients that render MCP Apps, a PNG image elsewhere. Use it to check a layout
 after building.
 
@@ -342,7 +361,7 @@ and returns only its size, which is what to do for anything the user wants on di
 
 ## 8. Keeping token use down
 
-- Element results are summaries `{_id, _type, name, _parent}`. Ask for more with `fields`
+- Element results are summaries `{_id, _type, name, _parent, path}`. Ask for more with `fields`
   (attribute names), `depth` (owned elements) or, rarely, `summary: false`.
 - `find_elements` pages: pass `limit` and the `nextCursor` it returns.
 - Results omit null and empty fields and the arguments you sent; a bare `ok` means success.
@@ -365,6 +384,6 @@ otherwise every extension call answers `UNAUTHORIZED`. Never ask the user to pas
 the chat; ask them to set the variable where the MCP server is configured.
 
 Errors come back as results with `isError`, a `[CODE, endpoint, HTTP status]` line and often a
-`Hint:` line; follow the hint. `INVALID_ARGUMENT` names the failing field (`ops.2.body.ownerId`
+`Hint:` line; follow the hint. `INVALID_ARGUMENT` names the failing field (`ops.2.body.ref`
 inside a batch). `DIALOG_REQUIRED` means the command would open a dialog: pass the arguments
 `describe_commands` lists, or use the dedicated endpoint. `RATE_LIMITED` says when to retry.

@@ -15,11 +15,17 @@ import {
 } from "../src/extension-tools.js";
 import { isLoopback } from "../src/index.js";
 import {
+  aliasesOf,
+  ALIAS_OF,
   BUNDLED_MANIFEST,
+  canonicalBody,
+  compileManifest,
+  listedRequestSchema,
   MAX_DESCRIPTION_LENGTH,
   terseDescription,
   toolName,
 } from "../src/manifest.js";
+import { sampleArgs } from "./support/schema.js";
 import { diagramImageUri, diagramTextUri } from "../src/server.js";
 import {
   CORE_ENDPOINTS,
@@ -308,6 +314,99 @@ describe("paths and URIs", () => {
       fc.property(octet, octet, octet, fc.domain(), (a, b, c, domain) => {
         expect(isLoopback(`127.${a}.${b}.${c}`)).toBe(true);
         expect(isLoopback(`localhost.${domain}`)).toBe(false);
+      }),
+    );
+  });
+});
+
+/**
+ * Extension 0.3.0 takes an id or a path wherever it takes an element (src/refs.ts there) and keeps
+ * the old field names as aliases marked x-alias-of. The listings show canonical names only, and a
+ * path is an ordinary string to every check this server makes.
+ */
+describe("path references and aliases", () => {
+  const entries = BUNDLED_MANIFEST.endpoints;
+  const tools = compileManifest(BUNDLED_MANIFEST).tools;
+  const withAliases = tools.filter((t) => Object.keys(t.aliases).length > 0);
+  type Schema = Record<string, unknown>;
+  const propertiesOf = (schema: Schema) => (schema.properties ?? {}) as Record<string, Schema>;
+  /** Fields documented as taking an id or a path, by endpoint. */
+  const refFields = entries.flatMap((entry) =>
+    Object.entries(propertiesOf(entry.request))
+      .filter(
+        ([, p]) => p[ALIAS_OF] === undefined && /\b[Ii]d or path\b/.test(String(p.description)),
+      )
+      .map(([field, p]) => ({ entry, field, array: p.type === "array" })),
+  );
+  /** Strings over the path alphabet: names, the separators, escapes and the @ forms. */
+  const path = fc
+    .array(
+      fc.oneof(
+        fc.stringMatching(/^[A-Za-z][\w ]{0,6}$/),
+        fc.constantFrom("/", ".", "#", "@", "(", ")", ",", "\\", "@current", "@project", "()"),
+      ),
+      { minLength: 1, maxLength: 8 },
+    )
+    .map((parts) => parts.join(""));
+
+  it("the manifest has aliases and path fields to check", () => {
+    expect(withAliases.length).toBeGreaterThan(30);
+    expect(refFields.length).toBeGreaterThan(50);
+  });
+
+  it("no listed schema shows an alias, and every alias's canonical field is listed", () => {
+    for (const entry of entries) {
+      const listed = propertiesOf(listedRequestSchema(entry).schema);
+      for (const [alias, canonical] of Object.entries(aliasesOf(entry))) {
+        expect(listed, `${entry.path} ${alias}`).not.toHaveProperty(alias);
+        expect(listed, `${entry.path} ${canonical}`).toHaveProperty(canonical);
+      }
+    }
+  });
+
+  it("canonicalBody renames each alias to its field, keeps every value and is idempotent", () => {
+    const body = fc
+      .constantFrom(...withAliases)
+      .chain((tool) =>
+        fc.tuple(
+          fc.constant(tool),
+          fc.dictionary(
+            fc.constantFrom(...Object.keys(tool.aliases), ...Object.values(tool.aliases), "other"),
+            fc.jsonValue({ maxDepth: 1 }),
+          ),
+        ),
+      );
+    fc.assert(
+      fc.property(body, ([tool, input]) => {
+        // Two spellings of one field, an alias and its field or two aliases of it (/diff_diagram
+        // has diagramId and id for diagram), are refused as the extension refuses them.
+        const fields = Object.keys(input).map((key) => tool.aliases[key] ?? key);
+        const clash = new Set(fields).size < fields.length;
+        if (clash) {
+          expect(() => canonicalBody(tool, input)).toThrow(ToolInputError);
+          return;
+        }
+        const { body: out, used } = canonicalBody(tool, input);
+        expect(Object.keys(out).some((k) => k in tool.aliases)).toBe(false);
+        expect(Object.keys(out)).toHaveLength(Object.keys(input).length);
+        for (const [key, value] of Object.entries(input)) {
+          const renamed = tool.aliases[key] ?? key;
+          expect(out[renamed]).toEqual(value);
+          if (renamed !== key) expect(used.get(renamed)).toBe(key);
+        }
+        expect(canonicalBody(tool, out).body).toEqual(out);
+      }),
+    );
+  });
+
+  it("every field that takes an id or a path accepts any non-empty path string", () => {
+    const strict = new Map(tools.map((t) => [t.path, t.requestSchema]));
+    fc.assert(
+      fc.property(fc.constantFrom(...refFields), path, ({ entry, field, array }, ref) => {
+        const body = { ...sampleArgs(entry.request), [field]: array ? [ref] : ref };
+        const parsed = strict.get(entry.path)!.safeParse(body);
+        const issues = parsed.success ? [] : parsed.error.issues;
+        expect(issues.filter((i) => i.path[0] === field)).toEqual([]);
       }),
     );
   });

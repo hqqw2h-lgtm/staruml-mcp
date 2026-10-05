@@ -70,7 +70,7 @@ function expectedRequest(tool: string, args: Record<string, unknown>) {
       return {
         fixture: extension,
         path: "/export_text",
-        body: { diagramId: "D1", format: args.format ?? "mermaid" },
+        body: { diagram: args.diagram ?? "D1", format: args.format ?? "mermaid" },
       };
     default:
       return { fixture: extension, path: `/${tool}`, body: args };

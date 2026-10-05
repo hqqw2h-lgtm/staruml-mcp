@@ -100,7 +100,7 @@ describe("build_diagram tool", () => {
     expect(extension.requests[0]!.body).toEqual({ mermaid, layout: "flow-right" });
   });
 
-  it("passes the unlisted parentId and autoLayout through", async () => {
+  it("passes the unlisted parent alias and autoLayout through", async () => {
     extension.reply("/build_diagram", {
       body: { success: true, data: { ...answer, kind: "usecase" } },
     });
@@ -120,7 +120,9 @@ describe("build_diagram tool", () => {
     const result = await mcp.call("build_diagram", body);
 
     expect(result.isError).toBeFalsy();
-    expect(extension.requests[0]!.body).toEqual(body);
+    // parentId is the alias extension 0.3.0 keeps for parent; it is sent under the new name.
+    const { parentId, ...rest } = body;
+    expect(extension.requests[0]!.body).toEqual({ ...rest, parent: parentId });
     // kind echoes the argument and is dropped.
     expect(text(result)).not.toContain('"kind"');
   });

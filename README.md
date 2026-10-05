@@ -17,7 +17,7 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 ```
   AI Agent  ──MCP──►  staruml-mcp (this package)  ──HTTP──►  StarUML
                                                   :58321 (built-in, 4 tools)
-                                                  :58322 (extension 0.3.x, 61 endpoints
+                                                  :58322 (extension 0.3.x, 69 endpoints
                                                           from its manifest: core ones as
                                                           tools, the rest via call_endpoint)
 ```
@@ -25,10 +25,10 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 | Package | What it is | Where it runs |
 |---|---|---|
 | **`staruml-mcp`** (this repo) | MCP server for AI agents | your machine via `npx -y staruml-mcp` |
-| **[`staruml-mcp-extension`](https://github.com/hqqw2h-lgtm/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 61 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
+| **[`staruml-mcp-extension`](https://github.com/hqqw2h-lgtm/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 69 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
 
 - Using only Mermaid-based diagram tools? Install `staruml-mcp` only. The 4 built-in tools, `doctor` and `view_diagram` (as a PNG) work.
-- Want the extension's 61 endpoints (whole diagrams from a spec or Mermaid in one call, diagrams read back as Mermaid, PlantUML or a text summary, type search, model validation, project save/open, element CRUD, relationships, attributes and operations, layout presets and edge routing, styling, export, undo, batches, code generation, any StarUML command)? Install **both**.
+- Want the extension's 69 endpoints (whole diagrams from a spec or Mermaid in one call, elements addressed by path instead of id, diagram and UML lint with fixes, diffs and snapshots, diagrams read back as Mermaid, PlantUML or a text summary, type search, model validation, project save/open, element CRUD, relationships, attributes and operations, layout presets and edge routing, styling, export, undo, batches, code generation, any StarUML command)? Install **both**.
 
 ## Prerequisites
 
@@ -129,6 +129,9 @@ to clients that render MCP Apps, and `notifications/tools/list_changed` reaches 
   statelessly by a server built for it alone, as every request was in 0.4.0: it works, but has
   no viewer and receives no notifications. `--max-sessions 0` serves every request that way.
 - Sessions live in memory: restarting the server ends them all.
+- A POST body over 4 MiB, the MCP SDK's own message cap (`MAXIMUM_MESSAGE_SIZE` in its SSE
+  transport), is refused with `413` and the connection closed, unread, in both modes; the largest
+  real request, a `build_diagram` spec, is tens of KiB.
 
 Restart Claude Code. Ask:
 > "What StarUML tools do you have?"
@@ -215,7 +218,7 @@ node         ok    22.23.3
 staruml api  ok    http://localhost:58321
 extension    ok    0.3.0 at http://localhost:58322
 staruml      ok    7.1.1
-manifest     ok    61 endpoints from the live manifest
+manifest     ok    69 endpoints from the live manifest
 tier         ok    core: 11 extension tools listed, 50 endpoints through call_endpoint
 ```
 
@@ -250,8 +253,8 @@ extension    fail  http://localhost:58322 refused the request: Missing or wrong 
 | `get_all_diagrams_info` | List all diagrams in the current project (id, name, type). |
 | `get_current_diagram_info` | Get metadata of the currently focused diagram. |
 | `get_diagram_image_by_id` | Export a diagram as PNG by its ID. |
-| `view_diagram` | Show a diagram (default the current one): an interactive SVG viewer in clients that render MCP Apps, the `get_diagram_image_by_id` PNG otherwise ([below](#inline-viewer-mcp-apps)). The SVG comes from the extension. |
-| `diagram_as_text` | A diagram (default the current one) as Mermaid, or PlantUML with `format: "plantuml"`, through the extension's `export_text`: the text in a block of its own, then `{id?, kind, warnings?}`. The Mermaid is the form `build_diagram` reads back. |
+| `view_diagram` | Show `diagram` (an id or a path; default the current one): an interactive SVG viewer in clients that render MCP Apps, the `get_diagram_image_by_id` PNG otherwise ([below](#inline-viewer-mcp-apps)). The SVG comes from the extension, which also resolves a path to the id the PNG needs. |
+| `diagram_as_text` | `diagram` (an id or a path; default the current one) as Mermaid, or PlantUML with `format: "plantuml"`, through the extension's `export_text`: the text in a block of its own, then `{id?, kind, warnings?}`. The Mermaid is the form `build_diagram` reads back. |
 | `doctor` | Check Node, both StarUML ports, the extension and StarUML versions; reloads the extension's tools and, given `tools`, switches the tier. |
 
 ### generate_diagram routing
@@ -286,8 +289,8 @@ default and reaches every other extension endpoint through two generic tools:
 
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
-| `core` (default) | the 7 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`, `search_types`, `describe_diagram`, `validate_model`; `describe_endpoints`, `call_endpoint` | 1,992 |
-| `all` | the 7 above and one tool per manifest endpoint | 9,136 |
+| `core` (default) | the 7 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`, `search_types`, `describe_diagram`, `validate_model`; `describe_endpoints`, `call_endpoint` | 1,973 |
+| `all` | the 7 above and one tool per manifest endpoint | 10,954 |
 | `core,create_diagram,…` | the 7 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
 Token counts include the server instructions (o200k_base, extension 0.3.0, `npm run
@@ -328,9 +331,24 @@ endpoint:
   shortened;
 - **annotations**: `readOnlyHint` from the manifest's `readOnly`, `destructiveHint` from
   `destructive` (stated for every writing tool, since MCP defaults it to true),
-  `openWorldHint: false`.
+  `openWorldHint: false`;
+- **canonical names only**: extension 0.3.0 renamed its id fields when they began to take paths
+  (`id` → `ref`, `ids` → `refs`, `diagramId` → `diagram`, `tailId`/`tailViewId` → `tail`,
+  `parentId` → `parent`, `containerViewId` → `container`, `viewIds` → `views`, ...) and keeps the
+  old names as aliases marked `x-alias-of` and `deprecated`. Listings and `describe_endpoints`
+  leave the aliases out. A body sent through `call_endpoint`, `batch` or a short-listed tool may
+  still use them: they are renamed before the body is checked, as the extension renames them,
+  and both spellings of one field are refused with `INVALID_ARGUMENT`.
 
-A copy of the 0.3.0 manifest (61 endpoints) is bundled (`src/extension-manifest.json`), so `tools/list` is
+Every field that takes an element takes its `_id` or a path: `Model/Shop/Order` (owners from the
+project down, or only the trailing steps when they name one element), `Order.total` (a member),
+`Order#pay()` or `Order#pay(int, String)` (an operation and overload), a diagram's name,
+`Order@Main` (the view of `Order` on diagram `Main`), `@current` (the open diagram) and
+`@project`; `\` escapes a separator inside a name. A path that fits several elements is refused
+with `AMBIGUOUS_REF` and the candidates' ids and paths. Element summaries carry the `path` each
+element resolves by.
+
+A copy of the 0.3.0 manifest (69 endpoints) is bundled (`src/extension-manifest.json`), so `tools/list` is
 complete while StarUML is closed; calls then fail with `EXTENSION_UNREACHABLE` and an install hint.
 `npm run sync:manifest` refreshes the copy from a running extension (`-- --url <base>`) or from a
 recorded `/introspect` response (`-- --from <file>`). When the running extension's version is
@@ -372,7 +390,7 @@ object, top-level properties that repeat an argument (such as the `filename` pas
 property therefore means null or empty. `get_current_diagram_info` returns `null` when no diagram
 is active.
 
-Elements come back as the extension's summaries, `{_id, _type, name, _parent}`; references and
+Elements come back as the extension's summaries, `{_id, _type, name, _parent, path}`; references and
 owned elements are `{$ref: id}`. Every tool that returns elements accepts `fields` (attribute
 names), `summary: false` (every saved attribute) and `depth` (levels of owned elements to expand);
 no tool lists them, since the server instructions name them once for all. `find_elements` pages with `limit` and `cursor` (`nextCursor` is absent on the last page). The
@@ -383,7 +401,7 @@ the result of the op named `a`, `"$a.view"` and `"$a.model"` for those of a `{vi
 a numeric segment indexes a list (`"$a.model.operands.0"`), and `"$$"` escapes a literal `$`. Before sending, the server checks every op against its endpoint's
 manifest schema (a reference may stand where the schema wants another type, since its value is
 only known once the batch runs) and that each reference names an earlier op; a failure is
-`INVALID_ARGUMENT` with the op index, as in `ops.2.body.ownerId: …`. Each result comes back without
+`INVALID_ARGUMENT` with the op index, as in `ops.2.body.ref: …`. Each result comes back without
 the op's `path` and, when it succeeded, without `success: true`. An atomic batch that fails in
 StarUML is rolled back and reported with the failing op's code; the extension's
 `details: {index, results}` come back in `structuredContent.error.details`, the results compacted as
@@ -392,7 +410,7 @@ above, and the text adds `Details: {"index": n}` (the results name elements the 
 `build_diagram` lists a hand-written description and seven parameters (`kind`, `spec`, `mermaid`,
 `name`, `upsert`, `direction`, `layout`, 267 tokens); the manifest's own description of `spec` alone is ~400
 tokens, so `spec` lists a one-line grammar per kind and `describe_endpoints({names:
-["build_diagram"]})` serves the full one. The unlisted `parentId` and `autoLayout` are accepted, and
+["build_diagram"]})` serves the full one. The unlisted `parent` (an id or a path) and `autoLayout` are accepted, and
 every body is checked against the manifest's whole request schema before it is sent, as for `batch`.
 
 `export_diagram` lists a hand-written description and shorter parameter descriptions (139 tokens
@@ -442,7 +460,7 @@ Clients that surface MCP prompts (as slash commands in Claude Code, for instance
 | Prompt | Arguments | Workflow |
 |---|---|---|
 | `model-codebase` | `path`, `language`, `description`, `name` (all optional) | `doctor`; with a source directory, `list_code_generators` and `reverse_code` (StarUML's Java reverse adds type hierarchy and package overview diagrams by default); otherwise one `build_diagram` of the central classes from the code or the description; then `describe_diagram` and `validate_model` on the result. |
-| `review-diagram` | `diagramId` (default the current diagram) | `describe_diagram`, `validate_model` scoped to the diagram's owner, `diagram_as_text`; then a review with a concrete fix per finding, changing nothing until asked. |
+| `review-diagram` | `diagram`, an id or a path (default `@current`) | `describe_diagram`, `validate_model` scoped to the diagram's owner, `diagram_as_text`; then a review with a concrete fix per finding, changing nothing until asked. |
 
 The text names each endpoint as a tool when the current tier lists it and as `call_endpoint`
 otherwise, so it is right under `--tools` selections too.
@@ -468,7 +486,7 @@ is one self-contained HTML file with no external requests; it speaks the protoco
   the host's light or dark theme until the Dark button overrides it. The SVG is shown as an
   `<img>` data URL, which runs no script whatever text the model put in element names.
 - **Any other client**, or no compatible extension: the PNG image block `get_diagram_image_by_id`
-  returns, from StarUML's built-in API, for `id` or the current diagram.
+  returns, from StarUML's built-in API, for `diagram` or the current diagram.
 
 Over `--transport http` this works within a session; a request sent without a session id gets
 a server of its own, which sees neither sign, and answers the PNG.

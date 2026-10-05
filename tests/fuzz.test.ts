@@ -118,6 +118,36 @@ describe("fuzz", () => {
     );
   }, 60_000);
 
+  it("core tools pass any path in a field that takes one to the extension as written", async () => {
+    // Fields of core tools that take an id or a path (extension src/refs.ts), as listed.
+    const fields: [string, string, Record<string, unknown>][] = [
+      ["get_element_by_id", "ref", {}],
+      ["delete_element", "ref", {}],
+      ["update_element", "ref", { field: "name", value: "x" }],
+      ["update_element", "parent", { ref: "Model/A", op: "relocate" }],
+      ["export_diagram", "diagram", { format: "svg" }],
+      ["describe_diagram", "diagram", {}],
+      ["validate_model", "scope", {}],
+      ["build_diagram", "parent", { kind: "mindmap", spec: { root: { name: "r" } } }],
+    ];
+    const segment = fc.oneof(
+      fc.string({ minLength: 1, maxLength: 6 }),
+      fc.constantFrom("/", ".", "#", "@", "(", ")", ",", "\\", "@current", "@project"),
+    );
+    const path = fc.array(segment, { minLength: 1, maxLength: 6 }).map((p) => p.join(""));
+    await fc.assert(
+      fc.asyncProperty(fc.constantFrom(...fields), path, async ([tool, field, rest], ref) => {
+        const sentBefore = extension.requests.length;
+        const result = await mcp.call(tool, { ...rest, [field]: ref });
+        structured(result);
+        expect(result.isError, `${tool} ${field}=${JSON.stringify(ref)}`).toBeFalsy();
+        const sent = extension.requests.slice(sentBefore).at(-1)!.body as Record<string, unknown>;
+        expect(sent[field]).toBe(ref);
+      }),
+      { numRuns: 200 },
+    );
+  }, 60_000);
+
   it("batch answers every ops list with a result", async () => {
     const op = fc
       .tuple(call, fc.option(fc.oneof(fc.stringMatching(/^[a-z]{1,2}$/), fc.string())))

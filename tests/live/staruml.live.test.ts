@@ -42,6 +42,7 @@ interface Summary {
   _type: string;
   name?: string;
   _parent?: string;
+  path?: string;
   [field: string]: unknown;
 }
 
@@ -83,7 +84,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
   /** The class views of a model element; /get_views_of also lists their compartment views. */
   const classViews = async (id: string) =>
-    payload<{ elements: Summary[] }>(await call("get_views_of", { id }))
+    payload<{ elements: Summary[] }>(await call("get_views_of", { ref: id }))
       .elements.filter((v) => v._type === "UMLClassView")
       .map((v) => v._id);
 
@@ -321,27 +322,34 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       }
       // ProjectManager.newProject() can leave the project without a model, unlike File > New.
       modelId = payload<Summary>(
-        await call("create_element", { type: "UMLModel", parentId: projectId, name: "Live" }),
+        await call("create_element", { type: "UMLModel", parent: projectId, name: "Live" }),
       )._id;
     });
 
     it("creates, reads, renames and finds a package as compact summaries", async () => {
       const created = payload<Summary>(
-        await call("create_element", { type: "UMLPackage", parentId: modelId, name: "LivePkg" }),
+        await call("create_element", { type: "UMLPackage", parent: modelId, name: "LivePkg" }),
       );
-      // The name echoes the argument and is dropped; summaries carry no other attribute.
-      expect(created).toEqual({ _id: expect.any(String), _type: "UMLPackage", _parent: modelId });
+      // The name echoes the argument and is dropped; summaries carry the path besides.
+      expect(created).toEqual({
+        _id: expect.any(String),
+        _type: "UMLPackage",
+        _parent: modelId,
+        path: expect.stringMatching(/\/LivePkg$/),
+      });
       packageId = created._id;
 
-      expect(payload<Summary>(await call("get_element_by_id", { id: packageId }))).toEqual({
+      // Paths resolve wherever an id is taken (extension #20).
+      expect(payload<Summary>(await call("get_element_by_id", { ref: created.path! }))).toEqual({
         _id: packageId,
         _type: "UMLPackage",
         name: "LivePkg",
         _parent: modelId,
+        path: created.path,
       });
       expect(
         payload<Summary>(
-          await call("update_element", { id: packageId, field: "name", value: "LivePkg2" }),
+          await call("update_element", { ref: packageId, field: "name", value: "LivePkg2" }),
         ).name,
       ).toBe("LivePkg2");
       expect(
@@ -367,7 +375,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     it("passes projection fields and depth through", async () => {
       const model = payload<Summary>(
         await call("get_element_by_id", {
-          id: modelId,
+          ref: modelId,
           fields: ["name", "ownedElements"],
           depth: 1,
         }),
@@ -376,7 +384,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         expect.arrayContaining([expect.objectContaining({ _id: packageId, name: "LivePkg2" })]),
       );
       const full = payload<Summary>(
-        await call("get_element_by_id", { id: packageId, summary: false }),
+        await call("get_element_by_id", { ref: packageId, summary: false }),
       );
       expect(full.visibility).toBe("public");
     });
@@ -385,17 +393,17 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       const diagram = payload<Summary>(
         await call("create_diagram", {
           type: "UMLClassDiagram",
-          parentId: packageId,
+          parent: packageId,
           name: "LiveDiagram",
         }),
       );
       classDiagramId = diagram._id;
 
-      expect(payload<Summary>(await call("switch_diagram", { id: classDiagramId }))._id).toBe(
+      expect(payload<Summary>(await call("switch_diagram", { diagram: classDiagramId }))._id).toBe(
         classDiagramId,
       );
-      ok(await call("close_diagram", { id: classDiagramId }));
-      ok(await call("switch_diagram", { id: classDiagramId }));
+      ok(await call("close_diagram", { diagram: classDiagramId }));
+      ok(await call("switch_diagram", { diagram: classDiagramId }));
     });
 
     it("creates classes with views and connects them", async () => {
@@ -403,8 +411,8 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         payload<Created>(
           await call("create_element_with_view", {
             type: "UMLClass",
-            parentId: packageId,
-            diagramId: classDiagramId,
+            parent: packageId,
+            diagram: classDiagramId,
             name,
             x,
             y: 100,
@@ -422,9 +430,9 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       const edge = payload<Created>(
         await call("create_edge_with_view", {
           type: "UMLAssociation",
-          diagramId: classDiagramId,
-          tailViewId: book.view!._id,
-          headViewId: author.view!._id,
+          diagram: classDiagramId,
+          tail: book.view!._id,
+          head: author.view!._id,
           name: "writtenBy",
         }),
       );
@@ -434,8 +442,8 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       const generalization = payload<Created>(
         await call("create_relationship", {
           type: "UMLDependency",
-          tailId: ids.book,
-          headId: ids.author,
+          tail: ids.book,
+          head: ids.author,
         }),
       );
       expect(generalization.model!._type).toBe("UMLDependency");
@@ -444,20 +452,20 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
     it("reports StarUML's refusal of an invalid connection as STARUML_ERROR", async () => {
       const ucd = payload<Summary>(
-        await call("create_diagram", { type: "UMLUseCaseDiagram", parentId: modelId }),
+        await call("create_diagram", { type: "UMLUseCaseDiagram", parent: modelId }),
       );
       const actor = payload<Created>(
         await call("create_element_with_view", {
           type: "UMLActor",
-          parentId: modelId,
-          diagramId: ucd._id,
+          parent: modelId,
+          diagram: ucd._id,
         }),
       );
       const useCase = payload<Created>(
         await call("create_element_with_view", {
           type: "UMLUseCase",
-          parentId: modelId,
-          diagramId: ucd._id,
+          parent: modelId,
+          diagram: ucd._id,
           x: 300,
         }),
       );
@@ -466,9 +474,9 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         failure(
           await call("create_relationship", {
             type: "UMLInclude",
-            diagramId: ucd._id,
-            tailId: actor.view!._id,
-            headId: useCase.view!._id,
+            diagram: ucd._id,
+            tail: actor.view!._id,
+            head: useCase.view!._id,
           }),
         ),
       ).toMatchObject({ code: "STARUML_ERROR", status: 422 });
@@ -476,11 +484,11 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
     it("adds attributes, operations, parameters and template parameters", async () => {
       ids.title = payload<Summary>(
-        await call("add_attribute", { ownerId: ids.book, name: "title", type: "String" }),
+        await call("add_attribute", { ref: ids.book, name: "title", type: "String" }),
       )._id;
       const lend = payload<Summary>(
         await call("add_operation", {
-          ownerId: ids.book,
+          ref: ids.book,
           name: "lend",
           parameters: [{ name: "days", type: "int" }],
           returnType: "boolean",
@@ -489,29 +497,27 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       expect(lend._type).toBe("UMLOperation");
       expect(
         payload<Summary>(
-          await call("add_parameter", { operationId: lend._id, name: "note", type: "String" }),
+          await call("add_parameter", { ref: lend._id, name: "note", type: "String" }),
         )._type,
       ).toBe("UMLParameter");
       expect(
-        payload<Summary>(await call("add_template_parameter", { ownerId: ids.book, name: "T" }))
-          ._type,
+        payload<Summary>(await call("add_template_parameter", { ref: ids.book, name: "T" }))._type,
       ).toBe("UMLTemplateParameter");
     });
 
     it("adds enumeration literals, slots and tags", async () => {
       const color = payload<Summary>(
-        await call("create_element", { type: "UMLEnumeration", parentId: modelId, name: "Color" }),
+        await call("create_element", { type: "UMLEnumeration", parent: modelId, name: "Color" }),
       );
       expect(
-        payload<Summary>(
-          await call("add_enumeration_literal", { enumerationId: color._id, name: "RED" }),
-        )._type,
+        payload<Summary>(await call("add_enumeration_literal", { ref: color._id, name: "RED" }))
+          ._type,
       ).toBe("UMLEnumerationLiteral");
 
       const copy = payload<Summary>(
         await call("create_element", {
           type: "UMLObject",
-          parentId: modelId,
+          parent: modelId,
           name: "dune",
           properties: { classifier: { $ref: ids.book } },
         }),
@@ -519,7 +525,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       expect(
         payload<Summary>(
           await call("add_slot", {
-            instanceId: copy._id,
+            ref: copy._id,
             definingFeature: ids.title,
             value: '"Dune"',
           }),
@@ -527,17 +533,17 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       ).toBe("UMLSlot");
       expect(
         payload<Summary>(
-          await call("add_tag", { elementId: ids.book, name: "pages", kind: "number", value: 412 }),
+          await call("add_tag", { ref: ids.book, name: "pages", kind: "number", value: 412 }),
         )._type,
       ).toBe("Tag");
     });
 
     it("sets stereotype and documentation", async () => {
       // Requested fields equal to an argument are dropped like any echo, so read them back.
-      ok(await call("set_stereotype", { elementId: ids.book, stereotype: "entity" }));
+      ok(await call("set_stereotype", { ref: ids.book, stereotype: "entity" }));
       ok(
         await call("set_documentation", {
-          elementId: ids.book,
+          ref: ids.book,
           documentation: "A published work.",
           fields: ["documentation"],
         }),
@@ -546,7 +552,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       expect(
         payload<Summary>(
           await call("get_element_by_id", {
-            id: ids.book,
+            ref: ids.book,
             fields: ["stereotype", "documentation"],
           }),
         ),
@@ -562,53 +568,56 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           ops: [
             {
               path: "/create_diagram",
-              body: { type: "UMLClassDiagram", parentId: packageId, name: "Batched" },
+              body: { type: "UMLClassDiagram", parent: packageId, name: "Batched" },
               as: "d",
             },
             ...["Shelf", "Copy"].map((name, i) => ({
               path: "/create_element_with_view",
               body: {
                 type: "UMLClass",
-                parentId: packageId,
-                diagramId: "$d",
+                parent: packageId,
+                diagram: "$d",
                 name,
                 x: 100 + 250 * i,
                 y: 100,
               },
               as: name.toLowerCase(),
             })),
-            { path: "/add_attribute", body: { ownerId: "$shelf.model", name: "code" } },
+            { path: "/add_attribute", body: { ref: "$shelf.model", name: "code" } },
             {
               path: "/create_edge_with_view",
               body: {
                 type: "UMLAssociation",
-                diagramId: "$d",
-                tailViewId: "$shelf.view",
-                headViewId: "$copy.view",
+                diagram: "$d",
+                tail: "$shelf.view",
+                head: "$copy.view",
               },
             },
           ],
         }),
       );
       expect(built.succeeded).toBe(5);
-      expect(JSON.stringify(built)).not.toContain('"path"');
+      // No op result repeats the op's endpoint path; element summaries carry element paths.
+      expect(JSON.stringify(built)).not.toMatch(/"path":"\//);
       const shelf = built.results[1]!.data.model!._id;
       ids.batchedDiagram = built.results[0]!.data._id;
       expect(await classViews(shelf)).toHaveLength(1);
 
       expect(payload<{ modified: boolean }>(await call("is_modified")).modified).toBe(true);
       ok(await call("undo"));
-      expect(failure(await call("get_element_by_id", { id: shelf })).code).toBe("NOT_FOUND");
+      expect(failure(await call("get_element_by_id", { ref: shelf })).code).toBe("NOT_FOUND");
       ok(await call("redo"));
-      expect(payload<Summary>(await call("get_element_by_id", { id: shelf })).name).toBe("Shelf");
+      expect(payload<Summary>(await call("get_element_by_id", { ref: shelf })).name).toBe("Shelf");
     });
 
     it("refuses a dangling batch reference locally and rolls back an atomic failure", async () => {
       expect(
-        failure(await call("batch", { ops: [{ path: "/delete_element", body: { id: "$nope" } }] })),
+        failure(
+          await call("batch", { ops: [{ path: "/delete_element", body: { ref: "$nope" } }] }),
+        ),
       ).toMatchObject({
         code: "INVALID_ARGUMENT",
-        message: "ops.0.body.id: $nope names no earlier op",
+        message: "ops.0.body.ref: $nope names no earlier op",
       });
 
       const error = failure(
@@ -616,9 +625,9 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           ops: [
             {
               path: "/create_element",
-              body: { type: "UMLClass", parentId: packageId, name: "Ghost" },
+              body: { type: "UMLClass", parent: packageId, name: "Ghost" },
             },
-            { path: "/delete_element", body: { id: "missing-id" } },
+            { path: "/delete_element", body: { ref: "missing-id" } },
           ],
         }),
       );
@@ -635,18 +644,18 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         payload<{ count: number }>(await call(name, args)).count;
 
       expect(await classViews(ids.book!)).toEqual([ids.bookView]);
-      expect(await count("get_edge_views_of", { id: ids.bookView })).toBeGreaterThan(0);
-      expect(await count("get_relationships_of", { id: ids.book })).toBeGreaterThanOrEqual(2);
-      expect(await count("get_refs_to", { id: ids.book })).toBeGreaterThan(0);
-      expect(await count("get_connected_node_views", { id: ids.bookView })).toBe(1);
+      expect(await count("get_edge_views_of", { ref: ids.bookView })).toBeGreaterThan(0);
+      expect(await count("get_relationships_of", { ref: ids.book })).toBeGreaterThanOrEqual(2);
+      expect(await count("get_refs_to", { ref: ids.book })).toBeGreaterThan(0);
+      expect(await count("get_connected_node_views", { ref: ids.bookView })).toBe(1);
     });
 
     it("lays out, moves, resizes, styles and reorders views", async () => {
-      ok(await call("layout_diagram", { id: classDiagramId, direction: "LR" }));
+      ok(await call("layout_diagram", { diagram: classDiagramId, direction: "LR" }));
       // preset echoes the argument and is dropped from the answer.
       const laid = payload<{ separations: { node: number; rank: number }; fitted: number }>(
         await call("layout_diagram", {
-          id: classDiagramId,
+          diagram: classDiagramId,
           preset: "hierarchy-right",
           nodeSeparation: 40,
           rankSeparation: 80,
@@ -657,22 +666,22 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       expect(laid.fitted).toBeGreaterThan(0);
       expect(
         payload<{ edges: number }>(
-          await call("route_edges", { diagramId: classDiagramId, lineStyle: "rectilinear" }),
+          await call("route_edges", { diagram: classDiagramId, lineStyle: "rectilinear" }),
         ).edges,
       ).toBeGreaterThan(0);
       // EdgeView.lineStyle 0 is LS_RECTILINEAR (StarUML core/graphics.js).
       expect(
         payload<Summary>(
-          await call("get_element_by_id", { id: ids.edgeView, fields: ["lineStyle"] }),
+          await call("get_element_by_id", { ref: ids.edgeView, fields: ["lineStyle"] }),
         ).lineStyle,
       ).toBe(0);
-      ok(await call("move_views", { ids: [ids.bookView], dx: 10, dy: 5 }));
-      ok(await call("resize_node", { id: ids.bookView, width: 180, height: 90 }));
-      ok(await call("set_view_style", { ids: [ids.bookView], fillColor: "#ffeecc" }));
-      ok(await call("set_z_order", { ids: [ids.bookView], position: "front" }));
+      ok(await call("move_views", { refs: [ids.bookView], dx: 10, dy: 5 }));
+      ok(await call("resize_node", { ref: ids.bookView, width: 180, height: 90 }));
+      ok(await call("set_view_style", { refs: [ids.bookView], fillColor: "#ffeecc" }));
+      ok(await call("set_z_order", { refs: [ids.bookView], position: "front" }));
 
       const view = payload<Summary>(
-        await call("get_element_by_id", { id: ids.bookView, fields: ["width", "fillColor"] }),
+        await call("get_element_by_id", { ref: ids.bookView, fields: ["width", "fillColor"] }),
       );
       // StarUML widens a class view to fit its compartments when it is next drawn.
       expect(view.fillColor, JSON.stringify(view)).toBe("#ffeecc");
@@ -680,8 +689,8 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     });
 
     it("sets and reads the selection and editor state", async () => {
-      ok(await call("switch_diagram", { id: classDiagramId }));
-      ok(await call("set_selection", { viewIds: [ids.bookView] }));
+      ok(await call("switch_diagram", { diagram: classDiagramId }));
+      ok(await call("set_selection", { views: [ids.bookView] }));
       expect(JSON.stringify(payload(await call("get_selection")))).toContain(ids.bookView);
 
       ok(await call("set_editor_state", { zoom: 1.5 }));
@@ -690,7 +699,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     });
 
     it("exports a diagram as a PNG image block, to a file, to PDF and to HTML", async () => {
-      const result = await call("export_diagram", { id: classDiagramId });
+      const result = await call("export_diagram", { diagram: classDiagramId });
       ok(result);
       const image = result.content[0] as { type: string; data: string; mimeType: string };
       expect(image).toMatchObject({ type: "image", mimeType: "image/png" });
@@ -701,10 +710,10 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       });
 
       const svg = join(dir, "diagram.svg");
-      ok(await call("export_diagram", { id: classDiagramId, format: "svg", path: svg }));
+      ok(await call("export_diagram", { diagram: classDiagramId, format: "svg", path: svg }));
       expect(existsSync(svg)).toBe(true);
       const pdf = join(dir, "diagram.pdf");
-      ok(await call("export_pdf", { path: pdf, ids: [classDiagramId] }));
+      ok(await call("export_pdf", { path: pdf, diagrams: [classDiagramId] }));
       expect(existsSync(pdf)).toBe(true);
       const html = join(dir, "html");
       ok(await call("export_html", { path: html }));
@@ -712,7 +721,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     }, 60_000);
 
     it("reads a diagram back as text, searches types and validates the model (#11)", async () => {
-      const described = ok(await call("describe_diagram", { diagramId: classDiagramId }));
+      const described = ok(await call("describe_diagram", { diagram: classDiagramId }));
       expect(described.split("\n")[0]).toMatch(
         /^UMLClassDiagram "LiveDiagram" in ".+": 2 nodes, \d+ edges$/,
       );
@@ -720,7 +729,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
       for (const format of ["mermaid", "plantuml"]) {
         const exported = payload<{ kind: string; text: string }>(
-          await call("export_text", { diagramId: classDiagramId, format }),
+          await call("export_text", { diagram: classDiagramId, format }),
         );
         expect(exported.kind).toBe("class");
         expect(exported.text).toContain("Book");
@@ -740,17 +749,20 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     });
 
     it("diagram_as_text writes Mermaid and PlantUML, also as resources, and round-trips (#11)", async () => {
-      const mermaid = await call("diagram_as_text", { id: classDiagramId });
+      const mermaid = await call("diagram_as_text", { diagram: classDiagramId });
       ok(mermaid);
       const source = (mermaid.content[0] as { text: string }).text;
       expect(source).toMatch(/^---\ntitle: "LiveDiagram"\n---\nclassDiagram\n/);
       expect(source).toContain("Book -- Author : writtenBy");
       expect(JSON.parse((mermaid.content[1] as { text: string }).text)).toEqual({ kind: "class" });
 
-      const plantuml = await call("diagram_as_text", { id: classDiagramId, format: "plantuml" });
+      const plantuml = await call("diagram_as_text", {
+        diagram: classDiagramId,
+        format: "plantuml",
+      });
       expect(ok(plantuml)).toMatch(/^@startuml\ntitle LiveDiagram\n[\s\S]*@enduml\n/);
 
-      ok(await call("switch_diagram", { id: classDiagramId }));
+      ok(await call("switch_diagram", { diagram: classDiagramId }));
       const current = await call("diagram_as_text");
       expect(JSON.parse((current.content[1] as { text: string }).text)).toEqual({
         id: classDiagramId,
@@ -771,15 +783,15 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         await call("build_diagram", {
           mermaid: source,
           name: "LiveRoundTrip",
-          parentId: packageId,
+          parent: packageId,
         }),
       );
-      const again = ok(await call("describe_diagram", { diagramId: rebuilt.diagram._id }));
+      const again = ok(await call("describe_diagram", { diagram: rebuilt.diagram._id }));
       expect(again).toContain('"Book" -[UMLAssociation "writtenBy"]-> "Author"');
       // Every node and edge line of the original comes back. Extension builds that reuse
       // same-named elements elsewhere in the project also draw their other relationships (here
       // the Book -> Author dependency, which has no view on LiveDiagram).
-      const original = ok(await call("describe_diagram", { diagramId: classDiagramId }));
+      const original = ok(await call("describe_diagram", { diagram: classDiagramId }));
       expect(again.split("\n").slice(1)).toEqual(
         expect.arrayContaining(original.split("\n").slice(1)),
       );
@@ -791,14 +803,14 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
       const review = await mcp.client.getPrompt({
         name: "review-diagram",
-        arguments: { diagramId: classDiagramId },
+        arguments: { diagram: classDiagramId },
       });
       const steps = (review.messages[0]!.content as { text: string }).text;
-      expect(steps).toContain(`describe_diagram({diagramId: "${classDiagramId}"})`);
-      expect(steps).toContain(`diagram_as_text({id: "${classDiagramId}"})`);
+      expect(steps).toContain(`describe_diagram({diagram: "${classDiagramId}"})`);
+      expect(steps).toContain(`diagram_as_text({diagram: "${classDiagramId}"})`);
       // Step 2 as the prompt describes it: the diagram's owner from get_element_by_id.
       const owner = payload<Summary>(
-        await call("get_element_by_id", { id: classDiagramId }),
+        await call("get_element_by_id", { ref: classDiagramId }),
       )._parent;
       expect(owner).toBe(packageId);
       expect(
@@ -817,7 +829,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     it("view_diagram shows the SVG export in the viewer, and a PNG without MCP Apps (#10)", async () => {
       const app = await connect({ catalog }, UI_CAPABILITIES);
       try {
-        const result = await app.call("view_diagram", { id: classDiagramId });
+        const result = await app.call("view_diagram", { diagram: classDiagramId });
         const shown = result.structuredContent as { svg: string; name: string; diagram: string };
         expect(result.isError, text(result)).toBeFalsy();
         expect(shown).toMatchObject({ diagram: classDiagramId, name: "LiveDiagram" });
@@ -839,7 +851,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         await app.close();
       }
 
-      const fallback = await call("view_diagram", { id: classDiagramId });
+      const fallback = await call("view_diagram", { diagram: classDiagramId });
       const image = fallback.content[0] as { type: string; data: string };
       expect(image.type).toBe("image");
       expect(Buffer.from(image.data, "base64").subarray(0, 8).toString("hex")).toBe(PNG_SIGNATURE);
@@ -890,9 +902,9 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           ops: [
             {
               path: "/create_element",
-              body: { type: "UMLClass", parentId: modelId, name: "Gone" },
+              body: { type: "UMLClass", parent: modelId, name: "Gone" },
             },
-            { path: "/delete_element", body: { id: "missing-id" } },
+            { path: "/delete_element", body: { ref: "missing-id" } },
           ],
         }),
       ) as { details?: { index: number; results: unknown[] } };
@@ -903,10 +915,10 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           ops: [
             {
               path: "/get_element_by_id",
-              body: { id: modelId, fields: ["ownedElements"] },
+              body: { ref: modelId, fields: ["ownedElements"] },
               as: "m",
             },
-            { path: "/get_element_by_id", body: { id: "$m.ownedElements.0" } },
+            { path: "/get_element_by_id", body: { ref: "$m.ownedElements.0" } },
           ],
         }),
       );
@@ -927,7 +939,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
             relations: [{ from: "Shelf2", to: "Copy2", type: "composition" }],
           },
           name: "LiveBuilt",
-          parentId: packageId,
+          parent: packageId,
           layout: "hierarchy-right",
         }),
       );
@@ -940,12 +952,104 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         await call("build_diagram", {
           mermaid: "classDiagram\n  Shelf2 --> Copy2\n  Copy2 --> Tag2",
           name: "LiveBuilt",
-          parentId: packageId,
+          parent: packageId,
           upsert: true,
         }),
       );
       expect(upserted.upserted).toBe(true);
       expect(upserted.created).toBeGreaterThan(0);
+    });
+
+    it("addresses elements by path, shows one again, divides a fragment and checkpoints (#20, #22)", async () => {
+      const book = payload<Summary>(await call("get_element_by_id", { ref: ids.book! }));
+      expect(book.path).toMatch(/\/Book$/);
+      expect(payload<Summary>(await call("get_element_by_id", { ref: book.path! }))._id).toBe(
+        ids.book,
+      );
+      const taken = payload<{ label: string; elements: number }>(
+        await call("snapshot", { label: "live-2g" }),
+      );
+      expect(taken.elements).toBeGreaterThan(10);
+
+      const shown = payload<Created>(
+        await call("create_view_of", { ref: book.path!, diagram: ids.batchedDiagram!, x: 420 }),
+      );
+      expect(shown.view!._type).toBe("UMLClassView");
+      expect(shown.view!.path).toMatch(/\/Book@/);
+
+      const sequence = payload<{ diagram: Summary }>(
+        await call("build_diagram", {
+          kind: "sequence",
+          name: "Live fragments",
+          parent: packageId,
+          spec: {
+            participants: ["A", "B"],
+            messages: [
+              { from: "A", to: "B", text: "ping()" },
+              { from: "B", to: "A", text: "pong", kind: "reply" },
+            ],
+            fragments: [{ operator: "alt", guard: "ok", operands: ["else"], from: 0, to: 1 }],
+          },
+        }),
+      );
+      const { ownedViews } = payload<{ ownedViews: Summary[] }>(
+        await call("get_element_by_id", {
+          ref: sequence.diagram._id,
+          fields: ["ownedViews"],
+          depth: 1,
+        }),
+      );
+      const fragment = ownedViews.find((v) => v._type === "UMLCombinedFragmentView")!;
+      const box = payload<{ top: number; height: number }>(
+        await call("get_element_by_id", { ref: fragment._id, fields: ["top", "height"] }),
+      );
+      const divided = payload<{ views: Summary[] }>(
+        await call("divide_fragment", {
+          ref: fragment._id,
+          at: [Math.round(box.top + box.height / 3)],
+        }),
+      );
+      expect(divided.views.length).toBeGreaterThan(0);
+
+      const since = payload<{ counts: { added: number; changed: number; removed: number } }>(
+        await call("diff_since", { snapshot: "live-2g" }),
+      );
+      expect(since.counts.added).toBeGreaterThan(0);
+      const restored = payload<{ undone: number; remaining: Record<string, number> }>(
+        await call("restore_snapshot", { snapshot: "live-2g" }),
+      );
+      expect(restored.undone).toBeGreaterThan(0);
+      expect(restored.remaining).toEqual({ added: 0, changed: 0, removed: 0 });
+      expect(failure(await call("get_element_by_id", { ref: sequence.diagram._id })).code).toBe(
+        "NOT_FOUND",
+      );
+      // One redo brings every undone operation back.
+      ok(await call("redo"));
+      expect(
+        payload<Summary>(await call("get_element_by_id", { ref: sequence.diagram._id })).name,
+      ).toBe("Live fragments");
+    });
+
+    it("lints a diagram and the model, and diffs a diagram against a spec (#21, #22)", async () => {
+      const lint = payload<{ count: number; findings?: { rule: string; paths: string[] }[] }>(
+        await call("lint_diagram", { diagram: ids.batchedDiagram! }),
+      );
+      expect(lint.count).toBeGreaterThanOrEqual(0);
+      const uml = payload<{ count: number; findings: { rule: string; path: string | null }[] }>(
+        await call("uml_lint", { scope: packageId }),
+      );
+      // The batch's association has no multiplicities (U001).
+      expect(uml.findings.map((f) => f.rule)).toContain("U001");
+
+      const diff = payload<{ identical?: boolean; added: { nodes: string[] } }>(
+        await call("diff_diagram", {
+          diagram: ids.batchedDiagram!,
+          kind: "class",
+          spec: { classes: [{ name: "Shelf" }, { name: "Copy" }, { name: "Loan" }] },
+        }),
+      );
+      expect(diff.identical).toBe(false);
+      expect(diff.added.nodes).toEqual(["Loan"]);
     });
 
     it("lists code generators, generates Java from a class and reverses it", async () => {
@@ -956,7 +1060,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
       const out = join(dir, "java");
       const generated = payload<{ count: number; files: string[] }>(
-        await call("generate_code", { language: "java", baseId: ids.book, path: out }),
+        await call("generate_code", { language: "java", ref: ids.book, path: out }),
       );
       expect(generated.files).toContain("Book.java");
       expect(existsSync(join(out, "Book.java"))).toBe(true);
@@ -975,7 +1079,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     it("exports every diagram of a selection into a directory", async () => {
       const out = join(dir, "diagrams");
       const exported = payload<{ count: number; files: { file: string }[] }>(
-        await call("export_diagrams", { path: out, ids: [classDiagramId] }),
+        await call("export_diagrams", { path: out, diagrams: [classDiagramId] }),
       );
       expect(exported.count).toBe(1);
       expect(existsSync(exported.files[0]!.file)).toBe(true);
@@ -983,11 +1087,11 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
     it("deletes the package and then reports it NOT_FOUND", async () => {
       expect(
-        payload<{ models_deleted: number }>(await call("delete_element", { id: packageId }))
+        payload<{ models_deleted: number }>(await call("delete_element", { ref: packageId }))
           .models_deleted,
       ).toBeGreaterThan(0);
 
-      expect(failure(await call("get_element_by_id", { id: packageId }))).toMatchObject({
+      expect(failure(await call("get_element_by_id", { ref: packageId }))).toMatchObject({
         code: "NOT_FOUND",
         status: 404,
         message: `Element not found: ${packageId}`,
@@ -1061,7 +1165,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     /** Top-level views of a diagram by type. */
     const viewCounts = async (id: string) => {
       const { ownedViews } = payload<{ ownedViews: Summary[] }>(
-        await call("get_element_by_id", { id, fields: ["ownedViews"], depth: 1 }),
+        await call("get_element_by_id", { ref: id, fields: ["ownedViews"], depth: 1 }),
       );
       const counts: Record<string, number> = {};
       for (const view of ownedViews) counts[view._type] = (counts[view._type] ?? 0) + 1;
@@ -1070,7 +1174,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
     /** The diagram exported through export_diagram as a decoded PNG. */
     const png = async (id: string) => {
-      const result = await call("export_diagram", { id });
+      const result = await call("export_diagram", { diagram: id });
       ok(result);
       const image = result.content[0] as { type: string; data: string };
       expect(image.type).toBe("image");
@@ -1125,7 +1229,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         }),
       );
       const model = broken.ids["Web\nApp"]!.model;
-      expect(payload<Summary>(await call("get_element_by_id", { id: model })).name).toBe(
+      expect(payload<Summary>(await call("get_element_by_id", { ref: model })).name).toBe(
         "Web\nApp",
       );
       expect(await viewCounts(broken.diagram._id)).toEqual({
@@ -1143,7 +1247,11 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           }),
         );
         ok(
-          await call("update_element", { id: built.ids.WebApp!.model, field: "name", value: name }),
+          await call("update_element", {
+            ref: built.ids.WebApp!.model,
+            field: "name",
+            value: name,
+          }),
         );
         return built;
       };
@@ -1301,7 +1409,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
     it("call_endpoint rejects a bad body before StarUML sees it", async () => {
       expect(
-        failure(await mcp.call("call_endpoint", { name: "create_diagram", body: { parentId: 1 } })),
+        failure(await mcp.call("call_endpoint", { name: "create_diagram", body: { parent: 1 } })),
       ).toMatchObject({ code: "INVALID_ARGUMENT" });
       expect(failure(await mcp.call("call_endpoint", { name: "nope", body: {} }))).toMatchObject({
         code: "UNKNOWN_ENDPOINT",
@@ -1443,13 +1551,15 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         );
         const id = (await list()).find((d) => !before.some((b) => b.id === d.id))!.id;
 
-        const shown = (await app.call("view_diagram", { id })).structuredContent as { svg: string };
+        const shown = (await app.call("view_diagram", { diagram: id })).structuredContent as {
+          svg: string;
+        };
         expect(shown.svg).toMatch(/^<svg [\s\S]*<\/svg>$/);
         expect(shown.svg).toContain(">HttpSessionA<");
 
-        expect((await plain.call("view_diagram", { id })).content[0]!.type).toBe("image");
+        expect((await plain.call("view_diagram", { diagram: id })).content[0]!.type).toBe("image");
         await plain.client.readResource({ uri: VIEWER_URI });
-        const read = (await plain.call("view_diagram", { id })).structuredContent as {
+        const read = (await plain.call("view_diagram", { diagram: id })).structuredContent as {
           svg: string;
         };
         expect(read.svg).toContain(">HttpSessionB<");

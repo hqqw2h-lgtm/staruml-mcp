@@ -6,7 +6,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { compactOpResults, serialize } from "./compact.js";
 import { ErrorCode, ToolInputError } from "./errors.js";
-import { unstamped, untrivial, type GeneratedTool } from "./manifest.js";
+import { canonicalBody, issuePath, unstamped, untrivial, type GeneratedTool } from "./manifest.js";
 import { textResult } from "./tool-result.js";
 
 export const BATCH = "batch";
@@ -73,7 +73,6 @@ export function checkBatch(tools: readonly GeneratedTool[], ops: readonly Op[]):
         hint: "describe_endpoints() lists the endpoints.",
       });
     }
-    const body = op.body ?? {};
     const fail = (message: string): never => {
       throw new ToolInputError(`ops.${i}.${message}`, {
         code: ErrorCode.InvalidArgument,
@@ -81,17 +80,27 @@ export function checkBatch(tools: readonly GeneratedTool[], ops: readonly Op[]):
         hint: `describe_endpoints({names: ["${tool.name}"]}) shows its schema.`,
       });
     };
-    const dangling = references(body).find((r) => !named.has(r.name));
+    const written = op.body ?? {};
+    const dangling = references(written).find((r) => !named.has(r.name));
     if (dangling !== undefined) {
       fail(`body.${dangling.at}: ${dangling.text} names no earlier op`);
     }
+    let renamed: ReturnType<typeof canonicalBody>;
+    try {
+      renamed = canonicalBody(tool, written);
+    } catch (error) {
+      return fail(`body.${(error as Error).message}`);
+    }
+    const { body, used } = renamed;
     const parsed = tool.requestSchema.safeParse(body);
     const issues = parsed.success
       ? []
       : parsed.error.issues.filter((issue) => !isReference(valueAt(body, issue.path)));
     if (issues.length > 0) {
       fail(
-        issues.map((issue) => `${["body", ...issue.path].join(".")}: ${issue.message}`).join("; "),
+        issues
+          .map((issue) => `${["body", ...issuePath(issue.path, used)].join(".")}: ${issue.message}`)
+          .join("; "),
       );
     }
     if (op.as !== undefined) named.add(op.as);

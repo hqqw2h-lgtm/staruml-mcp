@@ -34,16 +34,16 @@ export function updateElementInput(entry: ManifestEntry): z.ZodObject {
   return shortInput(
     entry,
     {
-      id: "Element _id.",
+      ref: "Element id or path.",
       op:
         "set (default): field = value. add/remove: value is element ids for the reference list " +
-        "field. reorder: move list item value to index. relocate: move to owner parentId.",
+        "field. reorder: move list item value to index. relocate: move to owner parent.",
       field: "Attribute name; not for relocate.",
       value:
         "set: the value; an id or {$ref: id} for references, null clears. add/remove: ids. " +
         "reorder: the item.",
       index: "reorder: position after the item is taken out.",
-      parentId: "relocate: the new owner.",
+      parent: "relocate: the new owner.",
     },
     new Set(["index"]),
   );

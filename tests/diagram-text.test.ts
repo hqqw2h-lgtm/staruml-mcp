@@ -40,7 +40,7 @@ afterAll(async () => {
 });
 
 describe("diagram_as_text", () => {
-  it("is listed read-only with an optional id and format", async () => {
+  it("is listed read-only with an optional diagram and format", async () => {
     const { tools } = await mcp.client.listTools();
     const tool = tools.find((t) => t.name === "diagram_as_text")!;
 
@@ -49,7 +49,7 @@ describe("diagram_as_text", () => {
     expect(tool.inputSchema).toEqual({
       type: "object",
       properties: {
-        id: { type: "string", minLength: 1, description: "Diagram _id; default the current one." },
+        diagram: { type: "string", description: "Diagram id or path; default the current one." },
         format: { type: "string", enum: ["mermaid", "plantuml"], description: "Default mermaid." },
       },
     });
@@ -58,10 +58,10 @@ describe("diagram_as_text", () => {
   it("answers the Mermaid as text of its own, then the kind", async () => {
     extension.reply("/export_text", { body: answer("mermaid", MERMAID) });
 
-    const result = await mcp.call("diagram_as_text", { id: "D1/+=" });
+    const result = await mcp.call("diagram_as_text", { diagram: "D1/+=" });
 
     expect(extension.requests).toEqual([
-      { method: "POST", path: "/export_text", body: { diagramId: "D1/+=", format: "mermaid" } },
+      { method: "POST", path: "/export_text", body: { diagram: "D1/+=", format: "mermaid" } },
     ]);
     expect(result.content).toEqual([
       { type: "text", text: MERMAID },
@@ -73,13 +73,23 @@ describe("diagram_as_text", () => {
     const warnings = ["Note views are not written"];
     extension.reply("/export_text", { body: answer("plantuml", PLANTUML, warnings) });
 
+    // id is the unlisted name diagram replaced.
     const result = await mcp.call("diagram_as_text", { id: "D1/+=", format: "plantuml" });
 
-    expect(extension.requests[0]!.body).toEqual({ diagramId: "D1/+=", format: "plantuml" });
+    expect(extension.requests[0]!.body).toEqual({ diagram: "D1/+=", format: "plantuml" });
     expect(result.content).toEqual([
       { type: "text", text: PLANTUML },
       { type: "text", text: JSON.stringify({ kind: "class", warnings }) },
     ]);
+  });
+
+  it("takes a path and names the id it resolved to", async () => {
+    extension.reply("/export_text", { body: answer("mermaid", MERMAID) });
+
+    const result = await mcp.call("diagram_as_text", { diagram: "Model/Probe" });
+
+    expect(extension.requests[0]!.body).toEqual({ diagram: "Model/Probe", format: "mermaid" });
+    expect(text({ content: result.content.slice(1) })).toBe('{"id":"D1/+=","kind":"class"}');
   });
 
   it("writes the current diagram and names its id", async () => {
@@ -90,7 +100,7 @@ describe("diagram_as_text", () => {
 
     const result = await mcp.call("diagram_as_text");
 
-    expect(extension.requests[0]!.body).toEqual({ diagramId: "D1/+=", format: "mermaid" });
+    expect(extension.requests[0]!.body).toEqual({ diagram: "D1/+=", format: "mermaid" });
     expect(text({ content: result.content.slice(1) })).toBe('{"id":"D1/+=","kind":"class"}');
   });
 
@@ -101,7 +111,7 @@ describe("diagram_as_text", () => {
 
     expect(result.isError).toBe(true);
     expect(text(result)).toBe(
-      "Failed to write diagram as text: No diagram is open in StarUML. [INVALID_ARGUMENT]\nHint: Pass id; get_all_diagrams_info lists the diagrams.",
+      "Failed to write diagram as text: No diagram is open in StarUML. [INVALID_ARGUMENT]\nHint: Pass diagram; get_all_diagrams_info lists the diagrams.",
     );
     expect(extension.requests).toEqual([]);
   });
@@ -116,7 +126,7 @@ describe("diagram_as_text", () => {
       },
     });
 
-    const result = await mcp.call("diagram_as_text", { id: "D2" });
+    const result = await mcp.call("diagram_as_text", { diagram: "D2" });
 
     expect(text(result)).toBe(
       "Failed to write diagram as text: UMLComponentDiagram cannot be written as text [INVALID_ARGUMENT, /export_text, HTTP 400]",
@@ -153,7 +163,7 @@ describe("staruml://diagram/{id}.mmd and .puml", () => {
     const { contents } = await mcp.client.readResource({ uri });
 
     expect(uri).toBe("staruml://diagram/D1%2F%2B%3D.mmd");
-    expect(extension.requests[0]!.body).toEqual({ diagramId: "D1/+=", format: "mermaid" });
+    expect(extension.requests[0]!.body).toEqual({ diagram: "D1/+=", format: "mermaid" });
     expect(contents).toEqual([
       { uri, mimeType: "text/plain", text: MERMAID, _meta: { kind: "class" } },
     ]);

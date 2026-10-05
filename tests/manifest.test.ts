@@ -1,9 +1,15 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { ToolInputError } from "../src/errors.js";
 import {
+  aliasesOf,
   annotationsOf,
   BUNDLED_MANIFEST,
+  canonicalBody,
+  issuePath,
+  nonEmpty,
+  unlisted,
   compatibleRange,
   compileManifest,
   inputSchema,
@@ -195,11 +201,111 @@ describe("strictRequestSchema", () => {
     });
   });
 
+  it("rejects every key of an endpoint without parameters", () => {
+    const parsed = strictRequestSchema(entry({ request: { type: "object" } })).safeParse({ a: 1 });
+
+    expect(parsed.success).toBe(false);
+  });
+
   it("rejects keys the manifest does not define", () => {
     const parsed = strictRequestSchema(entry({ request })).safeParse({ id: "a", Id: "b" });
 
     expect(parsed.success).toBe(false);
     expect(parsed.error!.issues[0]).toMatchObject({ code: "unrecognized_keys", keys: ["Id"] });
+  });
+});
+
+describe("aliases", () => {
+  const aliased = entry({
+    request: {
+      type: "object",
+      properties: {
+        ref: { type: "string", description: "Element. Id or path." },
+        id: { type: "string", description: "Alias of ref.", "x-alias-of": "ref", deprecated: true },
+        diagramId: { type: "string", "x-alias-of": "diagram", deprecated: true },
+        diagram: { type: "string" },
+      },
+      required: ["ref"],
+    },
+  });
+  const tool = compileManifest(manifest([aliased])).tools[0]!;
+
+  it("reads them from x-alias-of", () => {
+    expect(aliasesOf(aliased)).toEqual({ id: "ref", diagramId: "diagram" });
+    expect(aliasesOf(entry({ request: { type: "object" } }))).toEqual({});
+    expect(tool.aliases).toEqual({ id: "ref", diagramId: "diagram" });
+  });
+
+  it("lists the canonical fields only", () => {
+    expect(Object.keys(listedRequestSchema(aliased).schema.properties as object)).toEqual([
+      "ref",
+      "diagram",
+    ]);
+  });
+
+  it("checks a body without them: they are renamed before it is parsed", () => {
+    expect(tool.requestSchema.safeParse({ ref: "Order", diagram: "Main" }).success).toBe(true);
+    expect(tool.requestSchema.safeParse({ ref: "Order", id: "E1" }).success).toBe(false);
+  });
+
+  it("renames each alias to its canonical field and remembers what was written", () => {
+    const { body, used } = canonicalBody(tool, { id: "E1", diagramId: "D1", depth: 1 });
+
+    expect(body).toEqual({ ref: "E1", diagram: "D1", depth: 1 });
+    expect([...used]).toEqual([
+      ["ref", "id"],
+      ["diagram", "diagramId"],
+    ]);
+    expect(canonicalBody(tool, { ref: "E1" }).body).toEqual({ ref: "E1" });
+  });
+
+  it("refuses an alias given with its canonical field", () => {
+    expect(() => canonicalBody(tool, { id: "E1", ref: "Model/Order" })).toThrow(
+      new ToolInputError("id: an alias of ref, which is given too; pass ref only", {
+        code: "INVALID_ARGUMENT",
+      }),
+    );
+    let error: unknown;
+    try {
+      canonicalBody(tool, { id: "E1", ref: "E1" });
+    } catch (caught) {
+      error = caught;
+    }
+    expect((error as ToolInputError).toJSON()).toEqual({
+      code: "INVALID_ARGUMENT",
+      message: "id: an alias of ref, which is given too; pass ref only",
+      endpoint: "/do_it",
+      hint: 'describe_endpoints({names: ["do_it"]}) shows its schema.',
+    });
+  });
+
+  it("names an issue's first segment as the caller wrote it", () => {
+    const used = new Map([["ref", "id"]]);
+
+    expect(issuePath([], used)).toEqual([]);
+    expect(issuePath(["ref"], used)).toEqual(["id"]);
+    expect(issuePath(["ops", 0, "ref"], used)).toEqual(["ops", "0", "ref"]);
+    expect(issuePath(["diagram", "ref"], used)).toEqual(["diagram", "ref"]);
+  });
+});
+
+describe("unlisted", () => {
+  it("lists a schema without the keywords but still checks them", () => {
+    const schema = z.object({
+      name: nonEmpty(),
+      kind: unlisted(z.enum(["a", "b"]), "enum").meta({ type: "string" }),
+      ids: unlisted(z.array(z.string()).min(1), "minItems"),
+    });
+
+    expect(z.toJSONSchema(schema).properties).toEqual({
+      name: { type: "string" },
+      kind: { type: "string" },
+      ids: { type: "array", items: { type: "string" } },
+    });
+    expect(schema.safeParse({ name: "", kind: "a", ids: ["x"] }).success).toBe(false);
+    expect(schema.safeParse({ name: "n", kind: "c", ids: ["x"] }).success).toBe(false);
+    expect(schema.safeParse({ name: "n", kind: "a", ids: [] }).success).toBe(false);
+    expect(schema.safeParse({ name: "n", kind: "a", ids: ["x"] }).success).toBe(true);
   });
 });
 
