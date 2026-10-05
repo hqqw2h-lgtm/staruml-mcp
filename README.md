@@ -22,14 +22,14 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 | **`staruml-mcp`** (this repo) | MCP server for AI agents | your machine via `npx -y staruml-mcp` |
 | **[`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 29 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
 
-- Using only Mermaid-based diagram tools? Install `staruml-mcp` only. The 4 built-in tools work.
-- Want the full 33 tools (project save/open, element CRUD, relationships, attributes and operations, any StarUML command)? Install **both**.
+- Using only Mermaid-based diagram tools? Install `staruml-mcp` only. The 4 built-in tools and `doctor` work.
+- Want the full 34 tools (project save/open, element CRUD, relationships, attributes and operations, any StarUML command)? Install **both**.
 
 ## Prerequisites
 
 - **StarUML v7.0.0+** with API Server enabled (see below)
 - **Node.js 20+** on the machine running the AI agent
-- **(Optional)** [`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension) 0.3.x installed in StarUML — required for 29 of the 33 tools
+- **(Optional)** [`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension) 0.3.x installed in StarUML — required for 29 of the 34 tools
 
 ### Enable StarUML API Server
 
@@ -105,9 +105,25 @@ staruml-mcp [options]
       --api-port <number>  StarUML built-in API port (default: 58321)
       --ext-port <number>  staruml-mcp-extension port(default: 58322)
       --api-host <url>     StarUML API host prefix   (default: http://localhost)
+      --doctor             Check the setup, print a report and exit (1 on failure)
   -V, --version            Print version
   -h, --help               Show help
 ```
+
+On start the server checks its setup and prints a report to stderr (stdout carries the stdio
+transport); `--doctor` prints the same report to stdout and exits:
+
+```
+node         ok    22.23.3
+staruml api  ok    http://localhost:58321
+extension    ok    0.3.0 at http://localhost:58322
+staruml      ok    7.1.1
+tools        ok    29 extension tools from the live manifest
+```
+
+A failing check is followed by a `fix` line: start StarUML, enable `apiServer` in StarUML's
+`settings.json`, install the extension from its URL, or restart StarUML. The `doctor` tool runs the
+same check for an agent.
 
 ## Tools Exposed
 
@@ -120,12 +136,14 @@ staruml-mcp [options]
 | `get_current_diagram_info` | Get metadata of the currently focused diagram. |
 | `get_diagram_image_by_id` | Export a diagram as PNG by its ID. |
 
+| `doctor` | Check Node, both StarUML ports, the extension and StarUML versions; reloads the extension's tools. |
 
 ### Extension tools (require [`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension) 0.3.x, port 58322)
 
 These tools are not written by hand. The extension publishes a manifest from `POST /introspect`:
 each endpoint's name, description, read-only and destructive flags, and JSON Schemas for request
-and response. On start the server reads it and registers one tool per endpoint:
+and response. On start, and whenever `doctor` runs, the server reads it and registers one tool per
+endpoint:
 
 - **name** is the path without `/` (`/find_elements` → `find_elements`);
 - **description** is the endpoint description cut to the sentences that fit in 100 characters,
@@ -141,7 +159,9 @@ and response. On start the server reads it and registers one tool per endpoint:
 A copy of the 0.3.0 manifest is bundled (`src/extension-manifest.json`), so `tools/list` is
 complete while StarUML is closed; calls then fail with `EXTENSION_UNREACHABLE` and an install hint.
 `npm run sync:manifest` refreshes the copy from a running extension (`-- --url <base>`) or from a
-recorded `/introspect` response (`-- --from <file>`).
+recorded `/introspect` response (`-- --from <file>`). When the running extension's version is
+incompatible (another major version, or another minor version while it is 0.x), the server lists no
+extension tools at all and the startup report and `doctor` say which version to install.
 
 With extension 0.3.0:
 
@@ -253,7 +273,7 @@ in-process stub so the numbers measure this server. Every request builds a fresh
 `--requests 2000 --max-p99-ms 2000 --min-rps 100`.
 
 Measured on an Intel i9-9980HK (8 cores / 16 threads), macOS, Node 22.23.3, 5000 requests per
-level after 500 warm-up requests, load generator on the same machine, with the 33 tools of the
+level after 500 warm-up requests, load generator on the same machine, with the 34 tools of the
 bundled 0.3.0 manifest registered per request (stub runs pass `--ext-port 1` so a local StarUML does
 not change what is measured). Ranges span three runs on a machine shared with other work:
 

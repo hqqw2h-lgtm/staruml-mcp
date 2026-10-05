@@ -2,6 +2,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import type { ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { OK, serialize } from "./compact.js";
+import { diagnose, formatReport } from "./doctor.js";
 import {
   CatalogState,
   syncExtensionTools,
@@ -35,7 +36,8 @@ export function diagramImageUri(id: string): string {
 const INSTRUCTIONS =
   "Results are minified JSON; null and empty fields are omitted and arguments are not echoed. " +
   `${PROJECTION_INSTRUCTIONS} ` +
-  "Clients with resource support can read diagram PNGs and project data as resources instead of tool calls.";
+  "Clients with resource support can read diagram PNGs and project data as resources instead of tool calls. " +
+  "Run doctor when calls fail with STARUML_UNREACHABLE or EXTENSION_UNREACHABLE.";
 
 export interface ServerConfig {
   apiPort?: number;
@@ -114,6 +116,21 @@ export function createServer(config: ServerConfig = {}): McpServer {
       runTool("get diagram image", async () => {
         const image = await client.getDiagramImageById(diagramId);
         return { content: [{ type: "image", data: image, mimeType: "image/png" }] };
+      }),
+  );
+
+  server.registerTool(
+    "doctor",
+    {
+      description: "Check StarUML, extension and Node setup; reloads the extension's tools.",
+      annotations: READ_ONLY,
+    },
+    async () =>
+      runTool("run doctor", async () => {
+        const { checks, catalog: next } = await diagnose(client);
+        catalog.current = next;
+        syncExtensionTools(server, client, next, extensionTools);
+        return textResult(formatReport(checks));
       }),
   );
 

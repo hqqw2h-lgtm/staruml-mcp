@@ -71,7 +71,29 @@ export class StarUMLClient {
     return (await this.probe(this.baseUrl)) !== undefined;
   }
 
+  get builtinUrl(): string {
+    return this.baseUrl;
+  }
+
+  get extensionUrl(): string {
+    return this.extUrl;
+  }
+
   // === Extension API (port 58322, requires staruml-mcp-extension installed) ===
+
+  /**
+   * The extension's `GET /` banner, `{name, version, endpoints}`; undefined when nothing answers.
+   * Versions before 0.3.0 have no `/introspect`, so this is how the doctor tells them apart.
+   */
+  async extensionBanner(): Promise<unknown> {
+    const res = await this.probe(this.extUrl);
+    if (res === undefined) return undefined;
+    try {
+      return JSON.parse(await res.text()) as unknown;
+    } catch {
+      return null;
+    }
+  }
 
   /** Versions and the endpoint manifest only; the metamodel section alone is ~250 KB. */
   async introspectManifest(): Promise<unknown> {
@@ -86,8 +108,8 @@ export class StarUMLClient {
   // === Internal ===
 
   /**
-   * GET `url` with a deadline: a port held by a hung process would otherwise stall the caller
-   * until the OS gives up on the connection. Undefined unless the answer is 2xx.
+   * GET `url` with a deadline: a port held by a hung process would otherwise stall the startup
+   * check until the OS gives up on the connection. Undefined unless the answer is 2xx.
    */
   private async probe(url: string): Promise<Response | undefined> {
     try {

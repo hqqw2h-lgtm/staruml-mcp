@@ -37,6 +37,7 @@ describe("parseArgs", () => {
       apiPort: 58321,
       extPort: 58322,
       apiHost: "http://localhost",
+      doctor: false,
     });
   });
 
@@ -54,6 +55,7 @@ describe("parseArgs", () => {
         "65535",
         "--api-host",
         "http://10.0.0.2",
+        "--doctor",
       ]),
     ).toEqual({
       transport: "http",
@@ -61,6 +63,7 @@ describe("parseArgs", () => {
       apiPort: 1,
       extPort: 65535,
       apiHost: "http://10.0.0.2",
+      doctor: true,
     });
   });
 
@@ -135,7 +138,7 @@ describe("main", () => {
   });
 });
 
-describe("startup manifest", () => {
+describe("startup check", () => {
   const builtin = new UpstreamFixture();
   const extension = new UpstreamFixture();
   let upstream: string[];
@@ -156,6 +159,7 @@ describe("startup manifest", () => {
   afterEach(() => {
     builtin.reset();
     extension.reset();
+    process.exitCode = undefined;
   });
 
   afterAll(async () => {
@@ -169,7 +173,7 @@ describe("startup manifest", () => {
     });
   }
 
-  it("offers the tools of the live manifest and logs where they came from", async () => {
+  it("offers the tools of the live manifest and logs the report to stderr", async () => {
     serveManifest(BUNDLED_MANIFEST.endpoints.filter((e) => e.path === "/get_element_by_id"));
     const server = await main([...upstream, "--transport", "http", "--port", "0"]);
     try {
@@ -178,20 +182,39 @@ describe("startup manifest", () => {
       expect(names).toContain("get_element_by_id");
       expect(names).not.toContain("find_elements");
       expect(console.error).toHaveBeenCalledWith(
-        "[staruml-mcp] 1 extension tools from the live manifest",
+        expect.stringMatching(
+          /^\[staruml-mcp\] startup check\n.*tools +ok +1 extension tools from the live manifest/s,
+        ),
       );
     } finally {
       await server.close();
     }
   });
 
-  it("falls back to the bundled manifest when the extension is unreachable", async () => {
-    const server = await main([...OFFLINE, "--transport", "http", "--port", "0"]);
+  it("--doctor prints the report to stdout and leaves the exit code 0 when healthy", async () => {
+    serveManifest(BUNDLED_MANIFEST.endpoints);
+    const stdout = new PassThrough();
+    let printed = "";
+    stdout.on("data", (chunk: Buffer) => (printed += chunk.toString("utf8")));
+
+    const server = await main([...upstream, "--doctor"], { stdin: new PassThrough(), stdout });
     await server.close();
 
-    expect(console.error).toHaveBeenCalledWith(
-      `[staruml-mcp] ${BUNDLED_MANIFEST.endpoints.length} extension tools from the bundled manifest`,
-    );
+    expect(server.port).toBeUndefined();
+    expect(printed).toMatch(/^node +ok/);
+    expect(printed).toContain("extension    ok    0.3.0 at http://127.0.0.1:");
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("--doctor sets exit code 1 when a check fails", async () => {
+    const stdout = new PassThrough();
+    let printed = "";
+    stdout.on("data", (chunk: Buffer) => (printed += chunk.toString("utf8")));
+
+    await main([...OFFLINE, "--doctor"], { stdin: new PassThrough(), stdout });
+
+    expect(printed).toContain("staruml api  fail");
+    expect(process.exitCode).toBe(1);
   });
 });
 

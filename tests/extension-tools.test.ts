@@ -5,14 +5,13 @@ import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/typ
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   bundledCatalog,
-  loadCatalog,
   syncExtensionTools,
   type ExtensionCatalog,
   type RegisteredExtensionTools,
 } from "../src/extension-tools.js";
 import { BUNDLED_MANIFEST, compileManifest, type ManifestEntry } from "../src/manifest.js";
 import { StarUMLClient } from "../src/staruml-client.js";
-import { closedPort, UpstreamFixture } from "./support/fixture.js";
+import { UpstreamFixture } from "./support/fixture.js";
 
 const HOST = "http://127.0.0.1";
 const extension = new UpstreamFixture();
@@ -33,40 +32,6 @@ const live = (endpoints: ManifestEntry[]): ExtensionCatalog => ({
   compiled: compileManifest({ ...BUNDLED_MANIFEST, endpoints }),
   source: "live",
   enabled: true,
-});
-
-describe("loadCatalog", () => {
-  it("compiles the running extension's manifest", async () => {
-    const [first] = BUNDLED_MANIFEST.endpoints;
-    extension.reply("/introspect", {
-      body: { success: true, data: { ...BUNDLED_MANIFEST, endpoints: [first] } },
-    });
-
-    const catalog = await loadCatalog(new StarUMLClient({ host: HOST, extPort: extension.port }));
-
-    expect(catalog.source).toBe("live");
-    expect(catalog.compiled.tools.map((t) => t.path)).toEqual([first!.path]);
-    expect(extension.requests[0]!.body).toEqual({ include: ["endpoints"] });
-  });
-
-  it("falls back to the bundled manifest when the extension is unreachable", async () => {
-    const refused = await closedPort();
-
-    const catalog = await loadCatalog(
-      new StarUMLClient({ host: HOST, port: refused, extPort: refused }),
-    );
-
-    expect(catalog).toMatchObject({ source: "bundled", enabled: true });
-    expect(catalog.compiled.tools).toHaveLength(BUNDLED_MANIFEST.endpoints.length);
-  });
-
-  it("falls back to the bundled manifest when the answer is not a manifest", async () => {
-    extension.reply("/introspect", { body: { success: true, data: { endpoints: 1 } } });
-
-    const catalog = await loadCatalog(new StarUMLClient({ host: HOST, extPort: extension.port }));
-
-    expect(catalog.source).toBe("bundled");
-  });
 });
 
 describe("syncExtensionTools", () => {

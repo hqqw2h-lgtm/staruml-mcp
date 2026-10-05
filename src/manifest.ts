@@ -190,3 +190,28 @@ export function compileManifest(
   }
   return { manifest, tools, skipped };
 }
+
+/**
+ * Semver compatibility with the extension version this server was built against: same major, and
+ * for 0.x the same minor too, since semver lets a 0.x minor release break the API (semver 2.0.0
+ * item 4). Pre-release and build suffixes are ignored.
+ */
+export function isCompatibleVersion(actual: string, expected: string): boolean {
+  const a = parseVersion(actual);
+  const e = parseVersion(expected);
+  if (a === undefined || e === undefined) return false;
+  return a[0] === e[0] && (e[0] !== 0 || a[1] === e[1]);
+}
+
+/** `0.3.x`, `1.x`: the range {@link isCompatibleVersion} accepts, for messages. */
+export function compatibleRange(expected: string): string {
+  const parsed = parseVersion(expected);
+  if (parsed === undefined) return expected;
+  const [major, minor] = parsed;
+  return major === 0 ? `0.${minor}.x` : `${major}.x`;
+}
+
+function parseVersion(version: string): [number, number] | undefined {
+  const match = /^v?(\d+)\.(\d+)\.\d+/.exec(version);
+  return match ? [Number(match[1]), Number(match[2])] : undefined;
+}

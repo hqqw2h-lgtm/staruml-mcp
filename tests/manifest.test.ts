@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   annotationsOf,
   BUNDLED_MANIFEST,
+  compatibleRange,
   compileManifest,
   inputSchema,
+  isCompatibleVersion,
   listedRequestSchema,
   MAX_DESCRIPTION_LENGTH,
   parseManifest,
@@ -259,5 +261,29 @@ describe("compileManifest", () => {
 
     expect(a!.fingerprint).toBe(b!.fingerprint);
     expect(a!.fingerprint).not.toBe(c!.fingerprint);
+  });
+});
+
+describe("version compatibility", () => {
+  it.each([
+    ["0.3.0", "0.3.0", true],
+    ["0.3.7", "0.3.0", true],
+    ["v0.3.1-beta.1", "0.3.0", true],
+    ["0.2.2", "0.3.0", false],
+    ["0.4.0", "0.3.0", false],
+    ["1.4.0", "1.0.0", true],
+    ["2.0.0", "1.0.0", false],
+    ["unknown version", "0.3.0", false],
+    ["0.3.0", "garbage", false],
+  ])("%s against %s is %s", (actual, expected, compatible) => {
+    expect(isCompatibleVersion(actual, expected)).toBe(compatible);
+  });
+
+  it.each([
+    ["0.3.0", "0.3.x"],
+    ["1.2.0", "1.x"],
+    ["garbage", "garbage"],
+  ])("describes the range of %s as %s", (expected, range) => {
+    expect(compatibleRange(expected)).toBe(range);
   });
 });

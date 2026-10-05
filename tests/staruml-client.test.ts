@@ -59,6 +59,8 @@ describe("StarUMLClient", () => {
       expect(lastRequest().url).toBe("http://example.com:1234/generate_diagram");
       await client.callExtension("/new_project", {});
       expect(lastRequest().url).toBe("http://example.com:4321/new_project");
+      expect(client.builtinUrl).toBe("http://example.com:1234");
+      expect(client.extensionUrl).toBe("http://example.com:4321");
     });
   });
 
@@ -361,7 +363,28 @@ describe("StarUMLClient", () => {
     });
   });
 
-  describe("ping deadline", () => {
+  describe("extensionBanner", () => {
+    it("returns the parsed GET / banner", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response('{"name":"staruml-mcp-extension","version":"0.3.0"}', { status: 200 }),
+      );
+      await expect(new StarUMLClient().extensionBanner()).resolves.toEqual({
+        name: "staruml-mcp-extension",
+        version: "0.3.0",
+      });
+      expect(fetchSpy.mock.calls[0]![0]).toBe("http://localhost:58322");
+    });
+
+    it("returns null when something answers without JSON", async () => {
+      fetchSpy.mockResolvedValueOnce(new Response("Hello", { status: 200 }));
+      await expect(new StarUMLClient().extensionBanner()).resolves.toBeNull();
+    });
+
+    it("returns undefined when nothing answers", async () => {
+      fetchSpy.mockRejectedValueOnce(new Error("network down"));
+      await expect(new StarUMLClient().extensionBanner()).resolves.toBeUndefined();
+    });
+
     it("gives up on a port that does not answer within the probe deadline", async () => {
       fetchSpy.mockImplementationOnce(
         (_url, init) =>
@@ -371,9 +394,9 @@ describe("StarUMLClient", () => {
       );
       vi.useFakeTimers();
       try {
-        const up = new StarUMLClient().ping();
+        const banner = new StarUMLClient().extensionBanner();
         await vi.advanceTimersByTimeAsync(2_000);
-        await expect(up).resolves.toBe(false);
+        await expect(banner).resolves.toBeUndefined();
       } finally {
         vi.useRealTimers();
       }

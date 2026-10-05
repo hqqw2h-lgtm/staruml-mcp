@@ -11,7 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { CatalogState, HAND_WRITTEN_TOOLS, loadCatalog } from "../../src/extension-tools.js";
+import { diagnose, healthy } from "../../src/doctor.js";
+import { CatalogState, HAND_WRITTEN_TOOLS } from "../../src/extension-tools.js";
 import { main, type RunningServer } from "../../src/index.js";
 import { toolName } from "../../src/manifest.js";
 import { diagramImageUri } from "../../src/server.js";
@@ -71,7 +72,9 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
   };
 
   beforeAll(async () => {
-    catalog = new CatalogState(await loadCatalog(new StarUMLClient()));
+    const diagnosis = await diagnose(new StarUMLClient());
+    expect(healthy(diagnosis.checks), JSON.stringify(diagnosis.checks)).toBe(true);
+    catalog = new CatalogState(diagnosis.catalog);
     mcp = await connect({ catalog });
     // A null filename (never saved) is pruned from the result.
     const info = payload<{ filename?: string }>(await call("get_project_info"));
@@ -95,6 +98,13 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       const endpoints = catalog.current.compiled.manifest.endpoints.map((e) => toolName(e.path));
       expect(tools.map((t) => t.name).sort()).toEqual([...HAND_WRITTEN_TOOLS, ...endpoints].sort());
       for (const tool of tools) expect(tool.description, tool.name).toMatch(/^[^\n]{1,100}$/);
+    });
+
+    it("doctor reports every check ok", async () => {
+      const report = ok(await call("doctor"));
+      expect(report).toMatch(/^node +ok/);
+      expect(report).toMatch(/staruml +ok +7\./);
+      expect(report).not.toMatch(/ fail /);
     });
   });
 
@@ -511,6 +521,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       try {
         const error = failure(await noExtension.call("get_project_info"));
         expect(error.code).toBe("EXTENSION_UNREACHABLE");
+        expect(ok(await noExtension.call("doctor"))).toMatch(/extension +fail +no answer at/);
       } finally {
         await noExtension.close();
       }

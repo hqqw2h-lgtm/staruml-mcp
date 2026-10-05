@@ -1,10 +1,5 @@
 import type { McpServer, RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
-import {
-  BUNDLED_MANIFEST,
-  compileManifest,
-  parseManifest,
-  type CompiledManifest,
-} from "./manifest.js";
+import { BUNDLED_MANIFEST, compileManifest, type CompiledManifest } from "./manifest.js";
 import type { StarUMLClient } from "./staruml-client.js";
 import { jsonResult, runTool } from "./tool-result.js";
 
@@ -17,13 +12,14 @@ export const HAND_WRITTEN_TOOLS: ReadonlySet<string> = new Set([
   "get_all_diagrams_info",
   "get_current_diagram_info",
   "get_diagram_image_by_id",
+  "doctor",
 ]);
 
 /** The extension tools a server offers, and where their definitions came from. */
 export interface ExtensionCatalog {
   compiled: CompiledManifest;
   source: "live" | "bundled";
-  /** False lists no extension tools. */
+  /** False when the running extension's version is incompatible; no extension tools are listed. */
   enabled: boolean;
 }
 
@@ -36,23 +32,9 @@ export function bundledCatalog(): ExtensionCatalog {
 }
 
 /**
- * The running extension's manifest, or the bundled one when the extension cannot be reached or
- * answers with something that is not a manifest.
+ * Shared by every McpServer of a process: the HTTP transport builds one per request, and the
+ * doctor tool replaces `current` after reading a newer manifest.
  */
-export async function loadCatalog(client: StarUMLClient): Promise<ExtensionCatalog> {
-  try {
-    const manifest = parseManifest(await client.introspectManifest());
-    return {
-      compiled: compileManifest(manifest, HAND_WRITTEN_TOOLS),
-      source: "live",
-      enabled: true,
-    };
-  } catch {
-    return bundledCatalog();
-  }
-}
-
-/** Shared by every McpServer of a process; the HTTP transport builds one per request. */
 export class CatalogState {
   constructor(public current: ExtensionCatalog = bundledCatalog()) {}
 }

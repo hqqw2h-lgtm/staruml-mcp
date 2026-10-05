@@ -11,7 +11,8 @@ import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { CatalogState, loadCatalog } from "./extension-tools.js";
+import { diagnose, formatReport, healthy } from "./doctor.js";
+import { CatalogState } from "./extension-tools.js";
 import { createServer, type ServerConfig } from "./server.js";
 import { StarUMLClient } from "./staruml-client.js";
 import packageJson from "../package.json" with { type: "json" };
@@ -25,6 +26,7 @@ export interface CliOptions {
   apiPort: number;
   extPort: number;
   apiHost: string;
+  doctor: boolean;
 }
 
 export interface Stdio {
@@ -56,6 +58,7 @@ export function parseArgs(argv: readonly string[]): CliOptions {
       "StarUML API Server host (protocol + hostname, without port)",
       "http://localhost",
     )
+    .option("--doctor", "Check the StarUML setup, print a report and exit (1 on failure)", false)
     .parse([...argv]);
 
   const raw = program.opts<{
@@ -64,6 +67,7 @@ export function parseArgs(argv: readonly string[]): CliOptions {
     apiPort: string;
     extPort: string;
     apiHost: string;
+    doctor: boolean;
   }>();
 
   return {
@@ -73,6 +77,7 @@ export function parseArgs(argv: readonly string[]): CliOptions {
     apiPort: parsePort(raw.apiPort, "--api-port", 1),
     extPort: parsePort(raw.extPort, "--ext-port", 1),
     apiHost: raw.apiHost,
+    doctor: raw.doctor,
   };
 }
 
@@ -86,11 +91,17 @@ export async function main(
     port: options.apiPort,
     extPort: options.extPort,
   });
-  const catalog = await loadCatalog(client);
-  // stdout carries the stdio transport, so this goes to stderr.
-  console.error(
-    `[staruml-mcp] ${catalog.compiled.tools.length} extension tools from the ${catalog.source} manifest`,
-  );
+  const { checks, catalog } = await diagnose(client);
+  const report = formatReport(checks);
+
+  if (options.doctor) {
+    stdio.stdout.write(`${report}\n`);
+    if (!healthy(checks)) process.exitCode = 1;
+    return { port: undefined, close: async () => {} };
+  }
+
+  // stdout carries the stdio transport, so the startup report goes to stderr.
+  console.error(`[staruml-mcp] startup check\n${report}`);
   const serverConfig: ServerConfig = {
     apiHost: options.apiHost,
     apiPort: options.apiPort,
