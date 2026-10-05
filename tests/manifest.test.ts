@@ -130,34 +130,11 @@ describe("listedRequestSchema", () => {
     description: "Initial attribute values by name; references as an id or {$ref: id}.",
   };
 
-  it("keeps the projection of a read-only endpoint with short descriptions", () => {
-    expect(listedRequestSchema(entry({ readOnly: true, request }))).toEqual({
-      passthrough: false,
-      schema: {
-        type: "object",
-        properties: {
-          id: { type: "string", description: "Element id." },
-          properties: shortProperties,
-          summary: { type: "boolean", description: "Default true: {_id,_type,name,_parent} only." },
-          fields: {
-            type: "array",
-            items: { type: "string" },
-            description: "Attributes to return.",
-          },
-          depth: {
-            type: "integer",
-            minimum: 0,
-            maximum: 8,
-            description: "Owned-element levels to expand.",
-          },
-        },
-        required: ["id"],
-      },
-    });
-  });
-
-  it("leaves the projection of a writing endpoint unlisted but passed through", () => {
-    expect(listedRequestSchema(entry({ request }))).toEqual({
+  it.each([
+    ["a writing", false],
+    ["a read-only", true],
+  ])("leaves the projection of %s endpoint unlisted but passed through", (_, readOnly) => {
+    expect(listedRequestSchema(entry({ readOnly, request }))).toEqual({
       passthrough: true,
       schema: {
         type: "object",

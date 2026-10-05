@@ -58,6 +58,7 @@ describe("build_diagram tool", () => {
       "name",
       "upsert",
       "direction",
+      "layout",
     ]);
     expect(tool.inputSchema.required).toBeUndefined();
     expect(tool.annotations).toEqual({
@@ -89,6 +90,14 @@ describe("build_diagram tool", () => {
       { method: "POST", path: "/build_diagram", body: { mermaid, direction: "LR" } },
     ]);
     expect(JSON.parse(text(result))).toEqual(answer);
+  });
+
+  it("sends a layout preset", async () => {
+    extension.reply("/build_diagram", { body: { success: true, data: answer } });
+
+    await mcp.call("build_diagram", { mermaid, layout: "flow-right" });
+
+    expect(extension.requests[0]!.body).toEqual({ mermaid, layout: "flow-right" });
   });
 
   it("passes the unlisted parentId and autoLayout through", async () => {
@@ -124,6 +133,7 @@ describe("build_diagram tool", () => {
       "spec: Invalid input: expected object, received string",
     ],
     ["a kind it does not build", { kind: "gantt", spec: {} }, "kind: Invalid option"],
+    ["a layout preset it does not have", { mermaid, layout: "sideways" }, "layout: Invalid option"],
     [
       "a wrong-typed unlisted parameter",
       { mermaid, autoLayout: "no" },
@@ -190,7 +200,7 @@ describe("build_diagram tool", () => {
 describe("buildDiagramInput", () => {
   it("lists only the parameters the manifest entry has", () => {
     const properties = entry.request.properties as Record<string, unknown>;
-    const { upsert: _upsert, direction: _direction, ...rest } = properties;
+    const { upsert: _upsert, direction: _direction, layout: _layout, ...rest } = properties;
 
     const schema = z.toJSONSchema(
       buildDiagramInput({ ...entry, request: { ...entry.request, properties: rest } }),
@@ -199,13 +209,14 @@ describe("buildDiagramInput", () => {
     expect(Object.keys(schema.properties)).toEqual(["kind", "spec", "mermaid", "name"]);
   });
 
-  it("lists spec and kind without the types the whole schema checks", () => {
+  it("lists spec, kind and layout without the types the whole schema checks", () => {
     const schema = z.toJSONSchema(buildDiagramInput(entry)) as {
       properties: Record<string, Record<string, unknown>>;
     };
 
     expect(Object.keys(schema.properties.spec!)).toEqual(["description"]);
     expect(Object.keys(schema.properties.kind!)).toEqual(["description"]);
+    expect(Object.keys(schema.properties.layout!)).toEqual(["description"]);
     expect(schema.properties.direction!.enum).toEqual(["TB", "BT", "LR", "RL"]);
   });
 

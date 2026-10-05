@@ -422,6 +422,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         }),
       );
       expect(edge.model!._type).toBe("UMLAssociation");
+      ids.edgeView = edge.view!._id;
 
       const generalization = payload<Created>(
         await call("create_relationship", {
@@ -635,6 +636,29 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
     it("lays out, moves, resizes, styles and reorders views", async () => {
       ok(await call("layout_diagram", { id: classDiagramId, direction: "LR" }));
+      // preset echoes the argument and is dropped from the answer.
+      const laid = payload<{ separations: { node: number; rank: number }; fitted: number }>(
+        await call("layout_diagram", {
+          id: classDiagramId,
+          preset: "hierarchy-right",
+          nodeSeparation: 40,
+          rankSeparation: 80,
+          fit: true,
+        }),
+      );
+      expect(laid.separations).toMatchObject({ node: 40, rank: 80 });
+      expect(laid.fitted).toBeGreaterThan(0);
+      expect(
+        payload<{ edges: number }>(
+          await call("route_edges", { diagramId: classDiagramId, lineStyle: "rectilinear" }),
+        ).edges,
+      ).toBeGreaterThan(0);
+      // EdgeView.lineStyle 0 is LS_RECTILINEAR (StarUML core/graphics.js).
+      expect(
+        payload<Summary>(
+          await call("get_element_by_id", { id: ids.edgeView, fields: ["lineStyle"] }),
+        ).lineStyle,
+      ).toBe(0);
       ok(await call("move_views", { ids: [ids.bookView], dx: 10, dy: 5 }));
       ok(await call("resize_node", { id: ids.bookView, width: 180, height: 90 }));
       ok(await call("set_view_style", { ids: [ids.bookView], fillColor: "#ffeecc" }));
@@ -679,6 +703,35 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       ok(await call("export_html", { path: html }));
       expect(existsSync(join(html, "index.html"))).toBe(true);
     }, 60_000);
+
+    it("reads a diagram back as text, searches types and validates the model", async () => {
+      const described = payload<{ text: string; nodes: number }>(
+        await call("describe_diagram", { diagramId: classDiagramId }),
+      );
+      expect(described.nodes).toBe(2);
+      expect(described.text).toContain('UMLClassDiagram "LiveDiagram"');
+      expect(described.text).toContain('"Book" -[UMLAssociation "writtenBy"]-> "Author"');
+
+      for (const format of ["mermaid", "plantuml"]) {
+        const exported = payload<{ kind: string; text: string }>(
+          await call("export_text", { diagramId: classDiagramId, format }),
+        );
+        expect(exported.kind).toBe("class");
+        expect(exported.text).toContain("Book");
+        expect(exported.text).toContain("Author");
+      }
+
+      const found = payload<{ results: { id: string }[] }>(
+        await call("search_types", { query: "composition", limit: 3 }),
+      );
+      expect(found.results.map((r) => r.id)).toContain("UMLComposition");
+
+      const validated = payload<{ count: number; rules: number }>(
+        await call("validate_model", { scope: packageId, limit: 5 }),
+      );
+      expect(validated.rules).toBeGreaterThan(0);
+      expect(validated.count).toBeGreaterThanOrEqual(0);
+    });
 
     it("view_diagram shows the SVG export in the viewer, and a PNG without MCP Apps (#10)", async () => {
       const app = await connect({ catalog }, UI_CAPABILITIES);
@@ -780,7 +833,12 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     });
 
     it("builds a diagram from a spec and from Mermaid with build_diagram", async () => {
-      const fromSpec = payload<{ diagram: Summary; created: number; ids: Record<string, unknown> }>(
+      const fromSpec = payload<{
+        diagram: Summary;
+        created: number;
+        preset: string;
+        ids: Record<string, unknown>;
+      }>(
         await call("build_diagram", {
           kind: "class",
           spec: {
@@ -789,9 +847,11 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           },
           name: "LiveBuilt",
           parentId: packageId,
+          layout: "hierarchy-right",
         }),
       );
       expect(fromSpec.diagram.name).toBe("LiveBuilt");
+      expect(fromSpec.preset).toBe("hierarchy-right");
       expect(fromSpec.created).toBe(3);
       expect(Object.keys(fromSpec.ids).sort()).toEqual(["Copy2", "Shelf2"]);
 

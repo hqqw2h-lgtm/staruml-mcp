@@ -63,15 +63,12 @@ export const MAX_DESCRIPTION_LENGTH = 100;
 
 /**
  * The projection every element-returning endpoint takes (extension src/serialize.ts `Projection`),
- * documented in full on each of them. Read-only tools list it with a reminder; tools that write
- * accept it without listing it, which saves ~1,150 tools/list tokens, since their summary result
- * is usually all a caller needs. The server instructions explain it once.
+ * documented in full on each of them. No tool lists it; every tool accepts it, and the server
+ * instructions explain it once. Listing it on writing tools cost ~1,150 tools/list tokens, and on
+ * get_element_by_id and find_elements another 126 (o200k_base, extension 0.3.0, 61 endpoints),
+ * which the core tier needed for the diagram reads.
  */
-const PROJECTION: Record<string, string> = {
-  summary: "Default true: {_id,_type,name,_parent} only.",
-  fields: "Attributes to return.",
-  depth: "Owned-element levels to expand.",
-};
+const PROJECTION: ReadonlySet<string> = new Set(["summary", "fields", "depth"]);
 
 /** Parameter descriptions the manifest repeats verbatim on many endpoints, shortened once. */
 const SHARED_DESCRIPTIONS: Record<string, string> = {
@@ -81,7 +78,7 @@ const SHARED_DESCRIPTIONS: Record<string, string> = {
 export const PROJECTION_INSTRUCTIONS =
   "Element results are summaries {_id,_type,name,_parent}. Every tool returning elements also " +
   "accepts fields (attribute names), summary:false (all saved attributes) and depth (expand owned " +
-  "elements), listed or not.";
+  "elements).";
 
 const SENTENCE_END = /(?<!\be\.g|\bi\.e)\.\s+/;
 
@@ -115,7 +112,7 @@ export interface ListedSchema {
 
 /**
  * The request schema as tools/list shows it: `$schema` dropped (the SDK sets its own), the
- * projection shortened or left out (see {@link PROJECTION}) and shared descriptions shortened.
+ * projection left out (see {@link PROJECTION}) and shared descriptions shortened.
  * Other parameter descriptions stay verbatim: they carry the semantics (update_element's ops,
  * create_relationship's ends); cutting them to 100 characters would save ~600 tools/list tokens
  * (o200k_base, extension 0.3.0) while dropping exactly that.
@@ -127,12 +124,11 @@ export function listedRequestSchema(entry: ManifestEntry): ListedSchema {
   const listed: Record<string, JsonSchema> = {};
   let passthrough = false;
   for (const [name, property] of Object.entries(properties)) {
-    const reminder = PROJECTION[name];
-    if (reminder !== undefined && !entry.readOnly) {
+    if (PROJECTION.has(name)) {
       passthrough = true;
       continue;
     }
-    const short = reminder ?? SHARED_DESCRIPTIONS[name];
+    const short = SHARED_DESCRIPTIONS[name];
     listed[name] = short === undefined ? property : { ...property, description: short };
   }
   return { schema: { ...rest, properties: listed }, passthrough };

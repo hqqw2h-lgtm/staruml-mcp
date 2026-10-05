@@ -13,7 +13,7 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 ```
   AI Agent  ──MCP──►  staruml-mcp (this package)  ──HTTP──►  StarUML
                                                   :58321 (built-in, 4 tools)
-                                                  :58322 (extension 0.3.x, 56 endpoints
+                                                  :58322 (extension 0.3.x, 61 endpoints
                                                           from its manifest: core ones as
                                                           tools, the rest via call_endpoint)
 ```
@@ -21,10 +21,10 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 | Package | What it is | Where it runs |
 |---|---|---|
 | **`staruml-mcp`** (this repo) | MCP server for AI agents | your machine via `npx -y staruml-mcp` |
-| **[`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 56 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
+| **[`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 61 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
 
 - Using only Mermaid-based diagram tools? Install `staruml-mcp` only. The 4 built-in tools, `doctor` and `view_diagram` (as a PNG) work.
-- Want the extension's 56 endpoints (whole diagrams from a spec or Mermaid in one call, project save/open, element CRUD, relationships, attributes and operations, view layout and styling, export, undo, batches, code generation, any StarUML command)? Install **both**.
+- Want the extension's 61 endpoints (whole diagrams from a spec or Mermaid in one call, diagrams read back as Mermaid, PlantUML or a text summary, type search, model validation, project save/open, element CRUD, relationships, attributes and operations, layout presets and edge routing, styling, export, undo, batches, code generation, any StarUML command)? Install **both**.
 
 ## Prerequisites
 
@@ -154,8 +154,8 @@ node         ok    22.23.3
 staruml api  ok    http://localhost:58321
 extension    ok    0.3.0 at http://localhost:58322
 staruml      ok    7.1.1
-manifest     ok    56 endpoints from the live manifest
-tier         ok    core: 8 extension tools listed, 48 endpoints through call_endpoint
+manifest     ok    61 endpoints from the live manifest
+tier         ok    core: 8 extension tools listed, 53 endpoints through call_endpoint
 ```
 
 A failing check is followed by a `fix` line: start StarUML, enable `apiServer` in StarUML's
@@ -224,8 +224,8 @@ default and reaches every other extension endpoint through two generic tools:
 
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
-| `core` (default) | the 6 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`; `describe_endpoints`, `call_endpoint` | 1,992 |
-| `all` | the 6 above and one tool per manifest endpoint | 9,322 |
+| `core` (default) | the 6 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`; `describe_endpoints`, `call_endpoint` | 1,884 |
+| `all` | the 6 above and one tool per manifest endpoint | 9,509 |
 | `core,create_diagram,…` | the 6 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
 Token counts include the server instructions (o200k_base, extension 0.3.0, `npm run
@@ -261,14 +261,14 @@ endpoint:
   on one line;
 - **input schema** is the endpoint's request schema converted with zod's `fromJSONSchema` and
   listed back by the MCP SDK without the `$schema` URL the SDK would add, otherwise unchanged
-  except that the projection parameters (`summary`,
-  `fields`, `depth`) and the shared `properties` description are shortened, and tools that write
-  accept the projection without listing it (the instructions explain it once);
+  except that the projection parameters (`summary`, `fields`, `depth`) are accepted without being
+  listed (the instructions explain them once) and the shared `properties` description is
+  shortened;
 - **annotations**: `readOnlyHint` from the manifest's `readOnly`, `destructiveHint` from
   `destructive` (stated for every writing tool, since MCP defaults it to true),
   `openWorldHint: false`.
 
-A copy of the 0.3.0 manifest (56 endpoints) is bundled (`src/extension-manifest.json`), so `tools/list` is
+A copy of the 0.3.0 manifest (61 endpoints) is bundled (`src/extension-manifest.json`), so `tools/list` is
 complete while StarUML is closed; calls then fail with `EXTENSION_UNREACHABLE` and an install hint.
 `npm run sync:manifest` refreshes the copy from a running extension (`-- --url <base>`) or from a
 recorded `/introspect` response (`-- --from <file>`). When the running extension's version is
@@ -280,7 +280,9 @@ the core tier):
 
 | Endpoint | Does |
 |---|---|
-| `build_diagram` | A whole diagram in one call and one undo step, from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap) or from Mermaid; laid out, optionally upserted into the diagram of the same name; answers the model and view ids by node name. |
+| `build_diagram` | A whole diagram in one call and one undo step, from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap) or from Mermaid; laid out with a `layout` preset (default by kind), optionally upserted into the diagram of the same name; answers the model and view ids by node name. |
+| `export_text` / `describe_diagram` | A diagram as Mermaid (the form `build_diagram` reads back) or PlantUML, with warnings for what the text cannot carry / a bounded text summary of its nodes, members and edges. |
+| `search_types` / `validate_model` | Fuzzy search over metamodel types, palette items, relationship kinds and commands, each hit with an example request / StarUML's validation rules over the open model, problems with element and rule ids. |
 | `get_all_commands` / `describe_commands` / `execute_command` | List command ids / their arguments and whether they open a dialog / run any StarUML command. |
 | `get_project_info` / `new_project` / `open_project` / `save_project` / `save_project_as` | Project lifecycle. |
 | `get_element_by_id` / `find_elements` | Read elements; `find_elements` pages with `limit`/`cursor`. |
@@ -290,7 +292,7 @@ the core tier):
 | `set_stereotype` / `set_documentation` | Common element properties. |
 | `create_diagram` / `switch_diagram` / `close_diagram` | Diagrams. |
 | `get_views_of` / `get_edge_views_of` / `get_relationships_of` / `get_refs_to` / `get_connected_node_views` | Lookups between models, views and relationships. |
-| `layout_diagram` / `move_views` / `resize_node` / `set_view_style` / `set_z_order` | Arrange and style views. |
+| `layout_diagram` / `route_edges` / `move_views` / `resize_node` / `set_view_style` / `set_z_order` | Arrange and style views; `layout_diagram` takes a preset (`flow-down`, `hierarchy-right`, …), node and rank separations and `fit`, `route_edges` gives every edge one line style. |
 | `get_selection` / `set_selection` / `get_editor_state` / `set_editor_state` | Selection, current diagram, zoom and grid. |
 | `export_diagram` / `export_diagrams` / `export_pdf` / `export_html` | Diagram as PNG, JPEG or SVG (inline or to a file) / many diagrams into a directory / PDF / HTML docs. |
 | `list_code_generators` / `generate_code` / `reverse_code` | Installed language generators and their options / source code from a model element / a source directory into the model. |
@@ -310,8 +312,8 @@ is active.
 
 Elements come back as the extension's summaries, `{_id, _type, name, _parent}`; references and
 owned elements are `{$ref: id}`. Every tool that returns elements accepts `fields` (attribute
-names), `summary: false` (every saved attribute) and `depth` (levels of owned elements to expand),
-and `find_elements` pages with `limit` and `cursor` (`nextCursor` is absent on the last page). The
+names), `summary: false` (every saved attribute) and `depth` (levels of owned elements to expand);
+no tool lists them, since the server instructions name them once for all. `find_elements` pages with `limit` and `cursor` (`nextCursor` is absent on the last page). The
 `/create_*_with_view` and `/create_relationship` tools return `{view, model}`.
 
 `batch` takes `{ops: [{path, body, as}], atomic}`. A string `"$a"` in a body stands for the id of
@@ -325,8 +327,8 @@ StarUML is rolled back and reported with the failing op's code; the extension's
 `details: {index, results}` come back in `structuredContent.error.details`, the results compacted as
 above, and the text adds `Details: {"index": n}` (the results name elements the rollback removed).
 
-`build_diagram` lists a hand-written description and six parameters (`kind`, `spec`, `mermaid`,
-`name`, `upsert`, `direction`, 260 tokens); the manifest's own description of `spec` alone is ~400
+`build_diagram` lists a hand-written description and seven parameters (`kind`, `spec`, `mermaid`,
+`name`, `upsert`, `direction`, `layout`, 278 tokens); the manifest's own description of `spec` alone is ~400
 tokens, so `spec` lists a one-line grammar per kind and `describe_endpoints({names:
 ["build_diagram"]})` serves the full one. The unlisted `parentId` and `autoLayout` are accepted, and
 every body is checked against the manifest's whole request schema before it is sent, as for `batch`.

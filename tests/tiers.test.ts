@@ -85,7 +85,7 @@ describe("parseToolSelection", () => {
 });
 
 describe("endpointGroup", () => {
-  it("groups every 0.3.0 endpoint", () => {
+  it("groups every endpoint of the 61-endpoint manifest", () => {
     const groups: Record<string, string[]> = {};
     for (const e of BUNDLED_MANIFEST.endpoints) {
       (groups[endpointGroup(toolName(e.path))] ??= []).push(toolName(e.path));
@@ -100,6 +100,7 @@ describe("endpointGroup", () => {
         "new_project",
         "open_project",
         "is_modified",
+        "validate_model",
       ],
       element: [
         "get_element_by_id",
@@ -124,6 +125,7 @@ describe("endpointGroup", () => {
         "get_edge_views_of",
         "get_connected_node_views",
         "layout_diagram",
+        "route_edges",
         "move_views",
         "resize_node",
         "set_view_style",
@@ -132,7 +134,9 @@ describe("endpointGroup", () => {
         "export_diagrams",
         "export_pdf",
         "export_html",
+        "export_text",
         "build_diagram",
+        "describe_diagram",
       ],
       feature: [
         "add_attribute",
@@ -151,7 +155,7 @@ describe("endpointGroup", () => {
         "undo",
         "redo",
       ],
-      meta: ["introspect", "debug"],
+      meta: ["search_types", "introspect", "debug"],
     });
   });
 
@@ -286,8 +290,11 @@ describe("describe_endpoints", () => {
         .sort(),
     ).toEqual([...EXTENDED].sort());
     expect(index.project!.save_project).toBe(terseDescription(entryOf("save_project").description));
-    // The introspect summary is listed, so only debug is left in its group.
-    expect(index.meta).toEqual({ debug: terseDescription(entryOf("debug").description) });
+    // The introspect summary is listed, so introspect is not in its group.
+    expect(index.meta).toEqual({
+      search_types: terseDescription(entryOf("search_types").description),
+      debug: terseDescription(entryOf("debug").description),
+    });
   });
 
   it("describes named endpoints in full, listed ones included", async () => {

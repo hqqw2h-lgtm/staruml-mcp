@@ -158,7 +158,7 @@ describe("tool registry", () => {
         ...BUNDLED_MANIFEST.endpoints.map((e) => toolName(e.path)),
       ].sort(),
     );
-    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(56);
+    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(61);
   });
 
   it("lists no $schema on any input schema", async () => {
@@ -370,11 +370,11 @@ describe("extension 0.3.0 contract", () => {
   });
 
   it("drops arguments the manifest does not define before calling the extension", async () => {
-    extension.reply("/get_element_by_id", { body: { success: true, data: summary } });
+    extension.reply("/route_edges", { body: { success: true, data: {} } });
 
-    await mcp.call("get_element_by_id", { id: "E1", bogus: true });
+    await mcp.call("route_edges", { lineStyle: "curve", bogus: true });
 
-    expect(extension.requests[0]!.body).toEqual({ id: "E1" });
+    expect(extension.requests[0]!.body).toEqual({ lineStyle: "curve" });
   });
 
   it("forwards the unlisted projection of a writing tool", async () => {
@@ -386,22 +386,17 @@ describe("extension 0.3.0 contract", () => {
     expect(extension.requests[0]!.body).toEqual(args);
   });
 
-  it("lists the projection only on read-only tools", async () => {
+  it("lists the projection on no tool and forwards it from a read-only one", async () => {
     const { tools } = await mcp.client.listTools();
-    const withProjection = tools
-      .filter((t) => (t.inputSchema.properties ?? {})["fields"] !== undefined)
-      .map((t) => t.name);
-    expect(withProjection.sort()).toEqual([
-      "find_elements",
-      "get_connected_node_views",
-      "get_edge_views_of",
-      "get_element_by_id",
-      "get_project_info",
-      "get_refs_to",
-      "get_relationships_of",
-      "get_selection",
-      "get_views_of",
-    ]);
+    const withProjection = tools.filter((t) =>
+      ["summary", "fields", "depth"].some((p) => (t.inputSchema.properties ?? {})[p] !== undefined),
+    );
+    expect(withProjection.map((t) => t.name)).toEqual([]);
+
+    extension.reply("/get_element_by_id", { body: { success: true, data: summary } });
+    const args = { id: "E1", fields: ["documentation"], depth: 1, summary: false };
+    await mcp.call("get_element_by_id", args);
+    expect(extension.requests[0]!.body).toEqual(args);
   });
 
   it("rejects a wrong-typed field before the extension sees it", async () => {

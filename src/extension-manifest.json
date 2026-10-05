@@ -3169,7 +3169,7 @@
     },
     {
       "path": "/layout_diagram",
-      "description": "Arrange a diagram's node views automatically (Format > Layout in the UI), as one undoable operation. Opens the diagram in the editor.",
+      "description": "Arrange a diagram's node views automatically (Format > Layout in the UI), as one undoable operation. A preset picks direction, spacing and edge style: flow-* put an edge's source before its target (flowcharts, activities, state machines), hierarchy-* put the target first (a superclass above its subclasses). fit first sizes node views to their content. Opens the diagram in the editor.",
       "readOnly": false,
       "destructive": false,
       "request": {
@@ -3181,6 +3181,25 @@
             "minLength": 1,
             "description": "Diagram id; default the current diagram."
           },
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Same as id."
+          },
+          "preset": {
+            "type": "string",
+            "enum": [
+              "flow-down",
+              "flow-up",
+              "flow-right",
+              "flow-left",
+              "hierarchy-down",
+              "hierarchy-up",
+              "hierarchy-right",
+              "hierarchy-left"
+            ],
+            "description": "flow-down|up|right|left: edges run from source to target in that direction. hierarchy-down|up|right|left: edge targets come first. Other fields override the preset's values."
+          },
           "direction": {
             "type": "string",
             "enum": [
@@ -3189,7 +3208,7 @@
               "LR",
               "RL"
             ],
-            "description": "Rank direction: TB top to bottom (default), BT, LR, RL."
+            "description": "dagre's rank direction as StarUML passes it: TB (default) puts an edge's target above its source; BT, LR, RL accordingly."
           },
           "separations": {
             "type": "object",
@@ -3214,6 +3233,16 @@
             ],
             "description": "Spacing in diagram units between nodes, edges and ranks; StarUML's defaults when omitted."
           },
+          "nodeSeparation": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Spacing between nodes of one rank, in diagram units."
+          },
+          "rankSeparation": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Spacing between ranks, in diagram units."
+          },
           "edgeLineStyle": {
             "type": "string",
             "enum": [
@@ -3222,7 +3251,11 @@
               "roundrect",
               "curve"
             ],
-            "description": "Line style applied to edges by the layout."
+            "description": "Line style applied to edges by the layout; StarUML's default is curve."
+          },
+          "fit": {
+            "type": "boolean",
+            "description": "Size node views to their content before the layout; one more undo step."
           }
         }
       },
@@ -3235,11 +3268,98 @@
           },
           "direction": {
             "type": "string"
+          },
+          "preset": {
+            "type": "string"
+          },
+          "separations": {
+            "type": "object",
+            "properties": {
+              "node": {
+                "type": "number"
+              },
+              "edge": {
+                "type": "number"
+              },
+              "rank": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "node",
+              "edge",
+              "rank"
+            ],
+            "additionalProperties": false,
+            "description": "Spacing passed to the layout, when the request set any."
+          },
+          "edgeLineStyle": {
+            "type": "string"
+          },
+          "fitted": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Node views resized by fit."
           }
         },
         "required": [
           "_id",
           "direction"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/route_edges",
+      "description": "Give every edge view on a diagram one line style (Format > Line Style), as one undoable operation; rectilinear and rounded edges are re-routed around their ends. Opens the diagram in the editor.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram id; default the current diagram."
+          },
+          "lineStyle": {
+            "type": "string",
+            "enum": [
+              "rectilinear",
+              "oblique",
+              "roundrect",
+              "curve"
+            ],
+            "description": "Line style for every edge."
+          }
+        },
+        "required": [
+          "lineStyle"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "string"
+          },
+          "lineStyle": {
+            "type": "string"
+          },
+          "edges": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Edge views given the style."
+          }
+        },
+        "required": [
+          "diagram",
+          "lineStyle",
+          "edges"
         ],
         "additionalProperties": false
       }
@@ -4343,6 +4463,99 @@
       }
     },
     {
+      "path": "/export_text",
+      "description": "Write a diagram as Mermaid or PlantUML text: class, sequence, use case, activity, state machine, ERD, flowchart and mind map diagrams. Mermaid comes out in the form /build_diagram reads (pass the answer's kind with it), so a diagram can be exported, edited as text and built again. warnings name what the text cannot carry.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram id."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "mermaid",
+              "plantuml"
+            ],
+            "description": "Text format."
+          }
+        },
+        "required": [
+          "diagramId",
+          "format"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "object",
+            "properties": {
+              "_id": {
+                "type": "string"
+              },
+              "_type": {
+                "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "_id",
+              "_type",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "class",
+              "sequence",
+              "usecase",
+              "activity",
+              "statemachine",
+              "erd",
+              "flowchart",
+              "mindmap"
+            ],
+            "description": "The /build_diagram kind; use case and activity diagrams are written as Mermaid flowcharts and need it to be built again."
+          },
+          "format": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Views or details the text leaves out or changes."
+          }
+        },
+        "required": [
+          "diagram",
+          "kind",
+          "format",
+          "text",
+          "warnings"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
       "path": "/list_code_generators",
       "description": "Which code generator extensions are installed, for /generate_code and /reverse_code, with the options each takes from its preferences.",
       "readOnly": true,
@@ -4771,7 +4984,7 @@
     },
     {
       "path": "/build_diagram",
-      "description": "Build a whole diagram in one call from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap) or from Mermaid (classDiagram, sequenceDiagram, flowchart, erDiagram, stateDiagram; a flowchart also as activity or usecase). One undo step; laid out by Format > Layout where the kind allows. upsert updates the diagram of the same name instead of adding another. Answers the ids of what it made, not the model.",
+      "description": "Build a whole diagram in one call from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap) or from Mermaid (classDiagram, sequenceDiagram, flowchart, erDiagram, stateDiagram, mindmap; a flowchart also as activity or usecase; /export_text writes this Mermaid back). One undo step; laid out by Format > Layout where the kind allows. upsert updates the diagram of the same name instead of adding another. Answers the ids of what it made, not the model.",
       "readOnly": false,
       "destructive": false,
       "request": {
@@ -4823,6 +5036,20 @@
               "RL"
             ],
             "description": "Layout direction; default TB, or Mermaid's."
+          },
+          "layout": {
+            "type": "string",
+            "enum": [
+              "flow-down",
+              "flow-up",
+              "flow-right",
+              "flow-left",
+              "hierarchy-down",
+              "hierarchy-up",
+              "hierarchy-right",
+              "hierarchy-left"
+            ],
+            "description": "Layout preset for Format > Layout (see /layout_diagram); default flow-<direction>, hierarchy-<direction> for class diagrams."
           },
           "autoLayout": {
             "type": "boolean",
@@ -4895,6 +5122,10 @@
             ],
             "description": "engine: Format > Layout arranged it; placed: the computed placement stands."
           },
+          "preset": {
+            "type": "string",
+            "description": "The layout preset applied."
+          },
           "ids": {
             "type": "object",
             "propertyNames": {
@@ -4959,6 +5190,291 @@
           "layout",
           "ids",
           "edges"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/search_types",
+      "description": "Find the type, palette item, relationship or command id to use, by a fuzzy query ('composition', 'state machine', 'erd entity', 'align'). Each hit has a one-line description and a minimal example request.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Words or part of an id; case and punctuation are ignored."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Most hits to return; default 10."
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "diagram",
+                "palette",
+                "relationship",
+                "model",
+                "enum",
+                "command"
+              ]
+            },
+            "description": "Only these categories: diagram, palette, relationship, model, enum, command."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Entries that matched, before the limit."
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "category": {
+                  "type": "string",
+                  "enum": [
+                    "diagram",
+                    "palette",
+                    "relationship",
+                    "model",
+                    "enum",
+                    "command"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "example": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "body"
+                  ],
+                  "additionalProperties": false,
+                  "description": "A minimal request; replace the <placeholders>."
+                },
+                "score": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "id",
+                "category",
+                "description",
+                "score"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "query",
+          "total",
+          "results"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/describe_diagram",
+      "description": "A compact text summary of a diagram: its nodes with their members and its edges as 'tail -[Type \"name\"]-> head', cut to maxChars. Cheaper to read than the element tree.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram id."
+          },
+          "maxChars": {
+            "type": "integer",
+            "minimum": 200,
+            "maximum": 200000,
+            "description": "Longest text to return; default 4000. Lines past it are counted, not shown."
+          }
+        },
+        "required": [
+          "diagramId"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "object",
+            "properties": {
+              "_id": {
+                "type": "string"
+              },
+              "_type": {
+                "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "_id",
+              "_type",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "nodes": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Node views showing a model."
+          },
+          "edges": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Edge views showing a model."
+          },
+          "text": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "diagram",
+          "nodes",
+          "edges",
+          "text",
+          "truncated"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/validate_model",
+      "description": "Check the open model against StarUML's validation rules (the rules.js of the core and of the UML, ERD and other extensions, what Model > Validate runs on the saved file) and list each problem with the element and rule id. Needs no save. Read-only.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Only problems on this element and what it owns; default the project."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Most problems to list; default 200. count is always the full number."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Problems found in scope."
+          },
+          "rules": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Rules checked."
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Element id."
+                },
+                "_type": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ruleId": {
+                  "type": "string",
+                  "description": "Rule id, e.g. UML001."
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "_type",
+                "name",
+                "ruleId",
+                "message"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "count",
+          "rules",
+          "problems"
         ],
         "additionalProperties": false
       }

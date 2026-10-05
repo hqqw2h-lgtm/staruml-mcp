@@ -32,14 +32,16 @@ const LISTED: Record<string, string> = {
   name: "Diagram name; \\n or <br/> breaks lines.",
   upsert: "Add only what the same-named diagram lacks.",
   direction: "Layout direction.",
+  layout: "Preset flow-|hierarchy- + down|up|right|left; default by kind.",
 };
 
 /**
- * spec's record type lists as {type, propertyNames, properties, additionalProperties} and kind's
- * enum repeats the kinds spec's description names: 46 tokens together. The whole request schema
- * still checks both.
+ * spec's record type lists as {type, propertyNames, properties, additionalProperties}, kind's
+ * enum repeats the kinds spec's description names and layout's enum spells out eight presets the
+ * description composes from two lists: 75 tokens together. The whole request schema still checks
+ * all three.
  */
-const UNTYPED = new Set(["spec", "kind"]);
+const UNTYPED = new Set(["spec", "kind", "layout"]);
 
 /**
  * The listed input schema: {@link LISTED} out of the entry's properties, loose so `parentId` and
