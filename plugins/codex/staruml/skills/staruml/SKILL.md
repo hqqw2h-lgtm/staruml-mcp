@@ -355,28 +355,8 @@ Write the spec as the domain talks:
   `build_diagram`.
 
 Run it with `dryRun: true` first: the answer names every element and relationship it would make
-by path. `upsert: true` extends the model of the same name later and never removes anything.
-
-```json build_model
-{
-  "dryRun": true,
-  "spec": {
-    "system": "Lending",
-    "contexts": [{ "id": "loans", "name": "Loans", "responsibility": "Who borrowed which copy, until when" }],
-    "classes": [
-      { "name": "Member", "context": "loans", "responsibility": "A person allowed to borrow", "attributes": ["+name: String"] },
-      { "name": "Loan", "context": "loans", "responsibility": "One copy lent to one member until a due date", "attributes": ["+due: Date"], "operations": ["+renew(days: int): void"] },
-      { "name": "Copy", "context": "loans", "responsibility": "A physical book on the shelf" },
-      { "name": "Fine", "context": "loans", "responsibility": "What a late return costs", "operations": ["+amount(): double"] }
-    ],
-    "relationships": [
-      { "from": "Member", "to": "Loan", "type": "owns", "fromMult": "1", "toMult": "0..*" },
-      { "from": "Loan", "to": "Copy", "type": "knows", "toMult": "1" },
-      { "from": "Loan", "to": "Fine", "type": "has", "toMult": "0..1" }
-    ]
-  }
-}
-```
+by path, and changes nothing. `upsert: true` extends the model of the same name later and never
+removes anything.
 
 ```json build_model
 {

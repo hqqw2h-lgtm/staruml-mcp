@@ -613,14 +613,15 @@ path it prints.
 `call_endpoint` of `find_elements`, which adds the manifest schema check and the extension port,
 `--batch` a `batch` of four read-only ops, one of them with a `"$p.project"` reference, which adds
 the per-op schema checks, `--build` a `build_diagram` of a three-class Mermaid diagram with
-`upsert`, which adds the check against the whole request schema, and `--lint` a `lint_diagram`
-of the current diagram, whose findings are reshaped. StarUML and the extension are
+`upsert`, which adds the check against the whole request schema, `--lint` a `lint_diagram`
+of the current diagram, whose findings are reshaped, and `--model` and `--pattern` dry runs of
+`build_model` and `apply_pattern`, whose answers are reshaped by path. StarUML and the extension are
 replaced by an in-process stub, which serves the bundled 0.3.0 manifest, so the numbers measure
 this server and a local StarUML does not change them. By default no request carries a session
 id, so each builds a fresh `McpServer` (the stateless fallback), which dominates the cost;
 `--session` initializes once and sends every request in that session, as an MCP client does. Any
 failed request makes the script exit non-zero; `--max-p99-ms` and `--min-rps` add budgets, and CI
-runs the default, `--session`, `--batch`, `--build` and `--lint --session` paths with
+runs the default, `--session`, `--batch`, `--build`, `--lint --session`, `--model --session` and `--pattern --session` paths with
 `--requests 2000 --max-p99-ms 4000 --min-rps 100`.
 
 Measured on an Intel i9-9980HK (8 cores / 16 threads), macOS, Node 22.23.3, 5000 requests per
@@ -699,6 +700,33 @@ warm-up requests, stub upstream, load average 10–16 from other agents' work, 0
 | `lint_diagram` | 50 | 1348–1446 | 32–36 ms | 61–67 ms |
 | `lint_diagram` | 200 | 1063–1681 | 110–163 ms | 186–445 ms |
 
+Re-run for 0.6.0 in one session (core tier of 19 tools, the 79-endpoint manifest), two runs per
+path, 5000 requests per level after 500 warm-up requests, stub upstream, load average 13–21 from
+other agents' work, 0 errors throughout:
+
+| Tool | Concurrency | req/s | p50 | p99 |
+|---|---|---|---|---|
+| `get_all_diagrams_info` | 50 | 1676–1715 | 28–29 ms | 49–52 ms |
+| `get_all_diagrams_info` | 200 | 2145–2168 | 78–82 ms | 180–322 ms |
+| `call_endpoint` | 50 | 807–1650 | 29–58 ms | 54–136 ms |
+| `call_endpoint` | 200 | 1100–2040 | 84–108 ms | 176–1855 ms |
+| `batch` (4 ops) | 50 | 1284–1527 | 31–37 ms | 57–66 ms |
+| `batch` (4 ops) | 200 | 1568–1811 | 101–114 ms | 178–228 ms |
+| `build_diagram` | 50 | 1359–1573 | 30–36 ms | 53–68 ms |
+| `build_diagram` | 200 | 1787–1890 | 95–101 ms | 168–222 ms |
+| `lint_diagram` | 50 | 405–1511 | 32–131 ms | 57–253 ms |
+| `lint_diagram` | 200 | 778–1901 | 96–282 ms | 155–477 ms |
+| `build_model` (dry run) | 50 | 1284–1294 | 36–38 ms | 64–77 ms |
+| `build_model` (dry run) | 200 | 779–1630 | 112–252 ms | 196–394 ms |
+| `apply_pattern` (dry run) | 50 | 507–1374 | 35–92 ms | 61–226 ms |
+| `apply_pattern` (dry run) | 200 | 1396–1736 | 106–120 ms | 171–464 ms |
+
+The wide ranges are the shared machine: each path's slower run coincides with a load-average peak,
+and its other run matches the plain call. Against StarUML 7.1.1 with the extension's working tree
+(85 endpoints; `--live --session --requests 1000 --concurrency 50`, 0 errors):
+`get_all_diagrams_info` 951 req/s, p99 72 ms; `build_model` dry run 712 req/s, p99 166 ms;
+`apply_pattern` dry run of Strategy 947 req/s, p99 67 ms.
+
 Against StarUML 7.1.1 with the extension, in one session (`--live --session --requests 1000
 --concurrency 50`, 0 errors): `get_all_diagrams_info` 1049 req/s, p99 63 ms; `call_endpoint`
 `find_elements` 644 req/s, p99 206 ms; `lint_diagram` of the open diagram 737 req/s, p99 166 ms.
@@ -729,21 +757,23 @@ invalidation path.
 
 `scripts/soak-test.mjs` starts `dist/index.js` over stdio against the stub, makes 2,000 warm-up
 calls, then 2,000 measured calls rotating `get_all_diagrams_info`, `call_endpoint`, a two-op `batch`,
-`build_diagram` and `lint_diagram`, and fails when the mean RSS, the live heap after a full GC or the p99 latency
+`build_diagram`, `lint_diagram` and dry runs of `build_model` and `apply_pattern`, and fails when the mean RSS, the live heap after a full GC or the p99 latency
 of the last 200 calls exceeds the first 200 by more than 25%, or any call fails; a p99 increase must
 also exceed 2 ms to count, since the p99 of 200 calls of about 1 ms is their second slowest and
 doubles on one scheduler stall. The live workflow runs it.
 
-Three runs for 0.5.0, `lint_diagram` added to the rotation (load average 10–16), 0 errors:
+Three runs for 0.6.0, dry runs of `build_model` and `apply_pattern` added to the rotation (load
+average 15–17), 0 errors:
 
 | Window | RSS | Live heap after GC | p50 | p99 |
 |---|---|---|---|---|
-| first 200 | 149.9–157.2 MB | 22.3–22.4 MB | 0.67–1.02 ms | 1.30–2.94 ms |
-| last 200 | 159.2–165.4 MB | 23.1 MB | 0.53–0.83 ms | 1.17–2.96 ms |
-| growth | 5.1–6.9% | 3.0–3.8% | | −60% to +127% |
+| first 200 | 156.9–158.4 MB | 23.0–23.2 MB | 0.89–1.65 ms | 1.47–6.16 ms |
+| last 200 | 166.5–170.4 MB | 23.8–23.9 MB | 0.57–0.77 ms | 1.54–3.29 ms |
+| growth | 6.0–7.6% | 2.9–3.7% | | −73% to +26% |
 
-The p99 swings both ways by about 1.7 ms between runs, under the 2 ms floor: one scheduler stall
-among 200 calls of about 1 ms on a shared machine. The 0.4.0 runs (load average 21–27) grew RSS by
+The 0.5.0 runs grew RSS by 5.1–6.9% and the heap by 3.0–3.8%. The p99 moves both ways between
+runs and rose by 0.4 ms where it rose, under the 2 ms floor: one scheduler stall among 200 calls of
+about 1 ms on a shared machine decides it (the 6.16 ms first window fell on a load-average peak). The 0.4.0 runs (load average 21–27) grew RSS by
 3.9–8.3% and the heap by 2.8–4.0%.
 
 Without warm-up (`--warmup 0`) RSS grows 51% (104 to 157 MB) over the first 2,000 calls while the
@@ -759,7 +789,7 @@ offline. Upstream responses are shaped like StarUML 7.1.1 + extension 0.3.0 outp
 summaries; the command list is the 322 ids captured from 7.1.1 in `scripts/benchmark-data/`). Four
 servers see the same data: `56864ca` (before issue #5), `0cfc06b` (issue #5, the last hand-written
 tool set, 21 tools), `45bedd4` (phase 2a, one tool per manifest endpoint, 34 tools) and the current
-one with the default core tier (21 tools). The first three are loaded with `git show` and run on
+one with the default core tier (19 tools). The first three are loaded with `git show` and run on
 the current dependencies (zod 4 lists schemas about 100 tokens shorter than zod 3 did, so #5's
 definitions measure 1831 here, 1930 when it was committed). When a step's tool is not listed, the
 scenario calls it through `call_endpoint` and first asks `describe_endpoints` for every such
@@ -784,18 +814,18 @@ Two accountings, side by side:
 
 | | pre-#5 | #5 | phase 2a | now batch | now (core) |
 |---|---|---|---|---|---|
-| Tools listed | 21 | 21 | 34 | 21 | 21 |
-| Definitions + instructions | 3011 | 1831 | 6154 | 1992 | 1992 |
+| Tools listed | 21 | 21 | 34 | 19 | 19 |
+| Definitions + instructions | 3011 | 1831 | 6154 | 1973 | 1973 |
 
 (a) Definitions once per scenario, plus results:
 
 | Scenario | Calls before / now | pre-#5 | #5 | phase 2a | now batch | now | vs pre-#5 | vs #5 |
 |---|---|---|---|---|---|---|---|---|
-| Mermaid class diagram + preview | 4 / 4 | 3197 | 1951 | 6274 | 2112 | 2112 | −33.9% | +8.3% |
-| Native use-case diagram | 11 / 2 | 3982 | 2497 | 6820 | 3947 | 2332 | −41.4% | −6.6% |
-| Inspect and refactor a class model | 8 / 8 | 6227 | 4234 | 8557 | 4598 | 4598 | −26.2% | +8.6% |
-| Native class diagram + export | 11 / 3 | 3917 | 2458 | 6781 | 3953 | 2342 | −40.2% | −4.7% |
-| All scenarios | 34 / 17 | 17323 | 11140 | 28432 | 14610 | 11384 | −34.3% | +2.2% |
+| Mermaid class diagram + preview | 4 / 4 | 3197 | 1951 | 6274 | 2093 | 2093 | −34.5% | +7.3% |
+| Native use-case diagram | 11 / 2 | 3982 | 2497 | 6820 | 3928 | 2313 | −41.9% | −7.4% |
+| Inspect and refactor a class model | 8 / 8 | 6227 | 4234 | 8557 | 4579 | 4579 | −26.5% | +8.1% |
+| Native class diagram + export | 11 / 3 | 3917 | 2458 | 6781 | 3934 | 2323 | −40.7% | −5.5% |
+| All scenarios | 34 / 17 | 17323 | 11140 | 28432 | 14534 | 11308 | −34.7% | +1.5% |
 
 (b) Definitions once per session, plus results and calls:
 
@@ -805,30 +835,30 @@ Two accountings, side by side:
 | Native use-case diagram | 1490 | 1185 | 1185 | 2420 | 449 | −69.9% | −62.1% |
 | Inspect and refactor a class model | 3369 | 2556 | 2556 | 2805 | 2805 | −16.7% | +9.7% |
 | Native class diagram + export | 1434 | 1155 | 1155 | 2443 | 483 | −66.3% | −58.2% |
-| Definitions, once | 3011 | 1831 | 6154 | 1992 | 1992 | | |
-| Session | 9586 | 6943 | 11266 | 9876 | 5945 | −38.0% | −14.4% |
+| Definitions, once | 3011 | 1831 | 6154 | 1973 | 1973 | | |
+| Session | 9586 | 6943 | 11266 | 9857 | 5926 | −38.2% | −14.6% |
 
 Targets of issues #5 and #8, under each accounting:
 
 | Target | (a) per scenario | (b) per session |
 |---|---|---|
-| #5 / #8: 60% below pre-#5, first three scenarios | not met: 9042 against ≤ 5362 (−32.6%) | not met: 5462 against ≤ 3260 (−33.0%) |
-| #5 / #8: 60% below pre-#5, all four scenarios | not met: 11384 against ≤ 6929 (−34.3%) | not met: 5945 against ≤ 3834 (−38.0%) |
-| #8: core definitions ≤ 2,000 | met: 1992 | met: 1992 |
-| #8: all scenarios below #5 | not met: 11384 against 11140 (+2.2%) | met: 5945 against 6943 (−14.4%) |
+| #5 / #8: 60% below pre-#5, first three scenarios | not met: 8985 against ≤ 5362 (−33.0%) | not met: 5443 against ≤ 3260 (−33.2%) |
+| #5 / #8: 60% below pre-#5, all four scenarios | not met: 11308 against ≤ 6929 (−34.7%) | not met: 5926 against ≤ 3834 (−38.2%) |
+| #8: core definitions ≤ 2,000 | met: 1973 | met: 1973 |
+| #8: all scenarios below #5 | not met: 11308 against 11140 (+1.5%) | met: 5926 against 6943 (−14.6%) |
 
 `build_diagram` does what it is for: a native diagram costs 449 and 483 tokens of results and calls
 (the spec it is given included), against 1185 and 1155 for #5's one call per element and 2420 and
 2443 for one `batch`, whose ops repeat every parent and diagram id, whose results now carry each
 element's path, and which needs `describe_endpoints` for four endpoint schemas. Under (a) that
-saving is hidden by the definitions, counted four times (7968 of 11384 tokens); under (b) the
-session is 14.4% below #5 and 38.0% below pre-#5. What keeps
-(b) above the 60% target is the fixed definitions (1992, a third of the session) and the refactor
+saving is hidden by the definitions, counted four times (7892 of 11308 tokens); under (b) the
+session is 14.6% below #5 and 38.2% below pre-#5. What keeps
+(b) above the 60% target is the fixed definitions (1973, a third of the session) and the refactor
 scenario, whose `get_all_commands` result alone is 1947 tokens of the 322 command ids; neither is
 touched by diagram building. The `batch` and `build_diagram` answers here are recorded in the
 extension's full form; since its phase 1g it answers each op's success and id, and a build's
-counts, unless asked for more, so both cost less against it. `--tools all` lists 76 tools for 10845 tokens (all scenarios (a)
-46461, (b) 14371). Generated descriptions stay one line of at most 100 characters (a test enforces
+counts, unless asked for more, so both cost less against it. `--tools all` lists 86 tools for 11896 tokens (all scenarios (a)
+50665, (b) 15422). Generated descriptions stay one line of at most 100 characters (a test enforces
 it on every listed tool), and a test keeps the core listing within 2,000 tokens.
 
 ### Reading a diagram back
@@ -847,7 +877,7 @@ scaled down, so its member text arrives smaller than StarUML drew it).
 |---|---|---|---|---|---|
 | PNG (`get_diagram_image_by_id`) | 29 | 0 | 1600 | 1629 | |
 | Element dump (`find_elements`, `summary: false`, `depth: 2`) | 27 | 4425 | 0 | 4452 | +173.3% |
-| `describe_diagram` | 25 | 260 | 0 | 285 | −82.5% |
+| `describe_diagram` (through `call_endpoint` since 0.6.0) | 33 | 260 | 0 | 293 | −82.0% |
 | `diagram_as_text` (Mermaid) | 25 | 242 | 0 | 267 | −83.6% |
 | `diagram_as_text` (PlantUML) | 30 | 253 | 0 | 283 | −82.6% |
 

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-06
+
+Built against staruml-mcp-extension 0.3.0 with 79 endpoints (extension phase 1g: model first,
+design patterns as data, annotated exports, themes). In short, by phase:
+
+- **2i** (#4, #8, #10, #13): `build_model` and `apply_pattern` in the core tier, the pattern
+  library as resources, the `apply-pattern` prompt and the skill's "Model first" and "Design
+  patterns with correct properties"; `annotate` on `export_diagram` and `view_diagram`; the
+  `package`, `component` and `deployment` kinds in `build_diagram`'s listing. `introspect`,
+  `describe_diagram`, `validate_model` and `search_types` move to `call_endpoint` to keep the core
+  tier under 2,000 tokens.
+
+The core tier lists 19 tools in 1,973 tokens (o200k_base). Applying Strategy to an existing
+three-class model costs 780 tokens with `apply_pattern`, 1,093 with a dry run first, and 2,076
+writing the same nine changes as one `batch`; all three reach `detect_patterns` confidence 1.
+
 ### Added
 - Bundled manifest synced from the extension's phase 1g build with 79 endpoints: `/build_model`, `/sync_operations`, `/check_messages`, `/list_patterns`, `/describe_pattern`, `/apply_pattern`, `/detect_patterns`, `/apply_preset`, `/describe_type`, `/apply_theme`, and `annotate` on `/export_diagram` (#4).
 - `build_diagram`'s listed grammar names the `package`, `component` and `deployment` spec shapes; its description no longer promises ids, which the extension answers with `result: "ids"` only (#4, #8).
@@ -25,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `describe_diagram`, `validate_model` and `search_types` leave the core tier with `introspect` to keep it under 2,000 tokens with `build_model` and `apply_pattern`: `diagram_as_text`, always listed, reads a diagram in as many tokens as `describe_diagram`; `validate_model` is a final check that now sits with `uml_lint` in the `quality` group; the spec tools take names, not metamodel ids. Their short listings and answer shapes stay, through `call_endpoint` and when named in `--tools`. The prompts and the skill name them through `call_endpoint`; the core tier lists 19 tools in 1,973 tokens (#8, #13).
 - `update_element`, `batch` and `export_diagram` list shorter parameter descriptions (186, 144 and 138 tokens) (#8).
 - `introspect` leaves the core tier to make room under the 2,000-token budget: `doctor` reports both versions and `search_types` and `staruml://introspect/metamodel` answer type questions. `call_endpoint({name: "introspect"})` now applies the summary tool's defaults (versions only, the metamodel with `types`); the extension's own default, every section, is 522 KB. `--tools core,introspect` lists the summary tool as before (#8).
+
+### Fixed
+- The live suite reopened the original project through `open_project` as a tool, which the core tier the suite runs does not list, so StarUML stayed on the suite's last project; it goes through `call_endpoint` and reports a failure (#14).
 
 ## [0.5.0] - 2026-10-05
 
@@ -225,6 +244,8 @@ The original 4 Mermaid/diagram tools continue to work without the extension.
 - Inspired by [`staruml/staruml-mcp-server`](https://github.com/staruml/staruml-mcp-server) by Minkyu Lee (StarUML creator).
 - Reimplemented with multi-transport support to work around stdio MCP registration issues in some clients (e.g., [Claude Code #36914](https://github.com/anthropics/claude-code/issues/36914)).
 
-[Unreleased]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.3.2...v0.4.0
 [0.1.0]: https://github.com/ezrabrilliant/staruml-mcp/releases/tag/v0.1.0

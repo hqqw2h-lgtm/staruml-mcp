@@ -369,7 +369,8 @@ const RESULT_SHAPES: Record<
   [LINT_DIAGRAM]: findingsResult,
   [UML_LINT]: findingsResult,
   [DIFF_DIAGRAM]: findingsResult,
-  // Dry runs of the endpoints that run a batch of their own answer its ops counted.
+  // Endpoints that run a batch of their own answer a dry run's ops counted; patterns and presets
+  // name their elements and properties by path.
   [BUILD_MODEL]: modelResult,
   [SYNC_OPERATIONS]: modelResult,
   [APPLY_THEME]: modelResult,

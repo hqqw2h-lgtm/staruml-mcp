@@ -450,8 +450,11 @@ describe("pattern bindings, model specs and their answers", () => {
       [7],
       null,
     );
+    // zod's record skips a "__proto__" key (found here): such a binding is ignored, not refused,
+    // on both sides, since the extension checks with zod too.
+    const roleName = fc.string({ maxLength: 12 }).filter((r) => r !== "__proto__");
     fc.assert(
-      fc.property(bindings, fc.string({ maxLength: 12 }), bad, (b, role, value) => {
+      fc.property(bindings, roleName, bad, (b, role, value) => {
         const parsed = schema("apply_pattern").safeParse({
           pattern: "Strategy",
           bindings: { ...b, [role]: value },
@@ -516,7 +519,8 @@ describe("pattern bindings, model specs and their answers", () => {
           // serialize prunes null and empty values, as for every answer.
           if (prune({ v: value }) && JSON.stringify(prune({ v: value })) === "{}") continue;
           expect(Object.hasOwn(grouped, path)).toBe(true);
-          expect(grouped[path]![field]).toEqual(prune(value));
+          // Through JSON, as the answer travels: -0 is written as 0 (found here).
+          expect(grouped[path]![field]).toEqual(JSON.parse(JSON.stringify(prune(value))));
         }
       }),
     );

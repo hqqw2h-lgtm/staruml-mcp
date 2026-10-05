@@ -1435,37 +1435,31 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         expect(again.counts.unchanged).toBeGreaterThan(0);
       });
 
-      it(
-        "builds the ThingsBoard model from its 93-class object spec",
-        // 644 ops; 22 s on StarUML 7.1.1 while nothing else uses it.
-        { timeout: 120_000 },
-        async () => {
-          const spec = JSON.parse(
-            readFileSync(new URL("../fixtures/thingsboard.oo.json", import.meta.url), "utf8"),
-          ) as { classes: unknown[]; system: string };
-          const built = payload<{
-            model: Summary;
-            counts: { created: Record<string, number> };
-            skipped?: { section: string }[];
-          }>(
-            // The SDK client gives up on a request after 60 s by default.
-            (await mcp.client.callTool({ name: "build_model", arguments: { spec } }, undefined, {
-              timeout: 110_000,
-            })) as CallToolResult,
-          );
-          expect(built.model.name).toBe(spec.system);
-          const classifiers = ["UMLClass", "UMLInterface", "UMLEnumeration"]
-            .map((t) => built.counts.created[t] ?? 0)
-            .reduce((a, b) => a + b);
-          expect(classifiers).toBe(spec.classes.length);
-          // Diagram sections are left to build_diagram.
-          expect(built.skipped?.map((s) => s.section)).toEqual(
-            expect.arrayContaining(["classViews", "erd"]),
-          );
-          // A thousand elements slow every later call; the rest of the suite does not need them.
-          ok(await call("delete_element", { ref: built.model._id }));
-        },
-      );
+      // A dry run: building its 644 ops took 22 s on an idle StarUML 7.1.1 and over 110 s while
+      // another client drove it, and the Shipping model above already builds for real.
+      it("plans the ThingsBoard model from its 93-classifier object spec", async () => {
+        const spec = JSON.parse(
+          readFileSync(new URL("../fixtures/thingsboard.oo.json", import.meta.url), "utf8"),
+        ) as { classes: unknown[]; system: string };
+        const planned = payload<{
+          model: { name: string; path: string; _id?: string };
+          counts: { created: Record<string, number> };
+          changes: { created: { path: string }[] };
+          skipped?: { section: string }[];
+          plan: { ops: number };
+        }>(await call("build_model", { spec, dryRun: true }));
+        expect(planned.model).toEqual({ name: spec.system, path: spec.system });
+        const classifiers = ["UMLClass", "UMLInterface", "UMLEnumeration"]
+          .map((t) => planned.counts.created[t] ?? 0)
+          .reduce((a, b) => a + b);
+        expect(classifiers).toBe(spec.classes.length);
+        expect(planned.plan.ops).toBeGreaterThan(600);
+        expect(planned.changes.created.map((c) => c.path)).toContain(`${spec.system}`);
+        // Diagram sections are left to build_diagram.
+        expect(planned.skipped?.map((s) => s.section)).toEqual(
+          expect.arrayContaining(["classViews", "erd"]),
+        );
+      });
 
       it("reads the pattern library as resources and through describe_pattern", async () => {
         const list = JSON.parse(

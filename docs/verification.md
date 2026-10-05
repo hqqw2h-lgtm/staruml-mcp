@@ -21,6 +21,30 @@ need no StarUML run in CI on every push (`.github/workflows/ci.yml`); mutation t
 
 ## Results
 
+Recorded for 0.6.0 (#13) on the same machine, other agents' test suites and a second StarUML
+client sharing it (load average 13–21):
+
+- **Unit, property, fuzz:** 1,291 tests, 100% lines, branches, functions and statements. Fuzz
+  outcomes of one run (1,200 calls, the bindings and spec runs included): `INVALID_ARGUMENT` 498,
+  `UNKNOWN_ENDPOINT` 111, SDK input validation 350, success 241. The binding property found that
+  zod's record skips a `"__proto__"` role, so such a binding is ignored rather than refused, here
+  and in the extension alike; a batch op that gives an alias beside its field was covered only
+  when the fuzz test happened to generate one, and has a test of its own now.
+- **Mutation:** 93.95%: of 3,125 mutants 2,861 killed, 75 timed out (counted as detected), 189
+  survived, none uncovered; 23 minutes with 15 runners. The new `src/model.ts` scores 94.92% and
+  `src/patterns.ts` 92.11%; their survivors are guards for answers not shaped like the
+  extension's.
+- **Live:** 103 of 104 passed against StarUML 7.1.1 and the extension's working tree after phase
+  1g (79 endpoints bundled; the running build offered six more, which the suite tolerates),
+  including the ThingsBoard object spec planned from `tests/fixtures/thingsboard.oo.json` (93
+  classifiers, 644 ops) and Strategy applied by path and detected back at confidence 1. The one
+  failure is `restore_snapshot` answering `SNAPSHOT_STALE` in the improve-diagram loop, against
+  that working tree's uncommitted undo recording (`src/undo.ts`); the test passed against the
+  phase 1g build.
+- **Load:** see README, Performance, "Re-run for 0.6.0": one session, seven paths, 0 errors.
+- **Soak:** three runs with dry runs of `build_model` and `apply_pattern` in the rotation, RSS
+  +6.0 to +7.6%, live heap after GC +2.9 to +3.7%, p99 within the 2 ms floor, 0 errors.
+
 Recorded for 0.5.0 (#13) on the same machine, other agents' test suites sharing it (load average
 10–16):
 

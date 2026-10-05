@@ -275,6 +275,13 @@ describe("batch tool", () => {
       'describe_endpoints({names: ["delete_element"]}) shows its schema.',
     ],
     [
+      // Covered by the fuzz test only by chance until 0.6.0.
+      "an alias beside the field it stands for",
+      [{ path: "/delete_element", body: { ref: "E1", id: "E2" } }],
+      "ops.0.body.id: an alias of ref, which is given too; pass ref only",
+      'describe_endpoints({names: ["delete_element"]}) shows its schema.',
+    ],
+    [
       "a reference to an unnamed op inside an array",
       [{ path: "/move_views", body: { ids: ["V1", "$x.view"], dx: 1, dy: 1 } }],
       "ops.0.body.ids.1: $x.view names no earlier op",
