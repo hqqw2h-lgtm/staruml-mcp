@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { EXTENSION_REPOSITORY } from "./errors.js";
 import { StarUMLClient } from "./staruml-client.js";
+import { runTool, textResult } from "./tool-result.js";
 
 const SUPPORTED_MERMAID_DIAGRAMS = [
   "classDiagram",
@@ -43,59 +45,37 @@ export function createServer(config: ServerConfig = {}): McpServer {
           `Mermaid diagram source code. Must start with one of: ${SUPPORTED_MERMAID_DIAGRAMS.join(", ")}. Example: "flowchart LR\\n  A[Start] --> B[End]"`,
         ),
     },
-    async ({ code }) => {
-      try {
+    async ({ code }) =>
+      runTool("generate diagram", async () => {
         await client.generateDiagram(code);
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Diagram successfully generated in StarUML.",
-            },
-          ],
-        };
-      } catch (error) {
-        return toolError(`Failed to generate diagram: ${formatError(error)}`);
-      }
-    },
+        return textResult("Diagram successfully generated in StarUML.");
+      }),
   );
 
   server.tool(
     "get_all_diagrams_info",
     "Get metadata (id, name, type) for all diagrams in the currently open StarUML project.",
     {},
-    async () => {
-      try {
+    async () =>
+      runTool("get all diagrams info", async () => {
         const data = await client.getAllDiagramsInfo();
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Diagrams: ${JSON.stringify(data, null, 2)}`,
-            },
-          ],
-        };
-      } catch (error) {
-        return toolError(`Failed to get all diagrams info: ${formatError(error)}`);
-      }
-    },
+        return textResult(`Diagrams: ${JSON.stringify(data, null, 2)}`);
+      }),
   );
 
   server.tool(
     "get_current_diagram_info",
     "Get metadata for the currently active (focused) diagram in StarUML.",
     {},
-    async () => {
-      try {
+    async () =>
+      runTool("get current diagram info", async () => {
         const data = await client.getCurrentDiagramInfo();
-        const text = data
-          ? `Current diagram: ${JSON.stringify(data, null, 2)}`
-          : "No diagram is currently active.";
-        return { content: [{ type: "text", text }] };
-      } catch (error) {
-        return toolError(`Failed to get current diagram info: ${formatError(error)}`);
-      }
-    },
+        return textResult(
+          data
+            ? `Current diagram: ${JSON.stringify(data, null, 2)}`
+            : "No diagram is currently active.",
+        );
+      }),
   );
 
   server.tool(
@@ -109,46 +89,26 @@ export function createServer(config: ServerConfig = {}): McpServer {
           "Diagram ID. Obtain from get_all_diagrams_info tool (each diagram entry has an 'id' field).",
         ),
     },
-    async ({ diagramId }) => {
-      try {
+    async ({ diagramId }) =>
+      runTool("get diagram image", async () => {
         const image = await client.getDiagramImageById(diagramId);
-        return {
-          content: [
-            {
-              type: "image",
-              data: image,
-              mimeType: "image/png",
-            },
-          ],
-        };
-      } catch (error) {
-        return toolError(`Failed to get diagram image: ${formatError(error)}`);
-      }
-    },
+        return { content: [{ type: "image", data: image, mimeType: "image/png" }] };
+      }),
   );
 
-  // =========================================================================
-  // Extension tools (require staruml-mcp-extension installed on port 58322)
-  // https://github.com/ezrabrilliant/staruml-mcp-extension
-  // =========================================================================
-
-  const EXT_NOTE =
-    "Requires staruml-mcp-extension to be installed in StarUML. Install from https://github.com/ezrabrilliant/staruml-mcp-extension";
+  // The tools below need staruml-mcp-extension; StarUML's built-in API (7.1.1) only offers
+  // the four endpoints used above.
+  const EXT_NOTE = `Requires staruml-mcp-extension to be installed in StarUML. Install from ${EXTENSION_REPOSITORY}`;
 
   server.tool(
     "get_all_commands",
     `List all registered StarUML command IDs (e.g. 'project:save', 'view:fit-to-window', 'alignment:align-left'). Useful to discover what execute_command can trigger. ${EXT_NOTE}`,
     {},
-    async () => {
-      try {
+    async () =>
+      runTool("get commands", async () => {
         const data = await client.getAllCommands();
-        return {
-          content: [{ type: "text", text: `Commands: ${JSON.stringify(data, null, 2)}` }],
-        };
-      } catch (error) {
-        return toolError(`Failed to get commands: ${formatError(error)}`);
-      }
-    },
+        return textResult(`Commands: ${JSON.stringify(data, null, 2)}`);
+      }),
   );
 
   server.tool(
@@ -164,30 +124,22 @@ export function createServer(config: ServerConfig = {}): McpServer {
         .optional()
         .describe("Optional positional arguments passed to the command handler"),
     },
-    async ({ id, args }) => {
-      try {
+    async ({ id, args }) =>
+      runTool("execute command", async () => {
         const data = await client.executeCommand(id, args);
-        return {
-          content: [{ type: "text", text: `Executed: ${JSON.stringify(data, null, 2)}` }],
-        };
-      } catch (error) {
-        return toolError(`Failed to execute command: ${formatError(error)}`);
-      }
-    },
+        return textResult(`Executed: ${JSON.stringify(data, null, 2)}`);
+      }),
   );
 
   server.tool(
     "get_project_info",
     `Get the current StarUML project's filename and top-level element summary. ${EXT_NOTE}`,
     {},
-    async () => {
-      try {
+    async () =>
+      runTool("get project info", async () => {
         const data = await client.getProjectInfo();
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-      } catch (error) {
-        return toolError(`Failed to get project info: ${formatError(error)}`);
-      }
-    },
+        return textResult(JSON.stringify(data, null, 2));
+      }),
   );
 
   server.tool(
@@ -199,14 +151,11 @@ export function createServer(config: ServerConfig = {}): McpServer {
         .optional()
         .describe("Optional absolute path. If omitted, saves to current project path."),
     },
-    async ({ filename }) => {
-      try {
+    async ({ filename }) =>
+      runTool("save project", async () => {
         const data = await client.saveProject(filename);
-        return { content: [{ type: "text", text: `Saved: ${JSON.stringify(data)}` }] };
-      } catch (error) {
-        return toolError(`Failed to save project: ${formatError(error)}`);
-      }
-    },
+        return textResult(`Saved: ${JSON.stringify(data)}`);
+      }),
   );
 
   server.tool(
@@ -215,28 +164,22 @@ export function createServer(config: ServerConfig = {}): McpServer {
     {
       filename: z.string().min(1).describe("Absolute path for the .mdj file"),
     },
-    async ({ filename }) => {
-      try {
+    async ({ filename }) =>
+      runTool("save project as", async () => {
         const data = await client.saveProjectAs(filename);
-        return { content: [{ type: "text", text: `Saved as: ${JSON.stringify(data)}` }] };
-      } catch (error) {
-        return toolError(`Failed to save project as: ${formatError(error)}`);
-      }
-    },
+        return textResult(`Saved as: ${JSON.stringify(data)}`);
+      }),
   );
 
   server.tool(
     "new_project",
     `Create a new empty StarUML project (discards unsaved changes in current project). ${EXT_NOTE}`,
     {},
-    async () => {
-      try {
+    async () =>
+      runTool("create new project", async () => {
         await client.newProject();
-        return { content: [{ type: "text", text: "New project created." }] };
-      } catch (error) {
-        return toolError(`Failed to create new project: ${formatError(error)}`);
-      }
-    },
+        return textResult("New project created.");
+      }),
   );
 
   server.tool(
@@ -245,14 +188,11 @@ export function createServer(config: ServerConfig = {}): McpServer {
     {
       filename: z.string().min(1).describe("Absolute path to the .mdj project file"),
     },
-    async ({ filename }) => {
-      try {
+    async ({ filename }) =>
+      runTool("open project", async () => {
         const data = await client.openProject(filename);
-        return { content: [{ type: "text", text: `Opened: ${JSON.stringify(data)}` }] };
-      } catch (error) {
-        return toolError(`Failed to open project: ${formatError(error)}`);
-      }
-    },
+        return textResult(`Opened: ${JSON.stringify(data)}`);
+      }),
   );
 
   server.tool(
@@ -261,14 +201,11 @@ export function createServer(config: ServerConfig = {}): McpServer {
     {
       id: z.string().min(1).describe("Element _id as stored in the StarUML repository"),
     },
-    async ({ id }) => {
-      try {
+    async ({ id }) =>
+      runTool("get element", async () => {
         const data = await client.getElementById(id);
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-      } catch (error) {
-        return toolError(`Failed to get element: ${formatError(error)}`);
-      }
-    },
+        return textResult(JSON.stringify(data, null, 2));
+      }),
   );
 
   server.tool(
@@ -281,14 +218,11 @@ export function createServer(config: ServerConfig = {}): McpServer {
         .describe("Metamodel type. Examples: 'Project', 'UMLModel', 'UMLClass', 'UMLPackage'"),
       name: z.string().optional().describe("Exact name match"),
     },
-    async ({ type, name }) => {
-      try {
+    async ({ type, name }) =>
+      runTool("find elements", async () => {
         const data = await client.findElements({ type, name });
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-      } catch (error) {
-        return toolError(`Failed to find elements: ${formatError(error)}`);
-      }
-    },
+        return textResult(JSON.stringify(data, null, 2));
+      }),
   );
 
   server.tool(
@@ -299,14 +233,11 @@ export function createServer(config: ServerConfig = {}): McpServer {
       parentId: z.string().min(1).describe("Parent element's _id"),
       name: z.string().optional().describe("Optional element name"),
     },
-    async ({ type, parentId, name }) => {
-      try {
+    async ({ type, parentId, name }) =>
+      runTool("create element", async () => {
         const data = await client.createElement({ type, parentId, name });
-        return { content: [{ type: "text", text: `Created: ${JSON.stringify(data, null, 2)}` }] };
-      } catch (error) {
-        return toolError(`Failed to create element: ${formatError(error)}`);
-      }
-    },
+        return textResult(`Created: ${JSON.stringify(data, null, 2)}`);
+      }),
   );
 
   server.tool(
@@ -327,14 +258,11 @@ export function createServer(config: ServerConfig = {}): McpServer {
       x2: z.number().optional().describe("Right X coordinate (default x+100)"),
       y2: z.number().optional().describe("Bottom Y coordinate (default y+50)"),
     },
-    async (args) => {
-      try {
+    async (args) =>
+      runTool("create element with view", async () => {
         const data = await client.createElementWithView(args);
-        return { content: [{ type: "text", text: `Created: ${JSON.stringify(data, null, 2)}` }] };
-      } catch (error) {
-        return toolError(`Failed to create element with view: ${formatError(error)}`);
-      }
-    },
+        return textResult(`Created: ${JSON.stringify(data, null, 2)}`);
+      }),
   );
 
   server.tool(
@@ -365,16 +293,11 @@ export function createServer(config: ServerConfig = {}): McpServer {
       x2: z.number().optional().describe("Edge head X coordinate"),
       y2: z.number().optional().describe("Edge head Y coordinate (defaults to y if omitted)"),
     },
-    async (args) => {
-      try {
+    async (args) =>
+      runTool("create edge", async () => {
         const data = await client.createEdgeWithView(args);
-        return {
-          content: [{ type: "text", text: `Created edge: ${JSON.stringify(data, null, 2)}` }],
-        };
-      } catch (error) {
-        return toolError(`Failed to create edge: ${formatError(error)}`);
-      }
-    },
+        return textResult(`Created edge: ${JSON.stringify(data, null, 2)}`);
+      }),
   );
 
   server.tool(
@@ -388,14 +311,11 @@ export function createServer(config: ServerConfig = {}): McpServer {
         .describe("Property name, e.g. 'name', 'documentation', 'visibility'"),
       value: z.unknown().describe("New value"),
     },
-    async ({ id, field, value }) => {
-      try {
+    async ({ id, field, value }) =>
+      runTool("update element", async () => {
         const data = await client.updateElement({ id, field, value });
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-      } catch (error) {
-        return toolError(`Failed to update element: ${formatError(error)}`);
-      }
-    },
+        return textResult(JSON.stringify(data, null, 2));
+      }),
   );
 
   server.tool(
@@ -404,14 +324,11 @@ export function createServer(config: ServerConfig = {}): McpServer {
     {
       id: z.string().min(1).describe("Element _id to delete"),
     },
-    async ({ id }) => {
-      try {
+    async ({ id }) =>
+      runTool("delete element", async () => {
         const data = await client.deleteElement(id);
-        return { content: [{ type: "text", text: JSON.stringify(data) }] };
-      } catch (error) {
-        return toolError(`Failed to delete element: ${formatError(error)}`);
-      }
-    },
+        return textResult(JSON.stringify(data));
+      }),
   );
 
   server.tool(
@@ -430,16 +347,11 @@ export function createServer(config: ServerConfig = {}): McpServer {
         .describe("Parent element's _id (usually the project or a package)"),
       name: z.string().optional().describe("Diagram name"),
     },
-    async ({ type, parentId, name }) => {
-      try {
+    async ({ type, parentId, name }) =>
+      runTool("create diagram", async () => {
         const data = await client.createDiagram({ type, parentId, name });
-        return {
-          content: [{ type: "text", text: `Created diagram: ${JSON.stringify(data, null, 2)}` }],
-        };
-      } catch (error) {
-        return toolError(`Failed to create diagram: ${formatError(error)}`);
-      }
-    },
+        return textResult(`Created diagram: ${JSON.stringify(data, null, 2)}`);
+      }),
   );
 
   server.tool(
@@ -448,14 +360,11 @@ export function createServer(config: ServerConfig = {}): McpServer {
     {
       id: z.string().min(1).describe("Diagram _id"),
     },
-    async ({ id }) => {
-      try {
+    async ({ id }) =>
+      runTool("switch diagram", async () => {
         const data = await client.switchDiagram(id);
-        return { content: [{ type: "text", text: JSON.stringify(data) }] };
-      } catch (error) {
-        return toolError(`Failed to switch diagram: ${formatError(error)}`);
-      }
-    },
+        return textResult(JSON.stringify(data));
+      }),
   );
 
   server.tool(
@@ -464,27 +373,12 @@ export function createServer(config: ServerConfig = {}): McpServer {
     {
       id: z.string().min(1).describe("Diagram _id"),
     },
-    async ({ id }) => {
-      try {
+    async ({ id }) =>
+      runTool("close diagram", async () => {
         const data = await client.closeDiagram(id);
-        return { content: [{ type: "text", text: JSON.stringify(data) }] };
-      } catch (error) {
-        return toolError(`Failed to close diagram: ${formatError(error)}`);
-      }
-    },
+        return textResult(JSON.stringify(data));
+      }),
   );
 
   return server;
-}
-
-function toolError(message: string) {
-  return {
-    isError: true,
-    content: [{ type: "text" as const, text: message }],
-  };
-}
-
-function formatError(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
 }

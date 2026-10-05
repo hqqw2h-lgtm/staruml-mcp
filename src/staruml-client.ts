@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { ErrorCode, EXTENSION_REPOSITORY, StarUMLApiError, type Upstream } from "./errors.js";
+
+export { ErrorCode, StarUMLApiError } from "./errors.js";
 
 const DEFAULT_HOST = "http://localhost";
 const DEFAULT_API_PORT = 58321;
@@ -8,18 +11,10 @@ const StarUMLResponseSchema = z.object({
   success: z.boolean(),
   data: z.unknown().optional(),
   error: z.string().optional(),
+  code: z.string().optional(),
 });
 
-export class StarUMLApiError extends Error {
-  constructor(
-    message: string,
-    public readonly slug: string,
-    public readonly status?: number,
-  ) {
-    super(message);
-    this.name = "StarUMLApiError";
-  }
-}
+type StarUMLResponse = z.infer<typeof StarUMLResponseSchema>;
 
 export interface StarUMLClientOptions {
   host?: string;
@@ -57,10 +52,11 @@ export class StarUMLClient {
   async getDiagramImageById(diagramId: string): Promise<string> {
     const result = await this.callBase("/get_diagram_image_by_id", { diagramId });
     if (typeof result !== "string") {
-      throw new StarUMLApiError(
-        "Expected image string, got different type",
-        "/get_diagram_image_by_id",
-      );
+      throw new StarUMLApiError(`Expected a base64 image string, got ${typeof result}`, {
+        code: ErrorCode.InvalidResponse,
+        slug: "/get_diagram_image_by_id",
+        upstream: "builtin",
+      });
     }
     return result;
   }
@@ -176,24 +172,19 @@ export class StarUMLClient {
   // === Internal ===
 
   private callBase(slug: string, body: Record<string, unknown>): Promise<unknown> {
-    return this.post(this.baseUrl, slug, body, "StarUML built-in API");
+    return this.post("builtin", slug, body);
   }
 
   private callExt(slug: string, body: Record<string, unknown>): Promise<unknown> {
-    return this.post(
-      this.extUrl,
-      slug,
-      body,
-      "staruml-mcp-extension (install from https://github.com/ezrabrilliant/staruml-mcp-extension)",
-    );
+    return this.post("extension", slug, body);
   }
 
   private async post(
-    baseUrl: string,
+    upstream: Upstream,
     slug: string,
     body: Record<string, unknown>,
-    hint: string,
   ): Promise<unknown> {
+    const baseUrl = upstream === "builtin" ? this.baseUrl : this.extUrl;
     let res: Response;
     try {
       res = await fetch(`${baseUrl}${slug}`, {
@@ -201,27 +192,112 @@ export class StarUMLClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-    } catch (error) {
-      throw new StarUMLApiError(
-        `Failed to reach ${baseUrl}. Is StarUML running? ${hint}. (${String(error)})`,
-        slug,
-      );
+    } catch (cause) {
+      throw await this.unreachable(upstream, slug, cause);
     }
+
+    const envelope = parseEnvelope(await res.text());
 
     if (!res.ok) {
+      throw this.httpError(upstream, slug, res, envelope);
+    }
+    if (envelope === undefined) {
       throw new StarUMLApiError(
-        `HTTP ${res.status} ${res.statusText} for ${slug}`,
-        slug,
-        res.status,
+        `${baseUrl}${slug} did not return a {success, data} JSON envelope`,
+        {
+          code: ErrorCode.InvalidResponse,
+          slug,
+          upstream,
+          status: res.status,
+          hint: `Check that ${baseUrl} is ${describe(upstream)} and not another service on that port.`,
+        },
       );
     }
-
-    const json = StarUMLResponseSchema.parse(await res.json());
-
-    if (!json.success) {
-      throw new StarUMLApiError(json.error ?? `Unknown error from ${baseUrl}${slug}`, slug);
+    if (!envelope.success) {
+      throw new StarUMLApiError(
+        envelope.error ?? `${baseUrl}${slug} reported failure without a message`,
+        {
+          code: envelope.code ?? ErrorCode.RequestRejected,
+          slug,
+          upstream,
+          status: res.status,
+        },
+      );
     }
-
-    return json.data;
+    return envelope.data;
   }
+
+  private async unreachable(
+    upstream: Upstream,
+    slug: string,
+    cause: unknown,
+  ): Promise<StarUMLApiError> {
+    const startStarUML = `Start StarUML 7.0.0+ with its API server enabled ("apiServer": true in StarUML's settings.json; port "apiServerPort", default 58321), or pass --api-host/--api-port if it listens elsewhere.`;
+    if (upstream === "builtin") {
+      return new StarUMLApiError(`Cannot reach the StarUML API server at ${this.baseUrl}`, {
+        code: ErrorCode.StarUMLUnreachable,
+        slug,
+        upstream,
+        hint: startStarUML,
+        cause,
+      });
+    }
+    // Probing the built-in port tells "StarUML is closed" apart from "the extension is
+    // missing": both look identical from the extension port alone.
+    if (!(await this.ping())) {
+      return new StarUMLApiError(
+        `Cannot reach StarUML: neither ${this.baseUrl} nor ${this.extUrl} answers`,
+        { code: ErrorCode.StarUMLUnreachable, slug, upstream, hint: startStarUML, cause },
+      );
+    }
+    return new StarUMLApiError(`StarUML is running but nothing answers at ${this.extUrl}`, {
+      code: ErrorCode.ExtensionUnreachable,
+      slug,
+      upstream,
+      hint: `Install staruml-mcp-extension (Tools > Extension Manager > Install From Url: ${EXTENSION_REPOSITORY}) and restart StarUML, or pass --ext-port if it listens on another port.`,
+      cause,
+    });
+  }
+
+  private httpError(
+    upstream: Upstream,
+    slug: string,
+    res: Response,
+    envelope: StarUMLResponse | undefined,
+  ): StarUMLApiError {
+    const message = envelope?.error ?? `HTTP ${res.status} ${res.statusText}`.trimEnd();
+    const options = { slug, upstream, status: res.status };
+    if (envelope?.code !== undefined) {
+      return new StarUMLApiError(message, { ...options, code: envelope.code });
+    }
+    if (res.status === 404) {
+      return new StarUMLApiError(message, {
+        ...options,
+        code: ErrorCode.EndpointNotFound,
+        hint:
+          upstream === "builtin"
+            ? `This StarUML build has no ${slug} API endpoint; it needs StarUML 7.0.0+.`
+            : `The installed staruml-mcp-extension does not provide ${slug}, so its version does not match this server. GET ${this.extUrl}/ lists the endpoints it supports; upgrade from ${EXTENSION_REPOSITORY}.`,
+      });
+    }
+    return new StarUMLApiError(message, {
+      ...options,
+      code: res.status < 500 ? ErrorCode.RequestRejected : ErrorCode.UpstreamError,
+    });
+  }
+}
+
+function parseEnvelope(text: string): StarUMLResponse | undefined {
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  const parsed = StarUMLResponseSchema.safeParse(json);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function describe(upstream: Upstream): string {
+  return upstream === "builtin" ? "the StarUML API server" : "staruml-mcp-extension";
 }

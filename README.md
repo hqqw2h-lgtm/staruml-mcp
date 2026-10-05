@@ -133,6 +133,23 @@ staruml-mcp [options]
 
 To enable extension tools: install `staruml-mcp-extension` in StarUML (Tools → Extension Manager → Install From URL → `https://github.com/ezrabrilliant/staruml-mcp-extension`).
 
+### Errors
+
+A failed tool call returns `isError: true` with a one-line cause, a hint where one helps, and
+`structuredContent.error = { code, message, endpoint, upstream, status?, hint? }`. The message is the
+`error` field of StarUML's or the extension's JSON body, so the calling agent sees the real cause
+(for example `Element not found: …`) instead of `HTTP 400 Bad Request`.
+
+| `code` | Meaning |
+|---|---|
+| `STARUML_UNREACHABLE` | Nothing answers on the built-in API port: StarUML is closed or `apiServer` is off. |
+| `EXTENSION_UNREACHABLE` | StarUML answers but the extension port does not: the extension is not installed or listens elsewhere. |
+| `ENDPOINT_NOT_FOUND` | HTTP 404 for the endpoint: the installed StarUML or extension version does not provide it. |
+| `REQUEST_REJECTED` | HTTP 4xx or `success: false`: the arguments were rejected; read `message`. |
+| `UPSTREAM_ERROR` | HTTP 5xx from StarUML or the extension. |
+| `INVALID_RESPONSE` | The port answered with something other than the `{ success, data, error }` envelope. |
+| other | A `code` sent by the extension, passed through unchanged. |
+
 ## Example Prompts
 
 - *"Create an ER diagram in StarUML for a POS database: users, menus, transactions with relationships."*

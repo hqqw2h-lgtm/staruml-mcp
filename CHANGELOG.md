@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Tool failures carry the `error` (and `code`) from the JSON body of non-2xx responses instead of `HTTP 400 Bad Request`, plus `structuredContent.error` with a stable `code` and a hint for connectivity and version-mismatch failures (#3).
+
 ## [0.3.2] - 2026-04-20
 
 ### Fixed
