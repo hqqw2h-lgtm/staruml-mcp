@@ -4,6 +4,11 @@ import { z } from "zod";
 import { BATCH, BATCH_DESCRIPTION, BatchInput, batchResult, checkBatch } from "./batch.js";
 import { BUILD_DIAGRAM, BUILD_DIAGRAM_DESCRIPTION, buildDiagramInput } from "./build-diagram.js";
 import { ErrorCode, ToolInputError } from "./errors.js";
+import {
+  EXPORT_DIAGRAM,
+  EXPORT_DIAGRAM_DESCRIPTION,
+  exportDiagramInput,
+} from "./export-diagram.js";
 import type { Check } from "./doctor.js";
 import {
   BUNDLED_MANIFEST,
@@ -35,6 +40,7 @@ export const HAND_WRITTEN_TOOLS: ReadonlySet<string> = new Set([
   "get_all_diagrams_info",
   "get_current_diagram_info",
   "get_diagram_image_by_id",
+  "view_diagram",
   "doctor",
   "describe_endpoints",
   "call_endpoint",
@@ -143,6 +149,10 @@ const SHORT_LISTED: Record<
     description: BUILD_DIAGRAM_DESCRIPTION,
     input: (tool) => buildDiagramInput(tool.entry),
   },
+  [EXPORT_DIAGRAM]: {
+    description: EXPORT_DIAGRAM_DESCRIPTION,
+    input: (tool) => exportDiagramInput(tool.entry),
+  },
 };
 
 function specs(server: McpServer, client: StarUMLClient, state: CatalogState): ToolSpec[] {
@@ -207,7 +217,7 @@ const RESULT_SHAPES: Record<
   (data: unknown, input: Record<string, unknown>) => CallToolResult
 > = {
   [BATCH]: batchResult,
-  export_diagram: exportResult,
+  [EXPORT_DIAGRAM]: exportResult,
 };
 
 function resultOf(name: string, data: unknown, input: Record<string, unknown>): CallToolResult {

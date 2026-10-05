@@ -77,6 +77,11 @@ describe("resources/list", () => {
         mimeType: "application/json",
       }),
       expect.objectContaining({
+        uri: "ui://staruml/viewer.html",
+        name: "viewer",
+        mimeType: "text/html;profile=mcp-app",
+      }),
+      expect.objectContaining({
         uri: "staruml://diagram/AAAAAAGhCh%2F2wd1CFIY%3D.png",
         name: "Main",
         mimeType: "image/png",
@@ -99,6 +104,7 @@ describe("resources/list", () => {
         "staruml://project/tree",
         "staruml://introspect/metamodel",
         "staruml://introspect/endpoints",
+        "ui://staruml/viewer.html",
       ]);
     } finally {
       await down.close();

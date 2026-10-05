@@ -23,7 +23,7 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 | **`staruml-mcp`** (this repo) | MCP server for AI agents | your machine via `npx -y staruml-mcp` |
 | **[`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 56 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
 
-- Using only Mermaid-based diagram tools? Install `staruml-mcp` only. The 4 built-in tools and `doctor` work.
+- Using only Mermaid-based diagram tools? Install `staruml-mcp` only. The 4 built-in tools, `doctor` and `view_diagram` (as a PNG) work.
 - Want the extension's 56 endpoints (whole diagrams from a spec or Mermaid in one call, project save/open, element CRUD, relationships, attributes and operations, view layout and styling, export, undo, batches, code generation, any StarUML command)? Install **both**.
 
 ## Prerequisites
@@ -156,6 +156,7 @@ extension    fail  http://localhost:58322 refused the request: Missing or wrong 
 | `get_all_diagrams_info` | List all diagrams in the current project (id, name, type). |
 | `get_current_diagram_info` | Get metadata of the currently focused diagram. |
 | `get_diagram_image_by_id` | Export a diagram as PNG by its ID. |
+| `view_diagram` | Show a diagram (default the current one): an interactive SVG viewer in clients that render MCP Apps, the `get_diagram_image_by_id` PNG otherwise ([below](#inline-viewer-mcp-apps)). The SVG comes from the extension. |
 | `doctor` | Check Node, both StarUML ports, the extension and StarUML versions; reloads the extension's tools and, given `tools`, switches the tier. |
 
 ### generate_diagram routing
@@ -190,9 +191,9 @@ default and reaches every other extension endpoint through two generic tools:
 
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
-| `core` (default) | the 5 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`; `describe_endpoints`, `call_endpoint` | 1,995 |
-| `all` | the 5 above and one tool per manifest endpoint | 9,325 |
-| `core,create_diagram,…` | the 5 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
+| `core` (default) | the 6 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`; `describe_endpoints`, `call_endpoint` | 1,995 |
+| `all` | the 6 above and one tool per manifest endpoint | 9,325 |
+| `core,create_diagram,…` | the 6 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
 Token counts include the server instructions (o200k_base, extension 0.3.0, `npm run
 benchmark:tokens`). Pick the tier with `--tools`, or `STARUML_MCP_TOOLS` for clients that pass
@@ -297,7 +298,9 @@ tokens, so `spec` lists a one-line grammar per kind and `describe_endpoints({nam
 ["build_diagram"]})` serves the full one. The unlisted `parentId` and `autoLayout` are accepted, and
 every body is checked against the manifest's whole request schema before it is sent, as for `batch`.
 
-`export_diagram` returns a PNG or JPEG as an image content block followed by the rest of the answer
+`export_diagram` lists a hand-written description and shorter parameter descriptions (147 tokens
+against the manifest's 208); the colour pattern is left to the check against the whole request
+schema, as for `build_diagram`. It returns a PNG or JPEG as an image content block followed by the rest of the answer
 (`width`, `height`, `bytes`) as JSON; as text, the base64 of even a small diagram costs thousands of
 tokens. SVG and exports written to `path` come back as JSON.
 
@@ -313,15 +316,44 @@ diagram PNGs out of tool results:
 | `staruml://project/tree` | `application/json` ownership tree of every model element and diagram, `[{_id, _type, name, children}]`, built from paged `find_elements` summaries (needs the extension) | `find_elements` with `type: "Model"` |
 | `staruml://introspect/metamodel` | `application/json` every metamodel type with attributes, supertypes and view types, schema values intact (needs the extension) | `introspect` with `include: ["metamodel"]` |
 | `staruml://introspect/endpoints` | `application/json` the endpoint manifest this server uses (live or bundled), with request and response JSON Schemas | `describe_endpoints` |
+| `ui://staruml/viewer.html` | `text/html;profile=mcp-app` the diagram viewer `view_diagram` names in its `_meta` | |
 | `staruml://diagram/{id}.png` | `image/png` blob; `{id}` is percent-encoded, since ids can contain `/`, `+` and `=` | `get_diagram_image_by_id` |
 
 `resources/list` enumerates one `staruml://diagram/{id}.png` per diagram; when StarUML is not
-reachable it lists only the five static resources. A failed read is a JSON-RPC error whose `data`
+reachable it lists only the six static resources. A failed read is a JSON-RPC error whose `data`
 holds the same `error` object a failed tool call returns.
 
 StarUML 7.1.1's `/get_diagram_image_by_id` ignores every field except `diagramId` (`scale`,
 `maxWidth`, `width` and `format` return identical bytes; the live suite checks this), so the
 image tool and resource offer no size options.
+
+### Inline viewer (MCP Apps)
+
+`view_diagram` follows the [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) extension,
+protocol version `2026-01-26` as published in `@modelcontextprotocol/ext-apps` 1.7.4. The MCP
+TypeScript SDK this server runs on (1.29.0) has no UI helpers, so the server side is the
+convention itself: the tool carries `_meta.ui.resourceUri` (and the older flat `ui/resourceUri`)
+pointing at `ui://staruml/viewer.html`, a resource of type `text/html;profile=mcp-app`. The page
+is one self-contained HTML file with no external requests; it speaks the protocol's JSON-RPC over
+`postMessage` itself (`ui/initialize`, `ui/notifications/tool-result`,
+`ui/notifications/host-context-changed`, `ui/notifications/size-changed`).
+
+- **Client renders MCP Apps**: it declared `capabilities.extensions["io.modelcontextprotocol/ui"]`
+  with that MIME type at `initialize`, or it has read the viewer resource in this session (some
+  hosts render without declaring). The tool exports the diagram as SVG through the extension's
+  `export_diagram` and looks up its name, then returns the SVG in `structuredContent` for the view
+  and a one-line JSON summary (`diagram`, `name`, `width`, `height`, `viewer`) as text for the
+  model, so the SVG does not enter the model's context. The view shows the diagram's name, pans by
+  dragging, zooms with the wheel or the −/+ buttons, fits on `Fit` or a double-click, and follows
+  the host's light or dark theme until the Dark button overrides it. The SVG is shown as an
+  `<img>` data URL, which runs no script whatever text the model put in element names.
+- **Any other client**, or no compatible extension: the PNG image block `get_diagram_image_by_id`
+  returns, from StarUML's built-in API, for `id` or the current diagram.
+
+The stateless HTTP transport builds a fresh server per request, which never sees the client's
+`initialize` or its resource reads, so over `--transport http` `view_diagram` always answers the
+PNG; the viewer needs stdio (Claude Desktop, Claude Code with a command) until the HTTP transport
+keeps sessions.
 
 ### Errors
 

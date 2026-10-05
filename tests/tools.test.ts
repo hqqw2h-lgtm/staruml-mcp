@@ -91,7 +91,10 @@ const ARGS: Record<string, Record<string, unknown>> = {
  */
 const INVALID: Record<string, Record<string, unknown>> = {
   "/build_diagram": { upsert: "yes" },
+  "/export_diagram": { scale: 9 },
 };
+
+const SHORT = new Set(["/batch", "/build_diagram", "/export_diagram"]);
 
 /** One case per manifest endpoint: required arguments only, an element summary as the answer. */
 const generated: ToolCase[] = ENDPOINTS.map((entry) => {
@@ -151,6 +154,7 @@ describe("tool registry", () => {
         "get_all_diagrams_info",
         "get_current_diagram_info",
         "get_diagram_image_by_id",
+        "view_diagram",
         ...BUNDLED_MANIFEST.endpoints.map((e) => toolName(e.path)),
       ].sort(),
     );
@@ -179,9 +183,9 @@ describe("tool registry", () => {
     }
   });
 
-  // batch and build_diagram list shorter schemas of their own (tests/batch.test.ts,
+  // batch, build_diagram and export_diagram list shorter schemas of their own (tests/batch.test.ts,
   // tests/build-diagram.test.ts).
-  it.each(ENDPOINTS.filter((e) => e.path !== "/batch" && e.path !== "/build_diagram"))(
+  it.each(ENDPOINTS.filter((e) => !SHORT.has(e.path)))(
     "lists $path's request schema as the manifest defines it",
     async (entry) => {
       const { tools } = await mcp.client.listTools();

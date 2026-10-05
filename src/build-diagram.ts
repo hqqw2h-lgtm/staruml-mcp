@@ -3,7 +3,7 @@
  * schema built from the manifest entry. The body is still checked against the entry's whole
  * request schema before it is sent.
  */
-import { inputSchema, type ManifestEntry } from "./manifest.js";
+import { shortInput, type ManifestEntry } from "./manifest.js";
 import type { z } from "zod";
 
 export const BUILD_DIAGRAM = "build_diagram";
@@ -34,24 +34,18 @@ const LISTED: Record<string, string> = {
   direction: "Layout direction.",
 };
 
+/**
+ * spec's record type lists as {type, propertyNames, properties, additionalProperties} and kind's
+ * enum repeats the kinds spec's description names: 46 tokens together. The whole request schema
+ * still checks both.
+ */
 const UNTYPED = new Set(["spec", "kind"]);
 
 /**
  * The listed input schema: {@link LISTED} out of the entry's properties, loose so `parentId` and
  * `autoLayout`, which describe_endpoints shows, still pass to the check against the whole
- * request schema. Properties the entry
- * lacks are left out, so an extension that renames one does not break the listing.
+ * request schema.
  */
 export function buildDiagramInput(entry: ManifestEntry): z.ZodObject {
-  const properties = (entry.request.properties ?? {}) as Record<string, Record<string, unknown>>;
-  const listed: Record<string, Record<string, unknown>> = {};
-  for (const [name, description] of Object.entries(LISTED)) {
-    const property = properties[name];
-    if (property === undefined) continue;
-    // spec's record type lists as {type, propertyNames, properties, additionalProperties} and
-    // kind's enum repeats the kinds spec's description names: 46 tokens together. The whole
-    // request schema still checks both.
-    listed[name] = UNTYPED.has(name) ? { description } : { ...property, description };
-  }
-  return inputSchema({ schema: { type: "object", properties: listed }, passthrough: true });
+  return shortInput(entry, LISTED, UNTYPED);
 }

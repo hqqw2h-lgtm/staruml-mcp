@@ -180,6 +180,7 @@ describe("core tier (default)", () => {
       "get_all_diagrams_info",
       "get_current_diagram_info",
       "get_diagram_image_by_id",
+      "view_diagram",
       "doctor",
       "get_element_by_id",
       "find_elements",
@@ -509,6 +510,7 @@ describe("selections", () => {
       "get_all_diagrams_info",
       "get_current_diagram_info",
       "get_diagram_image_by_id",
+      "view_diagram",
       "doctor",
       "create_diagram",
       "describe_endpoints",
@@ -523,7 +525,7 @@ describe("selections", () => {
   it("drops the generic tools when every endpoint has a tool", async () => {
     const names = await namesFor("all");
 
-    expect(names).toHaveLength(5 + BUNDLED_MANIFEST.endpoints.length);
+    expect(names).toHaveLength(6 + BUNDLED_MANIFEST.endpoints.length);
     expect(names).not.toContain("call_endpoint");
   });
 
@@ -541,6 +543,7 @@ describe("selections", () => {
       "get_all_diagrams_info",
       "get_current_diagram_info",
       "get_diagram_image_by_id",
+      "view_diagram",
       "doctor",
       "find_elements",
       "describe_endpoints",

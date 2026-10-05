@@ -158,6 +158,28 @@ export function withoutTrivialKeywords(schema: unknown): unknown {
 }
 
 /**
+ * A shorter listing for an endpoint whose manifest descriptions cost more than they tell: the
+ * properties named in `descriptions`, with those descriptions, and `bare` ones with nothing but
+ * the description. The root is loose, so parameters left out still reach the check against the
+ * whole request schema that such tools run before sending. Names the entry lacks are skipped, so
+ * an extension that renames one does not break the listing.
+ */
+export function shortInput(
+  entry: ManifestEntry,
+  descriptions: Readonly<Record<string, string>>,
+  bare: ReadonlySet<string> = new Set(),
+): z.ZodObject {
+  const properties = (entry.request.properties ?? {}) as Record<string, JsonSchema>;
+  const listed: Record<string, JsonSchema> = {};
+  for (const [name, description] of Object.entries(descriptions)) {
+    const property = properties[name];
+    if (property === undefined) continue;
+    listed[name] = bare.has(name) ? { description } : { ...property, description };
+  }
+  return inputSchema({ schema: { type: "object", properties: listed }, passthrough: true });
+}
+
+/**
  * zod's `fromJSONSchema` (zod 4.2+) turns an object without `additionalProperties` into a loose
  * object, which lists `additionalProperties: {}`. The extension strips unknown keys either way, so
  * the root is rebuilt from its shape: strict as the manifest lists it, or loose when parameters

@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { BATCH_DESCRIPTION } from "../src/batch.js";
+import { EXPORT_DIAGRAM_DESCRIPTION } from "../src/export-diagram.js";
 import { UpstreamFixture } from "./support/fixture.js";
 import { connect, text, type ConnectedClient } from "./support/mcp.js";
 
@@ -368,6 +369,30 @@ describe("export_diagram", () => {
         text: '{"diagram":"D1","format":"png","width":640,"height":480,"bytes":1234,"mimeType":"image/png"}',
       },
     ]);
+  });
+
+  it("lists a shorter schema of its own with every parameter", async () => {
+    const { tools } = await mcp.client.listTools();
+    const tool = tools.find((t) => t.name === "export_diagram")!;
+    const properties = tool.inputSchema.properties as Record<string, Record<string, unknown>>;
+
+    expect(tool.description).toBe(EXPORT_DIAGRAM_DESCRIPTION);
+    expect(Object.keys(properties)).toEqual(["id", "format", "scale", "background", "path"]);
+    expect(properties.background).toEqual({
+      description: "CSS colour, e.g. #fff; default transparent.",
+    });
+    expect(properties.scale).toMatchObject({ type: "number", exclusiveMinimum: 0, maximum: 4 });
+  });
+
+  it("checks the colour against the manifest's pattern before sending", async () => {
+    const result = await mcp.call("export_diagram", { background: "url(x)" });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      error: { code: "INVALID_ARGUMENT", endpoint: "/export_diagram" },
+    });
+    expect(text(result)).toMatch(/^Failed to export diagram: background: /);
+    expect(extension.requests).toEqual([]);
   });
 
   it("returns an image reached through call_endpoint as an image block", async () => {

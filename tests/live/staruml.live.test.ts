@@ -19,10 +19,12 @@ import { main, type RunningServer } from "../../src/index.js";
 import { BUNDLED_MANIFEST, toolName } from "../../src/manifest.js";
 import { diagramImageUri, ENDPOINTS_URI, METAMODEL_URI } from "../../src/server.js";
 import { StarUMLClient } from "../../src/staruml-client.js";
+import { VIEWER_URI } from "../../src/viewer.js";
 import { CORE_ENDPOINTS, parseToolSelection } from "../../src/tiers.js";
 import { closedPort } from "../support/fixture.js";
 import { decodePng, differingRows } from "../support/png.js";
-import { connect, text, type ConnectedClient } from "../support/mcp.js";
+import { connect, text, UI_CAPABILITIES, type ConnectedClient } from "../support/mcp.js";
+import { loadViewer } from "../support/viewer.js";
 import { rpc } from "../support/sse.js";
 
 const LIVE = process.env.STARUML_LIVE === "1";
@@ -134,6 +136,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           "get_all_diagrams_info",
           "get_current_diagram_info",
           "get_diagram_image_by_id",
+          "view_diagram",
           "doctor",
           "describe_endpoints",
           "call_endpoint",
@@ -153,7 +156,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       try {
         const names = (await all.client.listTools()).tools.map((t) => t.name);
         const endpoints = catalog.current.compiled.manifest.endpoints.map((e) => toolName(e.path));
-        expect(names.length).toBe(5 + endpoints.length);
+        expect(names.length).toBe(6 + endpoints.length);
         expect(names).toEqual(expect.arrayContaining(endpoints));
         expect(
           payload<{ count: number }>(await all.call("get_all_commands")).count,
@@ -675,6 +678,37 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       ok(await call("export_html", { path: html }));
       expect(existsSync(join(html, "index.html"))).toBe(true);
     }, 60_000);
+
+    it("view_diagram shows the SVG export in the viewer, and a PNG without MCP Apps (#10)", async () => {
+      const app = await connect({ catalog }, UI_CAPABILITIES);
+      try {
+        const result = await app.call("view_diagram", { id: classDiagramId });
+        const shown = result.structuredContent as { svg: string; name: string; diagram: string };
+        expect(result.isError, text(result)).toBeFalsy();
+        expect(shown).toMatchObject({ diagram: classDiagramId, name: "LiveDiagram" });
+        expect(shown.svg).toMatch(/^<svg [\s\S]*<\/svg>$/);
+        expect(shown.svg).toContain(">Book<");
+        expect(shown.svg).toContain(">Author<");
+        expect(JSON.parse(text(result))).toMatchObject({ viewer: VIEWER_URI });
+
+        // The page the host would render, driven as the host would.
+        const page = await app.client.readResource({ uri: VIEWER_URI });
+        const viewer = loadViewer((page.contents[0] as { text: string }).text);
+        viewer.receive({ jsonrpc: "2.0", id: 1, result: { hostContext: {} } });
+        await viewer.settle();
+        viewer.receive({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: result });
+        const src = viewer.elements.diagram.src;
+        expect(decodeURIComponent(src.slice(src.indexOf(",") + 1))).toBe(shown.svg);
+        expect(viewer.elements.name.textContent).toBe("LiveDiagram");
+      } finally {
+        await app.close();
+      }
+
+      const fallback = await call("view_diagram", { id: classDiagramId });
+      const image = fallback.content[0] as { type: string; data: string };
+      expect(image.type).toBe("image");
+      expect(Buffer.from(image.data, "base64").subarray(0, 8).toString("hex")).toBe(PNG_SIGNATURE);
+    });
 
     it("introspects versions and the debug surface", async () => {
       const info = payload<{

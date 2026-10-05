@@ -381,6 +381,7 @@ describe("doctor tool", () => {
         "get_all_diagrams_info",
         "get_current_diagram_info",
         "get_diagram_image_by_id",
+        "view_diagram",
       ]);
       expect(text(result)).toContain("tier         ok    core: 0 extension tools listed");
     } finally {

@@ -17,6 +17,14 @@ import { readProjectTree } from "./project-tree.js";
 import { StarUMLClient } from "./staruml-client.js";
 import { parseToolSelection, type ToolSelection } from "./tiers.js";
 import { jsonResult, resourceError, runTool, textResult } from "./tool-result.js";
+import { VIEW_DIAGRAM, VIEW_DIAGRAM_DESCRIPTION, viewDiagram } from "./view-diagram.js";
+import {
+  declaresUi,
+  VIEWER_HTML,
+  VIEWER_MIME_TYPE,
+  VIEWER_TOOL_META,
+  VIEWER_URI,
+} from "./viewer.js";
 
 const SUPPORTED_MERMAID_DIAGRAMS = [
   "classDiagram",
@@ -75,6 +83,10 @@ const GenerateDiagramInput = unstamped(
 
 const DiagramImageInput = unstamped(z.object({ diagramId: id("Diagram") }));
 
+const ViewDiagramInput = unstamped(
+  z.object({ id: id("Diagram").optional().describe("Diagram _id; default the current one.") }),
+);
+
 const DoctorInput = unstamped(
   z.object({
     tools: z
@@ -100,6 +112,32 @@ export function createServer(config: ServerConfig = {}): McpServer {
   const catalog = config.catalog ?? new CatalogState();
   registerResources(server, client, catalog);
 
+  // A host may render MCP Apps without declaring the capability; fetching the view is the other
+  // sign that it does (the approach of jgraph/drawio-mcp's app server). Over the stateless HTTP
+  // transport each request gets a new server that sees neither, so the PNG is returned there.
+  let viewerRead = false;
+  server.registerResource(
+    "viewer",
+    VIEWER_URI,
+    {
+      description: "Interactive SVG viewer for view_diagram (MCP Apps).",
+      mimeType: VIEWER_MIME_TYPE,
+    },
+    async (uri) => {
+      viewerRead = true;
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: VIEWER_MIME_TYPE,
+            text: VIEWER_HTML,
+            _meta: { ui: { prefersBorder: true } },
+          },
+        ],
+      };
+    },
+  );
+
   server.registerTool(
     "generate_diagram",
     {
@@ -108,7 +146,9 @@ export function createServer(config: ServerConfig = {}): McpServer {
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     },
     async (input) =>
-      runTool("generate diagram", () => generateDiagram(client, buildDiagramTool(catalog), input)),
+      runTool("generate diagram", () =>
+        generateDiagram(client, extensionTool(catalog, BUILD_DIAGRAM), input),
+      ),
   );
 
   server.registerTool(
@@ -147,6 +187,21 @@ export function createServer(config: ServerConfig = {}): McpServer {
   );
 
   server.registerTool(
+    VIEW_DIAGRAM,
+    {
+      description: VIEW_DIAGRAM_DESCRIPTION,
+      inputSchema: ViewDiagramInput,
+      annotations: READ_ONLY,
+      _meta: VIEWER_TOOL_META,
+    },
+    async ({ id }) =>
+      runTool("view diagram", () => {
+        const inline = viewerRead || declaresUi(server.server.getClientCapabilities());
+        return viewDiagram(client, extensionTool(catalog, "export_diagram"), id, inline);
+      }),
+  );
+
+  server.registerTool(
     "doctor",
     {
       description: "Check StarUML, extension and Node setup; reloads the extension's tools.",
@@ -171,10 +226,10 @@ export function createServer(config: ServerConfig = {}): McpServer {
   return server;
 }
 
-/** /build_diagram of the current catalog, which generate_diagram uses whether listed or not. */
-function buildDiagramTool(catalog: CatalogState) {
+/** An endpoint of the current catalog, which hand-written tools use whether listed or not. */
+function extensionTool(catalog: CatalogState, name: string) {
   const { enabled, compiled } = catalog.current;
-  return enabled ? compiled.tools.find((t) => t.name === BUILD_DIAGRAM) : undefined;
+  return enabled ? compiled.tools.find((t) => t.name === name) : undefined;
 }
 
 function selectionArgument(value: string): ToolSelection {
