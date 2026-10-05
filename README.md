@@ -365,7 +365,7 @@ npm test               # vitest: unit, tool-level and HTTP transport tests
 npm run test:coverage  # same, failing below 100% lines/branches/functions/statements
 npm run test:live      # STARUML_LIVE=1: every tool and endpoint against a running StarUML + extension
 npm run load-test      # HTTP transport load test (needs npm run build)
-npm run benchmark:tokens # token cost of four scenarios, current vs. 56864ca, 0cfc06b and 45bedd4
+npm run benchmark:tokens # token cost of four scenarios under two accountings, current vs. 56864ca, 0cfc06b and 45bedd4
 npm run sync:manifest  # refresh src/extension-manifest.json from a running extension
 npm run typecheck      # tsc --noEmit for src and tests
 ```
@@ -384,33 +384,40 @@ path it prints.
 
 `scripts/load-test.mjs` starts `dist/index.js` with `--transport http` and sends
 `tools/call get_all_diagrams_info` at each concurrency level; `--call-endpoint` sends a
-`call_endpoint` of `find_elements`, which adds the manifest schema check and the extension port, and
+`call_endpoint` of `find_elements`, which adds the manifest schema check and the extension port,
 `--batch` a `batch` of four read-only ops, one of them with a `"$p.project"` reference, which adds
-the per-op schema checks. StarUML and the extension are replaced by an in-process stub, which serves
-the bundled 0.3.0 manifest, so the numbers measure this server and a local StarUML does not change
-them. Every request builds a fresh `McpServer` (stateless mode), which dominates the cost. Any
-failed request makes the script exit non-zero; `--max-p99-ms` and `--min-rps` add budgets, and CI
-runs the default and `--batch` paths with `--requests 2000 --max-p99-ms 2000 --min-rps 100`.
+the per-op schema checks, and `--build` a `build_diagram` of a three-class Mermaid diagram with
+`upsert`, which adds the check against the whole request schema. StarUML and the extension are
+replaced by an in-process stub, which serves the bundled 0.3.0 manifest, so the numbers measure
+this server and a local StarUML does not change them. Every request builds a fresh `McpServer`
+(stateless mode), which dominates the cost. Any failed request makes the script exit non-zero;
+`--max-p99-ms` and `--min-rps` add budgets, and CI runs the default, `--batch` and `--build` paths
+with `--requests 2000 --max-p99-ms 2000 --min-rps 100`.
 
 Measured on an Intel i9-9980HK (8 cores / 16 threads), macOS, Node 22.23.3, 5000 requests per
-level after 500 warm-up requests, load generator on the same machine, core tier (14 tools
+level after 500 warm-up requests, load generator on the same machine, core tier (15 tools
 registered per request). Ranges span two runs on a machine shared with other work (load average
-8–20 during the runs):
+4–6 during the runs):
 
 | Tool | Concurrency | req/s | p50 | p99 | Errors |
 |---|---|---|---|---|---|
-| `get_all_diagrams_info` | 50 | 812–1023 | 45–52 ms | 83–176 ms | 0 |
-| `get_all_diagrams_info` | 200 | 856–1253 | 143–190 ms | 265–574 ms | 0 |
-| `call_endpoint` | 50 | 894–975 | 47–53 ms | 89–90 ms | 0 |
-| `call_endpoint` | 200 | 846–882 | 144–196 ms | 482–2717 ms | 0 |
-| `batch` (4 ops) | 50 | 935–951 | 50 ms | 87–92 ms | 0 |
-| `batch` (4 ops) | 200 | 860–1077 | 173–175 ms | 332–692 ms | 0 |
+| `get_all_diagrams_info` | 50 | 936–940 | 48–49 ms | 94–97 ms | 0 |
+| `get_all_diagrams_info` | 200 | 1048–1094 | 168–173 ms | 313–375 ms | 0 |
+| `call_endpoint` | 50 | 877–897 | 51–53 ms | 94–99 ms | 0 |
+| `call_endpoint` | 200 | 972–1050 | 175–184 ms | 306–401 ms | 0 |
+| `batch` (4 ops) | 50 | 678–875 | 53–61 ms | 96–197 ms | 0 |
+| `batch` (4 ops) | 200 | 940–979 | 191–206 ms | 290–325 ms | 0 |
+| `build_diagram` | 50 | 626–874 | 52–64 ms | 97–254 ms | 0 |
+| `build_diagram` | 200 | 988–998 | 178–194 ms | 325–550 ms | 0 |
 
-Against the real StarUML 7.1.1 with extension 0.3.0 (`--live --requests 1000 --concurrency 50`,
-two runs each, 0 errors): `get_all_diagrams_info` 725–774 req/s, p50 62–66 ms, p99 86–88 ms;
-`call_endpoint` `find_elements` 771–837 req/s, p50 59–64 ms, p99 72–80 ms; `batch` of four ops
-695–709 req/s, p50 69–70 ms, p99 92–96 ms. The generated tools' zod schemas are built once per
-manifest and shared by every per-request server.
+At concurrency 200 the slowest request of each run took 1.7–4.0 s, every path alike: queueing in the
+single Node process, not a slower code path. Against the real StarUML 7.1.1 with extension 0.3.0
+(`--live --requests 1000 --concurrency 50`, two runs each, 0 errors): `get_all_diagrams_info`
+729–730 req/s, p50 67–68 ms, p99 83–85 ms; `call_endpoint` `find_elements` 690–728 req/s, p50
+68–70 ms, p99 83–119 ms; `batch` of four ops 695–698 req/s, p50 72 ms, p99 86–87 ms;
+`build_diagram` 620–648 req/s, p50 76 ms, p99 114–124 ms (3,000 upserts, warm-up included, of one three-class
+diagram, which StarUML built once and then found complete). The generated tools' zod schemas are
+built once per manifest and shared by every per-request server.
 
 ## Token efficiency
 
@@ -420,49 +427,74 @@ offline. Upstream responses are shaped like StarUML 7.1.1 + extension 0.3.0 outp
 summaries; the command list is the 322 ids captured from 7.1.1 in `scripts/benchmark-data/`). Four
 servers see the same data: `56864ca` (before issue #5), `0cfc06b` (issue #5, the last hand-written
 tool set, 21 tools), `45bedd4` (phase 2a, one tool per manifest endpoint, 34 tools) and the current
-one with the default core tier (14 tools). The first three are loaded with `git show` and run on
+one with the default core tier (15 tools). The first three are loaded with `git show` and run on
 the current dependencies (zod 4 lists schemas about 100 tokens shorter than zod 3 did, so #5's
-definitions measure 1831 here, 1930 when it was committed). Each scenario counts the tool
-definitions a client forwards to the model (name, description, input schema) plus server
-instructions once, and the text of every result; image bytes are excluded because they are the
-same on every side and billed as vision input. When a step's tool is not listed, the scenario calls
-it through `call_endpoint` and first asks `describe_endpoints` for every such endpoint it uses, in
-one call whose result is counted. The two native-diagram scenarios have a second plan for a server
-that lists `batch`: every creation in one `batch` call, and `export_diagram` instead of the
-built-in image endpoint; the endpoints inside the batch count as used, since the model needs their
-schemas to write the op bodies. Tokenizer: `o200k_base` from `gpt-tokenizer`.
+definitions measure 1831 here, 1930 when it was committed). When a step's tool is not listed, the
+scenario calls it through `call_endpoint` and first asks `describe_endpoints` for every such
+endpoint it uses, in one call that is counted. The two native-diagram scenarios are one
+`build_diagram` call from a spec on a server that lists it, which is what the endpoint is for, and
+one call per element on the others; "now batch" replays the current server with every creation in
+one `batch` call instead, for comparison. Both use `export_diagram` for the preview and keep the
+`save_project` step every server makes. Tokenizer: `o200k_base` from `gpt-tokenizer`; image bytes
+are excluded, since they are the same on every side and billed as vision input.
 
-| | pre-#5 | #5 | phase 2a | now (core) |
-|---|---|---|---|---|
-| Tools listed | 21 | 21 | 34 | 14 |
-| Definitions + instructions | 3011 | 1831 | 6154 | 1736 |
+Two accountings, side by side:
 
-| Scenario | Calls before / now | Results pre-#5 / #5 / phase 2a / now | Total pre-#5 / #5 / phase 2a / now |
-|---|---|---|---|
-| Mermaid class diagram + preview | 4 / 4 | 186 / 120 / 120 / 120 | 3197 / 1951 / 6274 / 1856 |
-| Native use-case diagram | 11 / 3 | 971 / 666 / 666 / 1731 | 3982 / 2497 / 6820 / 3467 |
-| Inspect and refactor a class model | 8 / 8 | 3216 / 2403 / 2403 / 2582 | 6227 / 4234 / 8557 / 4318 |
-| Native class diagram + export | 11 / 4 | 906 / 627 / 627 / 1750 | 3917 / 2458 / 6781 / 3486 |
-| All scenarios | 34 / 19 | 5279 / 3816 / 3816 / 6183 | 17323 / 11140 / 28432 / 13127 |
+- **(a) per scenario**: the tool definitions a client forwards to the model (name, description,
+  input schema) and the server instructions once per scenario, plus the text of every result. This
+  is how the issue #5 baseline was measured; clients resend the definitions with every turn, so one
+  copy per scenario is the conservative floor.
+- **(b) per session with prompt caching**: the definitions and instructions once for the whole
+  session of four scenarios, then for every call its result text and the call itself (tool name
+  and JSON arguments, which the model writes as output tokens). A client that caches its prompt
+  prefix sends the fixed tool list once and reads it from the cache at a fraction of the price after
+  that, so this is closer to how sessions are billed.
 
-The all-scenario total is 13127: 24.2% below pre-#5, 53.8% below phase 2a and 17.8% above #5. The
-target of issue #5, 60% below pre-#5, is not met: over the first three scenarios it is 5362 and the
-current server needs 9641 (28.1% below pre-#5; 8488 on phase 2b, before `batch` and
-`export_diagram` joined the core tier), over all four it is 6929 against 13127. The definitions
-alone, counted once per scenario, are 5208 and 6944: over three scenarios that leaves 154 tokens
-for every result together, and over four the definitions exceed the target before any call, so
-under this accounting the target needs a smaller core listing, not smaller results.
+| | pre-#5 | #5 | phase 2a | now batch | now (core) |
+|---|---|---|---|---|---|
+| Tools listed | 21 | 21 | 34 | 15 | 15 |
+| Definitions + instructions | 3011 | 1831 | 6154 | 1995 | 1995 |
 
-`batch` replaces ten creation calls with one (11 → 3 and 11 → 4 calls). Its result costs about
-the same as the ten results it replaces (642 tokens for eight ops of the class diagram), so the
-single-copy accounting above shows little gain; the cost that remains is `describe_endpoints` for
-the op endpoints (1029 tokens for `create_diagram`, `create_element_with_view`,
-`create_edge_with_view` and `save_project`), which #5's hand-written tools did not need. The saving
-`batch` does make is in model turns: a client resends the definitions and the growing conversation
-with every turn, and the two native scenarios take 15 fewer turns. `export_diagram` adds 32 tokens
-of metadata next to the image. `--tools all` lists 55 tools for 8412 tokens (all scenarios 37594).
-Generated descriptions stay one line of at most 100 characters (a test enforces it on every listed
-tool), and a test keeps the core listing within 2,000 tokens.
+(a) Definitions once per scenario, plus results:
+
+| Scenario | Calls before / now | pre-#5 | #5 | phase 2a | now batch | now | vs pre-#5 | vs #5 |
+|---|---|---|---|---|---|---|---|---|
+| Mermaid class diagram + preview | 4 / 4 | 3197 | 1951 | 6274 | 2115 | 2115 | −33.8% | +8.4% |
+| Native use-case diagram | 11 / 2 | 3982 | 2497 | 6820 | 3726 | 2335 | −41.4% | −6.5% |
+| Inspect and refactor a class model | 8 / 8 | 6227 | 4234 | 8557 | 4601 | 4601 | −26.1% | +8.7% |
+| Native class diagram + export | 11 / 3 | 3917 | 2458 | 6781 | 3745 | 2358 | −39.8% | −4.1% |
+| All scenarios | 34 / 17 | 17323 | 11140 | 28432 | 14187 | 11409 | −34.1% | +2.4% |
+
+(b) Definitions once per session, plus results and calls:
+
+| Scenario | pre-#5 | #5 | phase 2a | now batch | now | vs pre-#5 | vs #5 |
+|---|---|---|---|---|---|---|---|
+| Mermaid class diagram + preview | 282 | 216 | 216 | 216 | 216 | −23.4% | 0.0% |
+| Native use-case diagram | 1490 | 1185 | 1185 | 2223 | 449 | −69.9% | −62.1% |
+| Inspect and refactor a class model | 3369 | 2556 | 2556 | 2805 | 2805 | −16.7% | +9.7% |
+| Native class diagram + export | 1434 | 1155 | 1155 | 2259 | 496 | −65.4% | −57.1% |
+| Definitions, once | 3011 | 1831 | 6154 | 1995 | 1995 | | |
+| Session | 9586 | 6943 | 11266 | 9498 | 5961 | −37.8% | −14.1% |
+
+Targets of issues #5 and #8, under each accounting:
+
+| Target | (a) per scenario | (b) per session |
+|---|---|---|
+| #5 / #8: 60% below pre-#5, first three scenarios | not met: 9051 against ≤ 5362 (−32.5%) | not met: 5465 against ≤ 3260 (−33.0%) |
+| #5 / #8: 60% below pre-#5, all four scenarios | not met: 11409 against ≤ 6929 (−34.1%) | not met: 5961 against ≤ 3834 (−37.8%) |
+| #8: core definitions ≤ 2,000 | met: 1995 | met: 1995 |
+| #8: all scenarios below #5 | not met: 11409 against 11140 (+2.4%) | met: 5961 against 6943 (−14.1%) |
+
+`build_diagram` does what it is for: a native diagram costs 449 and 496 tokens of results and calls
+(the spec it is given included), against 1185 and 1155 for #5's one call per element and 2223 and
+2259 for one `batch`, whose ops repeat every parent and diagram id and need `describe_endpoints` for
+four endpoint schemas. Under (a) that saving is hidden by the definitions, counted four times
+(7980 of 11409 tokens); under (b) the session is 14.1% below #5 and 37.8% below pre-#5. What keeps
+(b) above the 60% target is the fixed definitions (1995, a third of the session) and the refactor
+scenario, whose `get_all_commands` result alone is 1947 tokens of the 322 command ids; neither is
+touched by diagram building. `--tools all` lists 61 tools for 9325 tokens (all scenarios (a)
+40394, (b) 12864). Generated descriptions stay one line of at most 100 characters (a test enforces
+it on every listed tool), and a test keeps the core listing within 2,000 tokens.
 
 ## Architecture
 

@@ -68,3 +68,6 @@ jobs:
 
       - name: Load test (batch)
         run: npm run load-test -- --batch --requests 2000 --max-p99-ms 2000 --min-rps 100
+
+      - name: Load test (build_diagram)
+        run: npm run load-test -- --build --requests 2000 --max-p99-ms 2000 --min-rps 100

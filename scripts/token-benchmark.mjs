@@ -6,19 +6,29 @@
 // upstream data, shaped like StarUML 7.1.1 + extension 0.3.0 responses (element summaries, paged
 // find_elements).
 //
-// Counted per scenario: the tools/list definitions (name, description, inputSchema) once, the
-// server instructions once, and the text of every tool result. Clients resend the definitions
-// with each model turn, so a single copy is the most conservative figure. Image bytes are
-// excluded: they are identical on all sides and billed as vision input, not text.
+// Two accountings are reported side by side:
+// (a) per scenario: the tools/list definitions (name, description, inputSchema) and the server
+//     instructions once per scenario, plus the text of every tool result. Clients resend the
+//     definitions with each model turn, so one copy per scenario is the most conservative
+//     figure; the issue #5 baseline was measured this way.
+// (b) per session with prompt caching: the definitions and instructions once for the whole
+//     session of four scenarios, as a client that caches its prompt prefix (Anthropic prompt
+//     caching, OpenAI's prefix cache) sends the fixed tool list once and reads it from the cache
+//     at a fraction of the price after that; then, for every call, the result text plus the call
+//     itself, its tool name and arguments as JSON, which the model writes as output tokens.
+// Image bytes are excluded from both: they are identical on all sides and billed as vision input.
 //
 // A step whose tool a server does not list goes through call_endpoint, and the scenario first
 // asks describe_endpoints for every such endpoint it uses, in one call whose result is counted:
 // a model has to read a schema before it can fill a body.
 //
-// The two native-diagram scenarios have a second plan for a server that lists the batch tool:
-// every creation in one /batch call, and /export_diagram instead of the built-in image endpoint.
-// Endpoints used inside the batch count as used for describe_endpoints, since each op body
-// follows its endpoint's schema.
+// The two native-diagram scenarios have two more plans. A server that lists build_diagram
+// builds the diagram with one /build_diagram call from a spec, which is what the endpoint is
+// for; one that lists batch makes every creation in one /batch call. Both use /export_diagram
+// instead of the built-in image endpoint. Endpoints used inside a batch count as used for
+// describe_endpoints, since each op body follows its endpoint's schema; build_diagram's listing
+// carries its spec grammar, so it needs none. The current server is also replayed with the batch
+// plan, for comparison.
 // Tokens are o200k_base counts from gpt-tokenizer; other tokenizers differ by a few percent
 // but the ratios are what matters.
 //
@@ -106,11 +116,12 @@ function createdWithView(type, name, diagram) {
 }
 
 /**
- * A native diagram built from `nodes` and `edges`, as the two ways a server offers: one call per
- * element (`steps`), or one /batch call whose ops name earlier results with "$name" references
- * (`batch`), answered the way extension 0.3.0 answers it (src/handlers/batch.ts).
+ * A native diagram built from `nodes` and `edges`, as the three ways a server offers: one call
+ * per element (`steps`), one /batch call whose ops name earlier results with "$name" references
+ * (`batch`), or one /build_diagram call with `spec` (`build`), each answered the way extension
+ * 0.3.0 answers it (src/handlers/batch.ts, src/handlers/build.ts).
  */
-function nativeDiagram(type, name, nodes, edges) {
+function nativeDiagram(type, name, nodes, edges, spec) {
   const diagram = summary(type, name, model);
   const created = nodes.map((n) => ({ ...n, data: createdWithView(n.type, n.name, diagram) }));
   const edgeData = edges.map(([tail]) => ({
@@ -172,6 +183,24 @@ function nativeDiagram(type, name, nodes, edges) {
     })),
   ];
   const datas = [diagram, ...created.map((n) => n.data), ...edgeData];
+  // What 0.3.0's /build_diagram answers for the same diagram (src/handlers/build.ts).
+  const built = {
+    diagram: { _id: diagram._id, _type: diagram._type, name },
+    kind: spec.kind,
+    upserted: false,
+    created: nodes.length + edges.length,
+    updated: 0,
+    unchanged: 0,
+    layout: "engine",
+    ids: Object.fromEntries(
+      created.map((n) => [n.name, { model: n.data.model._id, view: n.data.view._id }]),
+    ),
+    edges: edges.map(([tail, head], i) => ({
+      key: `${nodes[tail].name} -> ${nodes[head].name}`,
+      model: edgeData[i].model._id,
+      view: edgeData[i].view._id,
+    })),
+  };
   const answer = {
     atomic: true,
     succeeded: ops.length,
@@ -183,7 +212,18 @@ function nativeDiagram(type, name, nodes, edges) {
       data: datas[i],
     })),
   };
-  return { diagram, steps, batch: step("batch", { ops }, "extension", "/batch", answer) };
+  return {
+    diagram,
+    steps,
+    batch: step("batch", { ops }, "extension", "/batch", answer),
+    build: step(
+      "build_diagram",
+      { kind: spec.kind, name, spec: spec.body },
+      "extension",
+      "/build_diagram",
+      built,
+    ),
+  };
 }
 
 const useCase = nativeDiagram(
@@ -200,6 +240,18 @@ const useCase = nativeDiagram(
     [0, 3],
     [1, 3],
   ],
+  {
+    kind: "usecase",
+    body: {
+      actors: ["Customer", "Clerk"],
+      useCases: ["Place order", "Pay"],
+      relations: [
+        { from: "Customer", to: "Place order" },
+        { from: "Customer", to: "Pay" },
+        { from: "Clerk", to: "Pay" },
+      ],
+    },
+  },
 );
 
 const shop = nativeDiagram(
@@ -216,6 +268,17 @@ const shop = nativeDiagram(
     [1, 2],
     [2, 3],
   ],
+  {
+    kind: "class",
+    body: {
+      classes: ["Customer", "Order", "OrderLine", "Product"].map((name) => ({ name })),
+      relations: [
+        { from: "Customer", to: "Order" },
+        { from: "Order", to: "OrderLine" },
+        { from: "OrderLine", to: "Product" },
+      ],
+    },
+  },
 );
 
 const findModel = step("find_elements", { type: "UMLModel" }, "extension", "/find_elements", {
@@ -239,8 +302,10 @@ const exported = {
 };
 
 /**
- * `steps` is what every server can replay; `batched` is the same work for a server that lists
- * the batch tool: one /batch for the creations and /export_diagram for the preview.
+ * `steps` is what every server can replay; `built` and `batched` are the same work for a server
+ * that lists build_diagram or batch: one call for the creations and /export_diagram for the
+ * preview. Only the element-by-element plans look the model up, since they need a parent id;
+ * build_diagram defaults to the project, where StarUML adds the model the kind needs.
  */
 const scenarios = [
   {
@@ -278,6 +343,7 @@ const scenarios = [
       saveAs("/work/checkout.mdj"),
     ],
     batched: [findModel, useCase.batch, saveAs("/work/checkout.mdj")],
+    built: [useCase.build, saveAs("/work/checkout.mdj")],
   },
   {
     name: "Inspect and refactor a class model",
@@ -341,6 +407,11 @@ const scenarios = [
       step("export_diagram", { id: shop.diagram._id }, "extension", "/export_diagram", exported),
       saveAs("/work/shop.mdj"),
     ],
+    built: [
+      shop.build,
+      step("export_diagram", { id: shop.diagram._id }, "extension", "/export_diagram", exported),
+      saveAs("/work/shop.mdj"),
+    ],
   },
 ];
 
@@ -349,7 +420,16 @@ const scenarios = [
 const textTokens = (result) =>
   result.content.filter((c) => c.type === "text").reduce((sum, c) => sum + countTokens(c.text), 0);
 
-async function measure(createServer) {
+/** A call as the model writes it: the tool name and its arguments as JSON. */
+const callTokens = (name, args) => countTokens(JSON.stringify({ name, arguments: args }));
+
+/** Plans by preference: a scenario takes the first whose tool the server lists. */
+const PLANS = [
+  ["build_diagram", "built"],
+  ["batch", "batched"],
+];
+
+async function measure(createServer, plans = PLANS) {
   const builtin = await new UpstreamFixture().start();
   const extension = await new UpstreamFixture().start();
   const server = createServer({
@@ -373,14 +453,17 @@ async function measure(createServer) {
     const listed = new Set(tools.map((t) => t.name));
     const perScenario = [];
     for (const scenario of scenarios) {
-      const steps = listed.has("batch") && scenario.batched ? scenario.batched : scenario.steps;
+      const plan = plans.find(([tool, key]) => listed.has(tool) && scenario[key] !== undefined);
+      const steps = plan === undefined ? scenario.steps : scenario[plan[1]];
       let results = 0;
+      let calls = 0;
       const call = async (name, args) => {
         const result = await client.callTool({ name, arguments: args });
         if (result.isError) {
           throw new Error(`${scenario.name}: ${name} failed: ${JSON.stringify(result.content)}`);
         }
         results += textTokens(result);
+        calls += callTokens(name, args);
       };
       // A batch op's body follows its endpoint's schema, which the model must have read too.
       const used = steps.flatMap((s) =>
@@ -395,7 +478,13 @@ async function measure(createServer) {
           ? call(s.tool, s.args)
           : call("call_endpoint", { name: s.tool, body: s.args }));
       }
-      perScenario.push({ definitions, results, total: definitions + results, calls: steps.length });
+      perScenario.push({
+        results,
+        calls,
+        perScenario: definitions + results,
+        cached: results + calls,
+        steps: steps.length,
+      });
     }
     return { definitions, tools: tools.length, perScenario };
   } finally {
@@ -420,54 +509,84 @@ const withTools = (value) => (config) =>
     catalog: new CatalogState(undefined, parseToolSelection(value)),
   });
 const all = await measure(withTools("all"));
+servers.push({ label: "now batch", ...(await measure(withTools("core"), [PLANS[1]])) });
 servers.push({ label: "now", ...(await measure(withTools("core"))) });
 
 const pct = (b, a) => `${(((a - b) / b) * 100).toFixed(1)}%`;
 const sum = (list, key) => list.reduce((n, x) => n + x[key], 0);
+const [pre5, issue5] = servers;
 const now = servers.at(-1);
-const rows = [
-  ...scenarios.map((s, i) => ({
-    scenario: s.name,
-    pick: (m) => m.perScenario[i],
-  })),
-  {
-    scenario: "all scenarios",
-    pick: (m) => ({
-      results: sum(m.perScenario, "results"),
-      total: sum(m.perScenario, "total"),
-      calls: sum(m.perScenario, "calls"),
-    }),
-  },
-].map(({ scenario, pick }) => {
-  // Calls of a baseline / of the current server, describe_endpoints not included.
-  const row = { scenario, calls: `${pick(servers[0]).calls}/${pick(now).calls}` };
-  for (const m of servers) row[`results ${m.label}`] = pick(m).results;
-  for (const m of servers) row[`total ${m.label}`] = pick(m).total;
-  for (const m of servers.slice(0, -1)) {
-    row[`vs ${m.label}`] = pct(pick(m).total, pick(now).total);
+
+/** (a): definitions once per scenario, over the first `count` scenarios. */
+const perScenario = (m, count = scenarios.length) =>
+  sum(m.perScenario.slice(0, count), "perScenario");
+/** (b): definitions once per session, over the first `count` scenarios. */
+const cached = (m, count = scenarios.length) =>
+  m.definitions + sum(m.perScenario.slice(0, count), "cached");
+
+function table(key, session) {
+  const rows = scenarios.map((s, i) => {
+    const row = {
+      scenario: s.name,
+      calls: `${pre5.perScenario[i].steps}/${now.perScenario[i].steps}`,
+    };
+    for (const m of servers) row[m.label] = m.perScenario[i][key];
+    row["vs pre-#5"] = pct(pre5.perScenario[i][key], now.perScenario[i][key]);
+    row["vs #5"] = pct(issue5.perScenario[i][key], now.perScenario[i][key]);
+    return row;
+  });
+  if (session) {
+    const row = { scenario: "definitions, once", calls: "" };
+    for (const m of servers) row[m.label] = m.definitions;
+    rows.push(row);
   }
-  return row;
-});
+  const total = {
+    scenario: "all scenarios",
+    calls: `${sum(pre5.perScenario, "steps")}/${sum(now.perScenario, "steps")}`,
+  };
+  const of = session ? cached : perScenario;
+  for (const m of servers) total[m.label] = of(m);
+  total["vs pre-#5"] = pct(of(pre5), of(now));
+  total["vs #5"] = pct(of(issue5), of(now));
+  rows.push(total);
+  console.table(rows);
+}
 
 console.log(
-  `Tokenizer: o200k_base (gpt-tokenizer). Baselines: ${BASELINES.map((b) => `${b.label} ${b.commit.slice(0, 7)}`).join(", ")}.`,
+  `Tokenizer: o200k_base (gpt-tokenizer). Baselines: ${BASELINES.map((b) => `${b.label} ${b.commit.slice(0, 7)}`).join(", ")}; "now batch" is the current core tier with the batch plan instead of build_diagram.`,
 );
 console.log(
-  `Tool definitions + instructions (tools): ${servers.map((m) => `${m.label} ${m.definitions} (${m.tools})`).join(", ")}; counted once per scenario.`,
+  `Tool definitions + instructions (tools): ${servers.map((m) => `${m.label} ${m.definitions} (${m.tools})`).join(", ")}.`,
 );
-console.table(rows);
+console.log("\n(a) Definitions once per scenario, plus result text:");
+table("perScenario", false);
+console.log("\n(b) Definitions once per session (prompt caching), plus result text and the calls:");
+table("cached", true);
 console.log(
-  `--tools all: ${all.definitions} definition tokens (${all.tools} tools), all scenarios ${sum(all.perScenario, "total")}.`,
+  `\n--tools all: ${all.definitions} definition tokens (${all.tools} tools); all scenarios (a) ${perScenario(all)}, (b) ${cached(all)}.`,
 );
-/** The 60%-below-pre-#5 target of issue #5, over `count` scenarios from the first. */
-function target(count) {
-  const totals = (m) => sum(m.perScenario.slice(0, count), "total");
-  const goal = Math.floor(totals(servers[0]) * 0.4);
-  const reached = totals(now);
-  const definitions = now.definitions * count;
-  console.log(
-    `Target over the first ${count} scenarios (60% below ${servers[0].label} ${totals(servers[0])}): <= ${goal}; now ${reached} (${pct(totals(servers[0]), reached)}), ${reached <= goal ? "met" : `${reached - goal} over`}; definitions alone ${definitions}.`,
-  );
+
+/** Whether `reached` is at most `goal`, as a line. */
+const verdict = (reached, goal) =>
+  reached <= goal
+    ? `met (${reached} <= ${goal})`
+    : `not met (${reached}, ${reached - goal} over ${goal})`;
+console.log("\nTargets:");
+for (const count of [3, scenarios.length]) {
+  for (const [name, of] of [
+    ["(a)", perScenario],
+    ["(b)", cached],
+  ]) {
+    const goal = Math.floor(of(pre5, count) * 0.4);
+    console.log(
+      `  #5/#8 60% below pre-#5 over ${count} scenarios ${name}: ${verdict(of(now, count), goal)}, ${pct(of(pre5, count), of(now, count))}`,
+    );
+  }
 }
-target(3);
-target(scenarios.length);
+console.log(`  #8 definitions <= 2000: ${verdict(now.definitions, 2000)}`);
+for (const [name, of] of [
+  ["(a)", perScenario],
+  ["(b)", cached],
+]) {
+  console.log(`  #8 all scenarios below #5 ${name}: ${verdict(of(now), of(issue5) - 1)}`);
+}

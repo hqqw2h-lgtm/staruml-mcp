@@ -3,14 +3,17 @@
 //
 // Starts the built server (dist/index.js) as a child process and drives tools/call
 // get_all_diagrams_info at each concurrency level, or with --call-endpoint call_endpoint
-// find_elements, which adds the manifest schema check and the extension port, or with --batch a
-// batch of four read-only ops, one with a "$name" reference, which adds the per-op schema checks. By default StarUML
-// is replaced by an in-process stub so the numbers measure this server, not StarUML; --live
-// targets the real StarUML on 58321 and the extension on 58322 instead.
+// find_elements, which adds the manifest schema check and the extension port, with --batch a
+// batch of four read-only ops, one with a "$name" reference, which adds the per-op schema checks,
+// or with --build a build_diagram of a three-class Mermaid diagram, which adds the check against
+// the whole request schema. By default StarUML is replaced by an in-process stub so the numbers
+// measure this server, not StarUML; --live targets the real StarUML on 58321 and the extension
+// on 58322 instead. --build --live upserts one diagram named "load-test" into the open project:
+// the first call builds it and every later one finds nothing to add.
 //
 // Usage: npm run build && node scripts/load-test.mjs
 //          [--concurrency 50,200] [--requests 5000] [--warmup 500]
-//          [--max-p99-ms N] [--min-rps N] [--live] [--call-endpoint | --batch]
+//          [--max-p99-ms N] [--min-rps N] [--live] [--call-endpoint | --batch | --build]
 // STARUML_EXT_TOKEN reaches the server, so --live works with an extension that requires a token.
 // Exits non-zero on any failed request or a breached budget.
 
@@ -30,6 +33,7 @@ const { values: args } = parseArgs({
     live: { type: "boolean", default: false },
     "call-endpoint": { type: "boolean", default: false },
     batch: { type: "boolean", default: false },
+    build: { type: "boolean", default: false },
   },
 });
 
@@ -41,19 +45,28 @@ const BATCH_OPS = [
   { path: "/find_elements", body: { type: "UMLClass", limit: 10 } },
   { path: "/is_modified" },
 ];
-const params = args.batch
-  ? { name: "batch", arguments: { ops: BATCH_OPS } }
-  : callEndpoint
-    ? {
-        name: "call_endpoint",
-        arguments: { name: "find_elements", body: { type: "UMLClass", limit: 10 } },
-      }
-    : { name: "get_all_diagrams_info", arguments: {} };
-const label = args.batch
-  ? `batch of ${BATCH_OPS.length} ops`
-  : callEndpoint
-    ? "call_endpoint find_elements"
-    : params.name;
+const BUILD = {
+  mermaid: "classDiagram\n  Order --> Line\n  Order --> Customer",
+  name: "load-test",
+  upsert: true,
+};
+const params = args.build
+  ? { name: "build_diagram", arguments: BUILD }
+  : args.batch
+    ? { name: "batch", arguments: { ops: BATCH_OPS } }
+    : callEndpoint
+      ? {
+          name: "call_endpoint",
+          arguments: { name: "find_elements", body: { type: "UMLClass", limit: 10 } },
+        }
+      : { name: "get_all_diagrams_info", arguments: {} };
+const label = args.build
+  ? "build_diagram (3 classes, upsert)"
+  : args.batch
+    ? `batch of ${BATCH_OPS.length} ops`
+    : callEndpoint
+      ? "call_endpoint find_elements"
+      : params.name;
 
 const levels = args.concurrency.split(",").map(Number);
 const requestsPerLevel = Number(args.requests);
@@ -195,6 +208,26 @@ async function startStub() {
       },
     }),
     "POST /introspect": JSON.stringify({ success: true, data: manifest }),
+    // An upsert that found every node and edge already there (src/handlers/build.ts).
+    "POST /build_diagram": JSON.stringify({
+      success: true,
+      data: {
+        diagram: { _id: "AAAAAAFF+qBtyKM79qD=", _type: "UMLClassDiagram", name: "load-test" },
+        kind: "class",
+        upserted: true,
+        created: 0,
+        updated: 0,
+        unchanged: 5,
+        layout: "placed",
+        ids: Object.fromEntries(
+          ["Order", "Line", "Customer"].map((n, i) => [
+            n,
+            { model: `AAAAAAFF+qBtyKM79q${i}=`, view: `AAAAAAFF+qBtyKM79v${i}=` },
+          ]),
+        ),
+        edges: [],
+      },
+    }),
     "POST /find_elements": JSON.stringify({ success: true, data: page }),
   };
   const diagrams = JSON.stringify({
