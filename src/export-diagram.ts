@@ -13,8 +13,7 @@ export const EXPORT_DIAGRAM = "export_diagram";
  * Extension #24's labels, drawn on the image and never on the model. A path label is itself a
  * reference the next call can take, which is why the model is told about paths first.
  */
-export const ANNOTATE_DESCRIPTION =
-  "paths|ids: label each view with its element, on the image only.";
+export const ANNOTATE_DESCRIPTION = "paths|ids: label each view, on the image only.";
 
 export const EXPORT_DIAGRAM_DESCRIPTION =
   "Export a diagram as PNG, JPEG or SVG, inline or to a file.";
@@ -22,9 +21,9 @@ export const EXPORT_DIAGRAM_DESCRIPTION =
 const LISTED: Record<string, string> = {
   diagram: "Diagram id or path; default the current one.",
   format: "Default png.",
-  scale: "PNG/JPEG pixels per unit, up to 4; default 1.",
-  background: "CSS colour, e.g. #fff; default transparent.",
-  path: "Absolute file to write instead of answering the image.",
+  scale: "PNG/JPEG pixels per unit, up to 4.",
+  background: "CSS colour; default transparent.",
+  path: "Absolute file to write it to.",
   annotate: ANNOTATE_DESCRIPTION,
 };
 

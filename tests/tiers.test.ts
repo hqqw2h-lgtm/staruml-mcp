@@ -112,16 +112,6 @@ describe("endpointGroup", () => {
         "get_relationships_of",
         "get_refs_to",
         "batch",
-        "build_model",
-        "sync_operations",
-        "check_messages",
-        "list_patterns",
-        "describe_pattern",
-        "apply_pattern",
-        "detect_patterns",
-        "apply_preset",
-        "describe_type",
-        "apply_theme",
       ],
       diagram: [
         "create_element_with_view",
@@ -136,7 +126,6 @@ describe("endpointGroup", () => {
         "route_edges",
         "move_views",
         "resize_node",
-        "set_view_style",
         "set_z_order",
         "divide_fragment",
         "create_view_of",
@@ -157,23 +146,38 @@ describe("endpointGroup", () => {
         "add_slot",
         "add_tag",
       ],
+      style: ["set_view_style", "apply_theme"],
       editor: ["get_selection", "set_selection", "get_editor_state", "set_editor_state"],
       code: ["list_code_generators", "generate_code", "reverse_code"],
       history: ["undo", "redo", "snapshot", "diff_since", "restore_snapshot"],
-      meta: ["search_types", "introspect", "debug"],
+      meta: ["search_types", "describe_type", "introspect", "debug"],
       quality: ["validate_model", "lint_diagram", "uml_lint", "diff_diagram"],
+      model: ["build_model", "sync_operations", "check_messages"],
+      patterns: [
+        "list_patterns",
+        "describe_pattern",
+        "apply_pattern",
+        "detect_patterns",
+        "apply_preset",
+      ],
     });
   });
 
   it("places endpoints of a newer extension in a group", () => {
     expect(endpointGroup("export_sequence_diagram")).toBe("diagram");
     expect(endpointGroup("merge_elements")).toBe("element");
+    expect(endpointGroup("explain_pattern")).toBe("patterns");
+    expect(endpointGroup("set_font")).toBe("style");
+    expect(endpointGroup("derive_operations")).toBe("model");
     expect(ENDPOINT_GROUPS).toEqual([
       "quality",
       "history",
       "project",
       "command",
       "meta",
+      "patterns",
+      "model",
+      "style",
       "feature",
       "editor",
       "code",
@@ -202,10 +206,9 @@ describe("core tier (default)", () => {
       "export_diagram",
       "batch",
       "build_diagram",
-      "search_types",
-      "describe_diagram",
-      "validate_model",
       "lint_diagram",
+      "build_model",
+      "apply_pattern",
       "describe_endpoints",
       "call_endpoint",
     ]);
@@ -346,11 +349,21 @@ describe("describe_endpoints", () => {
         .sort(),
     ).toEqual([...EXTENDED].sort());
     expect(index.project!.save_project).toBe(terseDescription(entryOf("save_project").description));
-    // search_types is listed; introspect left the core tier in 0.6.0.
-    expect(index.meta).toEqual({
-      introspect: terseDescription(entryOf("introspect").description),
-      debug: terseDescription(entryOf("debug").description),
-    });
+    // introspect and search_types left the core tier in 0.6.0.
+    expect(Object.keys(index.meta!)).toEqual([
+      "search_types",
+      "describe_type",
+      "introspect",
+      "debug",
+    ]);
+    expect(Object.keys(index.patterns!)).toEqual([
+      "list_patterns",
+      "describe_pattern",
+      "detect_patterns",
+      "apply_preset",
+    ]);
+    expect(Object.keys(index.model!)).toEqual(["sync_operations", "check_messages"]);
+    expect(Object.keys(index.style!)).toEqual(["set_view_style", "apply_theme"]);
   });
 
   it("describes named endpoints in full, listed ones included", async () => {
@@ -389,16 +402,6 @@ describe("describe_endpoints", () => {
       "set_documentation",
       "get_relationships_of",
       "get_refs_to",
-      "build_model",
-      "sync_operations",
-      "check_messages",
-      "list_patterns",
-      "describe_pattern",
-      "apply_pattern",
-      "detect_patterns",
-      "apply_preset",
-      "describe_type",
-      "apply_theme",
     ]);
   });
 
@@ -408,8 +411,8 @@ describe("describe_endpoints", () => {
         JSON.parse(text(await mcp.call("describe_endpoints", { group: name }))) as object,
       );
 
-    // validate_model and lint_diagram are core tools, so the group lists the rest.
-    expect(await group("quality")).toEqual(["uml_lint", "diff_diagram"]);
+    // lint_diagram is a core tool, so the group lists the rest.
+    expect(await group("quality")).toEqual(["validate_model", "uml_lint", "diff_diagram"]);
     expect(await group("history")).toEqual([
       "undo",
       "redo",

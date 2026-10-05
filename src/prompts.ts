@@ -1,6 +1,6 @@
 /**
  * MCP prompts: workflows a user starts by name (`/model-codebase`, `/review-diagram`,
- * `/improve-diagram` in clients that surface prompts as commands). They spell out the tool calls, so they name an endpoint's
+ * `/improve-diagram`, `/apply-pattern` in clients that surface prompts as commands). They spell out the tool calls, so they name an endpoint's
  * call_endpoint form when the current tier does not list it.
  */
 import type { McpServer, RegisteredPrompt } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -16,6 +16,7 @@ import { listedTools, type CatalogState } from "./extension-tools.js";
 export const MODEL_CODEBASE = "model-codebase";
 export const REVIEW_DIAGRAM = "review-diagram";
 export const IMPROVE_DIAGRAM = "improve-diagram";
+export const APPLY_PATTERN_PROMPT = "apply-pattern";
 
 /** The snapshot improve-diagram takes first, to compare with and to go back to. */
 export const IMPROVE_SNAPSHOT = "before-improve";
@@ -140,6 +141,54 @@ export function improveDiagram(state: CatalogState, diagram: string | undefined)
   );
 }
 
+export interface ApplyPatternArgs {
+  pattern?: string;
+  scope?: string;
+  diagram?: string;
+}
+
+/**
+ * A pattern applied the way extension #30 makes it reliable: read what the pattern prescribes,
+ * bind its roles to the existing classes by path (an unbound role gets a new element named after
+ * the role, rarely the domain's word), check a dry run, apply, look, and detect it back, which
+ * scores the result against the same pattern data (confidence 1: everything it prescribes).
+ */
+export function applyPattern(state: CatalogState, args: ApplyPatternArgs): GetPromptResult {
+  const pattern = args.pattern ?? "<pattern>";
+  const diagram = args.diagram ?? `${args.pattern ?? "Design"} pattern`;
+  const call = (endpoint: string, body: string) => invocation(state, endpoint, body);
+  const scope = args.scope === undefined ? "" : ` in ${args.scope}`;
+  // New elements go to the diagram's owner or the project's first model unless parent says.
+  const parent = args.scope === undefined ? "" : `, parent: "${args.scope}"`;
+  const bindings = `{pattern: "${pattern}", bindings${parent}, diagram: "${diagram}"`;
+  return message(
+    [
+      `Apply the ${args.pattern ?? "design"} pattern to the existing model${scope}.`,
+      "",
+      ...(args.pattern === undefined
+        ? [
+            `0. Read staruml://patterns, or ${call("list_patterns", "{}")}, and pick the pattern ` +
+              "whose intent fits; use its exact name below.",
+          ]
+        : []),
+      `1. ${call("describe_pattern", `{name: "${pattern}"}`)}: its roles (\`*\` binds several ` +
+        "elements, `?` is optional), what each gets and the relationship ends it sets.",
+      `2. Bind each role to existing classes${scope} by path; staruml://project/tree and ` +
+        'find_elements list them. Write bindings as {Role: "Pkg/Class", ManyRole: ["Pkg/A", ' +
+        '"Pkg/B"]}; give a role no class plays a name in the domain\'s words, or leave it ' +
+        "unbound for a new element named after the role.",
+      `3. ${call("apply_pattern", `${bindings}, dryRun: true}`)}: check every role's paths, the ` +
+        "elements it would create and each property it would set.",
+      `4. ${call("apply_pattern", `${bindings}}`)} applies it in one undo step.`,
+      `5. view_diagram({diagram: "${diagram}", annotate: "paths"}) to look at it, and ` +
+        `${call("detect_patterns", `{patterns: ["${pattern}"]${args.scope === undefined ? "" : `, scope: "${args.scope}"`}}`)} ` +
+        "to confirm it: confidence 1 and nothing missing.",
+      "",
+      "Report the bindings, what was created and anything detect_patterns still lists as missing.",
+    ].join("\n"),
+  );
+}
+
 const ModelCodebaseArgs = {
   path: z.string().optional().describe("Absolute source directory to reverse-engineer."),
   language: z.string().optional().describe("java, cpp, csharp or python, for reverse_code."),
@@ -152,6 +201,18 @@ const ReviewDiagramArgs = {
 };
 
 const ImproveDiagramArgs = ReviewDiagramArgs;
+
+const ApplyPatternPromptArgs = {
+  pattern: z
+    .string()
+    .optional()
+    .describe("Pattern name, e.g. Strategy; default chosen from the list."),
+  scope: z.string().optional().describe("Package or model holding the classes, by path."),
+  diagram: z
+    .string()
+    .optional()
+    .describe("Class diagram to show it on; default '<pattern> pattern'."),
+};
 
 /** A registered prompt's callback; every argument of these prompts is an optional string. */
 type Render = (args: Record<string, string>, extra: unknown) => GetPromptResult;
@@ -185,6 +246,16 @@ export function registerPrompts(server: McpServer, state: CatalogState): void {
         argsSchema: ImproveDiagramArgs,
       },
       ({ diagram }) => improveDiagram(state, diagram),
+    ),
+    [APPLY_PATTERN_PROMPT]: server.registerPrompt(
+      APPLY_PATTERN_PROMPT,
+      {
+        title: "Apply a design pattern",
+        description:
+          "Bind a pattern's roles to existing classes by path, dry-run, apply, look and detect it back.",
+        argsSchema: ApplyPatternPromptArgs,
+      },
+      (args) => applyPattern(state, args),
     ),
   };
   // GetPromptRequest's arguments are optional (MCP 2025-06-18, schema.ts), but McpServer 1.29

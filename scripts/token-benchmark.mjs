@@ -651,7 +651,7 @@ const readPlans = [
     data: read.dump,
   },
   {
-    name: "describe_diagram",
+    name: "describe_diagram (call_endpoint)",
     tool: "describe_diagram",
     args: { diagram: read.diagramId },
     upstream: "extension",
@@ -689,11 +689,16 @@ async function measureReads() {
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
     const rows = [];
+    const listed = new Set((await client.listTools()).tools.map((t) => t.name));
     for (const plan of readPlans) {
       (plan.upstream === "builtin" ? builtin : extension).reply(plan.slug, { body: ok(plan.data) });
-      const result = await client.callTool({ name: plan.tool, arguments: plan.args });
+      // describe_diagram left the core tier in 0.6.0; the call is written through call_endpoint.
+      const [tool, args] = listed.has(plan.tool)
+        ? [plan.tool, plan.args]
+        : ["call_endpoint", { name: plan.tool, body: plan.args }];
+      const result = await client.callTool({ name: tool, arguments: args });
       if (result.isError) throw new Error(`${plan.name}: ${JSON.stringify(result.content)}`);
-      const call = callTokens(plan.tool, plan.args);
+      const call = callTokens(tool, args);
       const text = textTokens(result);
       const image = plan.image ?? 0;
       rows.push({
@@ -830,3 +835,106 @@ console.log(
     "results and calls counted, definitions left out:",
 );
 console.table(await measureFixes());
+
+// --- Apply Strategy to an existing class model -------------------------------------------------
+
+// What StarUML 7.1.1 and the extension answered while Strategy was applied to a three-class model
+// (Order, FlatRate, ByWeight) both ways, recorded by scripts/capture-pattern.mjs in
+// benchmark-data/pattern-7.1.1.json. "apply_pattern" reads the pattern and applies it with the
+// roles bound by path, the prompt's way with or without its dry run. "batch" writes the same
+// changes as ops: the ops of apply_pattern's own dry run, the best a model writing them can do
+// (every property Strategy prescribes), after reading the schemas of the endpoints they use.
+// It is not charged for knowing what the pattern prescribes. The last column is what
+// /detect_patterns found afterwards.
+const strategy = JSON.parse(
+  readFileSync(new URL("benchmark-data/pattern-7.1.1.json", import.meta.url), "utf8"),
+);
+const confidence = (detect) =>
+  detect.detections.find((d) => d.pattern === "Strategy")?.confidence ?? 0;
+const describeStep = fixStep(
+  "call_endpoint",
+  { name: "describe_pattern", body: { name: "Strategy" } },
+  [["extension", "/describe_pattern", strategy.viaPattern.describe]],
+);
+const applyStep = fixStep("apply_pattern", strategy.apply, [
+  ["extension", "/apply_pattern", strategy.viaPattern.applied],
+]);
+const opEndpoints = [...new Set(strategy.byHand.ops.map((op) => op.path.slice(1)))];
+const patternPlans = [
+  {
+    name: "apply_pattern: describe_pattern, apply",
+    confidence: confidence(strategy.viaPattern.detect),
+    steps: [describeStep, applyStep],
+  },
+  {
+    name: "apply_pattern with a dry run first",
+    confidence: confidence(strategy.viaPattern.detect),
+    steps: [
+      describeStep,
+      fixStep("apply_pattern", { ...strategy.apply, dryRun: true }, [
+        ["extension", "/apply_pattern", strategy.viaPattern.dryRun],
+      ]),
+      applyStep,
+    ],
+  },
+  {
+    name: `batch: ${opEndpoints.length} schemas, ${strategy.byHand.ops.length} ops`,
+    confidence: confidence(strategy.byHand.detect),
+    steps: [
+      fixStep("describe_endpoints", { names: opEndpoints }, []),
+      fixStep("batch", { ops: strategy.byHand.ops }, [
+        ["extension", "/batch", strategy.byHand.batch],
+      ]),
+    ],
+  },
+];
+
+async function measurePlans(plans) {
+  const builtin = await new UpstreamFixture().start();
+  const extension = await new UpstreamFixture().start();
+  const server = withTools("core")({
+    apiHost: "http://127.0.0.1",
+    apiPort: builtin.port,
+    extPort: extension.port,
+  });
+  const client = new Client({ name: "token-benchmark", version: "0.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    const rows = [];
+    for (const plan of plans) {
+      let calls = 0;
+      let results = 0;
+      for (const { tool, args, replies } of plan.steps) {
+        for (const [, slug, data] of replies) extension.reply(slug, { body: ok(data) });
+        const result = await client.callTool({ name: tool, arguments: args });
+        if (result.isError) throw new Error(`${plan.name}: ${JSON.stringify(result.content)}`);
+        calls += callTokens(tool, args);
+        results += textTokens(result);
+      }
+      rows.push({
+        plan: plan.name,
+        calls: plan.steps.length,
+        "call tokens": calls,
+        "result text": results,
+        total: calls + results,
+        "detect confidence": plan.confidence,
+      });
+    }
+    return rows;
+  } finally {
+    await client.close();
+    await server.close();
+    await builtin.stop();
+    await extension.stop();
+  }
+}
+
+const rawApplied = countTokens(JSON.stringify(strategy.viaPattern.applied));
+console.log(
+  `\nApply Strategy to an existing class model: ${strategy.spec.classes.length} classes bound by ` +
+    `path, ${strategy.byHand.ops.length} changes (StarUML ${strategy.versions.staruml.version}, ` +
+    `extension ${strategy.versions.extension.version}); core tier, results and calls counted, ` +
+    `definitions left out. apply_pattern's answer is ${rawApplied} tokens as the extension sends it:`,
+);
+console.table(await measurePlans(patternPlans));

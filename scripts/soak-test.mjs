@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Soak test over stdio: starts the built server (dist/index.js) against an in-process stub of both
 // StarUML ports, sends tool calls one after another through the MCP SDK client (a rotation of
-// get_all_diagrams_info, call_endpoint find_elements, batch, build_diagram and lint_diagram), and
-// compares the first and the last --window of --calls measured calls. The server's resident set
+// get_all_diagrams_info, call_endpoint find_elements, batch, build_diagram, lint_diagram, and dry
+// runs of build_model and apply_pattern), and compares the first and the last --window of --calls
+// measured calls. The server's resident set
 // size is sampled with ps every --sample calls, and its live heap after a full GC is read at the
 // end of both windows. Exits non-zero when any call failed, or when the mean RSS, the live heap or the p99
 // latency of the last window exceeds the first by more than --max-growth percent: a leak or a
@@ -77,6 +78,14 @@ const ROTATION = [
     arguments: { mermaid: "classDiagram\n  Order --> Line", name: "soak", upsert: true },
   },
   { name: "lint_diagram", arguments: { diagram: "soak" } },
+  {
+    name: "build_model",
+    arguments: { spec: { system: "Soak", classes: [{ name: "Order" }] }, dryRun: true },
+  },
+  {
+    name: "apply_pattern",
+    arguments: { pattern: "Strategy", bindings: { Context: "Order" }, dryRun: true },
+  },
 ];
 
 const stub = await startStub();
@@ -226,6 +235,25 @@ async function startStub() {
       created: 0,
       updated: 0,
       unchanged: 3,
+    }),
+    "POST /build_model": ok({
+      model: { _id: "$m0", name: "Soak", path: "Soak" },
+      upserted: false,
+      counts: { created: { UMLModel: 1, UMLClass: 1 }, updated: {}, unchanged: 0 },
+      changes: { created: [{ path: "Soak/Order", type: "UMLClass" }], updated: [] },
+      dryRun: true,
+      plan: { ops: [{ path: "/create_element", body: {} }], creates: [], updates: [], deletes: [] },
+    }),
+    "POST /apply_pattern": ok({
+      pattern: "Strategy",
+      roles: { Context: [{ _id: "C1", path: "Model/Order", created: false }] },
+      created: 3,
+      updated: 0,
+      unchanged: 0,
+      changes: { created: [{ path: "Model/Strategy", type: "UMLInterface" }], updated: [] },
+      properties: [{ path: "Model/Strategy#execute()", field: "isAbstract", value: true }],
+      dryRun: true,
+      plan: { ops: [], creates: [], updates: [], deletes: [] },
     }),
     "POST /lint_diagram": ok({
       diagram: { _id: "D1", _type: "UMLClassDiagram", name: "soak", path: "soak" },

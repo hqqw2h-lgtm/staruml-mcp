@@ -125,11 +125,34 @@ describe("SKILL.md", () => {
         "view_diagram",
         "export_diagram",
         "diagram_as_text",
-        "search_types",
-        "validate_model",
         "lint_diagram",
+        "build_model",
+        "apply_pattern",
       ]),
     );
+  });
+
+  it("teaches model first and patterns with tested examples by path (#13)", () => {
+    const source = readSkill();
+    const section = (title: string) =>
+      new RegExp(`^## \\d+\\. ${title}\\n([\\s\\S]*?)^## `, "m").exec(source)?.[1] ?? "";
+    const model = section("Model first");
+    const patterns = section("Design patterns with correct properties");
+
+    for (const verb of ["owns", "has", "uses", "isA", "implements", "knows"]) {
+      expect(model, verb).toContain(`| \`${verb}\` |`);
+    }
+    expect(model).toContain("becomes the class's documentation");
+    expect(model).toContain("```json build_model");
+    expect(patterns).toContain("```json apply_pattern");
+    expect(patterns).toContain("detect_patterns");
+    // Bindings name existing classes by path.
+    const applied = examples.filter((e) => e.tool === "apply_pattern");
+    expect(applied.map((e) => (e.args.bindings as { Context: string }).Context)).toEqual([
+      "Loans/Loan",
+      "Loans/Loan",
+    ]);
+    expect(applied.map((e) => e.args.dryRun === true)).toEqual([true, false]);
   });
 
   it("teaches the build loop and what a readable UML diagram needs (#13)", () => {

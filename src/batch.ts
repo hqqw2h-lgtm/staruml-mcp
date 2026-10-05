@@ -58,10 +58,7 @@ export const BatchInput = unstamped(
         .min(1)
         .meta({ minItems: undefined })
         .describe("Calls in order."),
-      atomic: z
-        .boolean()
-        .optional()
-        .describe("Default true: undo every op when one fails. False runs and reports each."),
+      atomic: z.boolean().optional().describe("Default true: one failing op undoes all."),
     }),
   ),
 );

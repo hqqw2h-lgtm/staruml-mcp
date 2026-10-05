@@ -430,14 +430,14 @@ describe("export_diagram", () => {
       "annotate",
     ]);
     expect(properties.annotate).toEqual({
-      description: "paths|ids: label each view with its element, on the image only.",
+      description: "paths|ids: label each view, on the image only.",
     });
     expect(properties.background).toEqual({
-      description: "CSS colour, e.g. #fff; default transparent.",
+      description: "CSS colour; default transparent.",
     });
     // The bounds are left to the check against the whole request schema.
     expect(properties.scale).toEqual({
-      description: "PNG/JPEG pixels per unit, up to 4; default 1.",
+      description: "PNG/JPEG pixels per unit, up to 4.",
     });
   });
 

@@ -29,7 +29,7 @@ describe("listing", () => {
         "Element fields take an _id or a path: Pkg/Class, Class.attr, Class#op(), Class@Diagram, " +
         "@current. " +
         "Endpoints without a tool: describe_endpoints, then call_endpoint. " +
-        "Resources: diagram PNG, Mermaid, PlantUML; project tree; metamodel; endpoints.",
+        "Resources: diagram PNG, Mermaid, PlantUML; project tree; metamodel; endpoints; patterns.",
     );
   });
 
@@ -120,6 +120,11 @@ describe("listing", () => {
         mimeType: JSON_TYPE,
       },
       {
+        uri: "staruml://patterns",
+        description: "Design patterns apply_pattern applies: category, intent, roles, variants.",
+        mimeType: JSON_TYPE,
+      },
+      {
         uri: "ui://staruml/viewer.html",
         description: "Interactive SVG viewer for view_diagram (MCP Apps).",
         mimeType: "text/html;profile=mcp-app",
@@ -132,6 +137,12 @@ describe("listing", () => {
         mimeType,
       })),
     ).toEqual([
+      {
+        uriTemplate: "staruml://pattern/{name}",
+        description:
+          "A pattern's roles, members, relationship ends and the properties each gets; what apply_pattern sets.",
+        mimeType: JSON_TYPE,
+      },
       {
         uriTemplate: "staruml://diagram/{id}.png",
         description: "Diagram rendered as PNG.",

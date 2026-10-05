@@ -64,6 +64,23 @@ import {
   lintDiagramInput,
   UML_LINT,
 } from "./quality.js";
+import {
+  APPLY_THEME,
+  BUILD_MODEL,
+  BUILD_MODEL_DESCRIPTION,
+  buildModelInput,
+  modelResult,
+  SYNC_OPERATIONS,
+} from "./model.js";
+import {
+  APPLY_PATTERN,
+  APPLY_PATTERN_DESCRIPTION,
+  APPLY_PRESET,
+  applyPatternInput,
+  DETECT_PATTERNS,
+  detectResult,
+  patternResult,
+} from "./patterns.js";
 import type { StarUMLClient } from "./staruml-client.js";
 import {
   CORE_ENDPOINTS,
@@ -273,6 +290,14 @@ const SHORT_LISTED: Record<
     description: VALIDATE_MODEL_DESCRIPTION,
     input: (tool) => validateModelInput(tool.entry),
   },
+  [BUILD_MODEL]: {
+    description: BUILD_MODEL_DESCRIPTION,
+    input: (tool) => buildModelInput(tool.entry),
+  },
+  [APPLY_PATTERN]: {
+    description: APPLY_PATTERN_DESCRIPTION,
+    input: (tool) => applyPatternInput(tool.entry),
+  },
 };
 
 function specs(server: McpServer, client: StarUMLClient, state: CatalogState): ToolSpec[] {
@@ -344,6 +369,13 @@ const RESULT_SHAPES: Record<
   [LINT_DIAGRAM]: findingsResult,
   [UML_LINT]: findingsResult,
   [DIFF_DIAGRAM]: findingsResult,
+  // Dry runs of the endpoints that run a batch of their own answer its ops counted.
+  [BUILD_MODEL]: modelResult,
+  [SYNC_OPERATIONS]: modelResult,
+  [APPLY_THEME]: modelResult,
+  [APPLY_PATTERN]: patternResult,
+  [APPLY_PRESET]: patternResult,
+  [DETECT_PATTERNS]: detectResult,
 };
 
 function resultOf(name: string, data: unknown, input: Record<string, unknown>): CallToolResult {

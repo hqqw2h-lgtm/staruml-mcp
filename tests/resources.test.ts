@@ -2,7 +2,7 @@ import { McpError } from "@modelcontextprotocol/sdk/types.js";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { CatalogState } from "../src/extension-tools.js";
 import { BUNDLED_MANIFEST } from "../src/manifest.js";
-import { diagramImageUri } from "../src/server.js";
+import { diagramImageUri, PATTERNS_URI, patternUri } from "../src/server.js";
 import { closedPort, UpstreamFixture } from "./support/fixture.js";
 import { connect, type ConnectedClient } from "./support/mcp.js";
 
@@ -81,6 +81,11 @@ describe("resources/list", () => {
         mimeType: "application/json",
       }),
       expect.objectContaining({
+        uri: "staruml://patterns",
+        name: "patterns",
+        mimeType: "application/json",
+      }),
+      expect.objectContaining({
         uri: "ui://staruml/viewer.html",
         name: "viewer",
         mimeType: "text/html;profile=mcp-app",
@@ -108,6 +113,7 @@ describe("resources/list", () => {
         "staruml://project/tree",
         "staruml://introspect/metamodel",
         "staruml://introspect/endpoints",
+        "staruml://patterns",
         "ui://staruml/viewer.html",
       ]);
     } finally {
@@ -115,10 +121,15 @@ describe("resources/list", () => {
     }
   });
 
-  it("publishes the diagram image and text templates", async () => {
+  it("publishes the pattern, diagram image and text templates", async () => {
     const { resourceTemplates } = await mcp.client.listResourceTemplates();
 
     expect(resourceTemplates).toEqual([
+      expect.objectContaining({
+        uriTemplate: "staruml://pattern/{name}",
+        name: "pattern",
+        mimeType: "application/json",
+      }),
       expect.objectContaining({
         uriTemplate: "staruml://diagram/{id}.png",
         name: "diagram-image",
@@ -382,5 +393,75 @@ describe("staruml://diagram/{id}.png", () => {
 
     expect(error.data).toMatchObject({ error: { code: "UNEXPECTED_ERROR" } });
     expect(builtin.requests).toEqual([]);
+  });
+});
+
+/** Extension #30's /list_patterns and /describe_pattern answers, cut to one pattern. */
+const PATTERNS = {
+  count: 1,
+  patterns: [
+    {
+      name: "Strategy",
+      category: "behavioral",
+      intent: "Define a family of algorithms, encapsulate each one and make them interchangeable.",
+      roles: ["Context", "Strategy", "ConcreteStrategy*"],
+      variants: ["abstract-class"],
+      sequence: true,
+    },
+  ],
+};
+const ABSTRACT_FACTORY = {
+  name: "Abstract Factory",
+  category: "creational",
+  intent: "Provide an interface for creating families of related objects.",
+  roles: [{ name: "AbstractFactory", type: "UMLInterface", cardinality: "1" }],
+  relationships: [],
+};
+
+describe("pattern resources (extension #30)", () => {
+  it("lists the pattern library, read once until the catalog changes", async () => {
+    extension.reply("/list_patterns", { body: { success: true, data: PATTERNS } });
+
+    const first = await mcp.client.readResource({ uri: PATTERNS_URI });
+    const again = await mcp.client.readResource({ uri: PATTERNS_URI });
+
+    expect(first.contents).toEqual([
+      { uri: PATTERNS_URI, mimeType: "application/json", text: JSON.stringify(PATTERNS) },
+    ]);
+    expect(again).toEqual(first);
+    expect(extension.requests).toEqual([{ method: "POST", path: "/list_patterns", body: {} }]);
+  });
+
+  it("describes one pattern by its percent-encoded name", async () => {
+    extension.reply("/describe_pattern", { body: { success: true, data: ABSTRACT_FACTORY } });
+    const uri = patternUri("Abstract Factory");
+
+    const { contents } = await mcp.client.readResource({ uri });
+
+    expect(uri).toBe("staruml://pattern/Abstract%20Factory");
+    // relationships: [] is pruned as in every answer; a missing list means an empty one.
+    const { relationships: _empty, ...shown } = ABSTRACT_FACTORY;
+    expect(contents).toEqual([{ uri, mimeType: "application/json", text: JSON.stringify(shown) }]);
+    expect(extension.requests).toEqual([
+      { method: "POST", path: "/describe_pattern", body: { name: "Abstract Factory" } },
+    ]);
+  });
+
+  it("reports an unknown pattern and an unreachable extension as resource errors", async () => {
+    extension.reply("/describe_pattern", {
+      status: 404,
+      body: { success: false, code: "NOT_FOUND", error: "No pattern Nope; see /list_patterns" },
+    });
+    extension.reply("/list_patterns", {
+      status: 500,
+      body: { success: false, code: "INTERNAL", error: "boom" },
+    });
+
+    const unknown = await readError(patternUri("Nope"));
+    const list = await readError(PATTERNS_URI);
+
+    expect(unknown.message).toContain("Failed to read pattern: No pattern Nope");
+    expect(unknown.data).toMatchObject({ error: { code: "NOT_FOUND" } });
+    expect(list.message).toContain("Failed to read patterns: boom");
   });
 });

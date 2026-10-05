@@ -32,21 +32,23 @@ extension's endpoints, so run it after the user upgrades the extension.
 
 | The user wants | Use |
 |---|---|
-| A new diagram of a kind below | `build_diagram` with a `spec`: exact names, one undo step, ids back |
-| Their Mermaid source rendered | `generate_diagram` (routes itself, see section 5) |
+| A domain model from a description or requirements | `build_model` with an object spec (section 5), then diagrams of it |
+| A new diagram of a kind below | `build_diagram` with a `spec`: exact names, one undo step |
+| A design pattern, or a class to be a value object or entity | `apply_pattern`, or `apply_preset` (section 6) |
+| Their Mermaid source rendered | `generate_diagram` (routes itself, see section 7) |
 | Small edits to an existing model | `find_elements`, then `update_element` / `delete_element` |
 | Many related creations or edits | one `batch` |
-| To read or explain a diagram | `diagram_as_text` or `describe_diagram` (section 8), not a picture |
-| The `type` or command id to pass | `search_types` |
-| To check a model | `validate_model`; `uml_lint` for modelling mistakes (section 4) |
+| To read or explain a diagram | `diagram_as_text` (section 10), not a picture |
+| The `type` or command id to pass | `search_types` through `call_endpoint` |
+| To check a model | `uml_lint` and `validate_model` through `call_endpoint` (section 4) |
 | To check how a diagram reads | `lint_diagram`, then its autofixes in one `batch` (section 4) |
 | To see what a build would change | `build_diagram` with `dryRun: true`, or `diff_diagram` |
 | Anything else StarUML can do | `describe_endpoints`, then `call_endpoint` |
 | To see a diagram | `view_diagram`; `export_diagram` for files |
 
 A user may also start the server's prompts `model-codebase` (reverse-engineer a source directory
-or build class diagrams from a description), `review-diagram` and `improve-diagram` (the lint and
-fix loop of section 4); they spell out the same calls.
+or build class diagrams from a description), `review-diagram`, `improve-diagram` (the lint and
+fix loop of section 4) and `apply-pattern` (section 6); they spell out the same calls.
 
 ### Ids and paths
 
@@ -66,7 +68,7 @@ need to look an id up first:
 A `\` escapes `/ . # @ ( ) ,` inside a name. Element results carry the `path` each element
 resolves by. A path that fits several elements is refused as `AMBIGUOUS_REF` with the candidates'
 ids and paths; pass one of those or a longer path. Use paths for what already exists and `$name`
-references (section 6) for what a batch creates.
+references (section 8) for what a batch creates.
 
 ## 3. build_diagram: one spec per kind
 
@@ -320,7 +322,145 @@ What a diagram needs to read well:
 - **ER diagrams**: a primary key on every entity (U011), foreign keys marked `FK` with a
   relationship giving both cardinalities, one naming style for tables and columns.
 
-## 5. Mermaid
+## 5. Model first
+
+When the user describes a domain, requirements or a system rather than a picture, build the
+model first and draw diagrams of it afterwards. `build_model` makes the packages, classes,
+members and relationships of one model from an object-level spec in one undo step, without any
+diagram; `build_diagram` then shows those same elements (its `reuse` finds them by name) on as
+many diagrams as the concerns need.
+
+Write the spec as the domain talks:
+
+- `contexts` are the packages (bounded contexts), each with an `id` classes refer to.
+- `classes[{name, context, kind: class|abstract|interface|enum, responsibility, knows, does,
+  collaboratesWith, attributes, operations, literals}]`. The `responsibility` (and `knows`,
+  `does`) becomes the class's documentation, so write one sentence of what it is for;
+  attributes and operations are UML strings such as `"+due: Date"`, `"+renew(days: int): void"`.
+- `relationships[{from, to, type, fromMult, toMult}]` take a verb, and the verb decides the UML
+  relationship and which end is which:
+
+| `type` | UML | `from` is |
+|---|---|---|
+| `owns` | composition | the whole; the part lives and dies with it |
+| `has` | aggregation | the whole of a shared part |
+| `uses` | dependency | the client |
+| `isA` | generalization | the specific kind |
+| `implements` | interface realization | the implementing class |
+| `knows` | directed association | the side that navigates |
+| `association` | plain association | either side |
+
+- `actors` and `useCases`, `collaborations` (each an interaction with lifelines and messages)
+  and `lifecycles` (state machines) complete it; diagram sections are listed in `skipped`, for
+  `build_diagram`.
+
+Run it with `dryRun: true` first: the answer names every element and relationship it would make
+by path. `upsert: true` extends the model of the same name later and never removes anything.
+
+```json build_model
+{
+  "dryRun": true,
+  "spec": {
+    "system": "Lending",
+    "contexts": [{ "id": "loans", "name": "Loans", "responsibility": "Who borrowed which copy, until when" }],
+    "classes": [
+      { "name": "Member", "context": "loans", "responsibility": "A person allowed to borrow", "attributes": ["+name: String"] },
+      { "name": "Loan", "context": "loans", "responsibility": "One copy lent to one member until a due date", "attributes": ["+due: Date"], "operations": ["+renew(days: int): void"] },
+      { "name": "Copy", "context": "loans", "responsibility": "A physical book on the shelf" },
+      { "name": "Fine", "context": "loans", "responsibility": "What a late return costs", "operations": ["+amount(): double"] }
+    ],
+    "relationships": [
+      { "from": "Member", "to": "Loan", "type": "owns", "fromMult": "1", "toMult": "0..*" },
+      { "from": "Loan", "to": "Copy", "type": "knows", "toMult": "1" },
+      { "from": "Loan", "to": "Fine", "type": "has", "toMult": "0..1" }
+    ]
+  }
+}
+```
+
+```json build_model
+{
+  "spec": {
+    "system": "Lending",
+    "contexts": [{ "id": "loans", "name": "Loans", "responsibility": "Who borrowed which copy, until when" }],
+    "classes": [
+      { "name": "Member", "context": "loans", "responsibility": "A person allowed to borrow", "attributes": ["+name: String"] },
+      { "name": "Loan", "context": "loans", "responsibility": "One copy lent to one member until a due date", "attributes": ["+due: Date"], "operations": ["+renew(days: int): void"] },
+      { "name": "Copy", "context": "loans", "responsibility": "A physical book on the shelf" },
+      { "name": "Fine", "context": "loans", "responsibility": "What a late return costs", "operations": ["+amount(): double"] }
+    ],
+    "relationships": [
+      { "from": "Member", "to": "Loan", "type": "owns", "fromMult": "1", "toMult": "0..*" },
+      { "from": "Loan", "to": "Copy", "type": "knows", "toMult": "1" },
+      { "from": "Loan", "to": "Fine", "type": "has", "toMult": "0..1" }
+    ]
+  }
+}
+```
+
+Then a `build_diagram` class spec that names `Member`, `Loan`, `Copy` and `Fine` shows these
+elements rather than copies. For a collaboration drawn as a sequence diagram,
+`call_endpoint({name: "check_messages", body: {diagram}})` lists the messages that name no
+operation of their receiver, and `sync_operations` adds those operations to the classes.
+
+## 6. Design patterns with correct properties
+
+A pattern is more than its class shapes: Strategy wants the strategy's operation abstract, the
+context's end of the association a shared aggregation that does not navigate, and the far end
+navigable, named `strategy`, with multiplicity 1. `apply_pattern` sets every such property from
+the pattern's data, on existing classes or new ones, in one undo step; writing the same by hand
+in a `batch` takes a dozen ops and usually misses some.
+
+1. Pick the pattern: `staruml://patterns` lists the 23 GoF patterns and Repository, Unit of
+   Work, Specification, Value Object, Entity, Service and DTO with their intent and roles (`*`
+   binds several elements, `?` is optional).
+2. Read what it prescribes: `staruml://pattern/{name}` or `describe_pattern`.
+3. Bind each role to an existing class by path (`Loans/Loan` names `Loan` in package `Loans`
+   wherever that package is), a list for a `*` role; a name nothing resolves to
+   becomes a new element of that name, and an unbound role gets one named after the role. New
+   elements go into `parent` (default the diagram's owner, else the project's first model), so
+   pass the package the bound classes live in.
+4. Dry run, apply (with `diagram` to show it laid out), and confirm with `detect_patterns`:
+   confidence 1 and nothing `missing` means every prescribed property is there. `uml_lint`
+   rule U013 reports a detected pattern that breaks one of its rules later.
+
+```json call_endpoint
+{ "name": "describe_pattern", "body": { "name": "Strategy" } }
+```
+
+```json apply_pattern
+{
+  "pattern": "Strategy",
+  "bindings": { "Context": "Loans/Loan", "Strategy": "FinePolicy", "ConcreteStrategy": ["DailyFine", "FlatFine"] },
+  "parent": "Lending/Loans",
+  "dryRun": true
+}
+```
+
+```json apply_pattern
+{
+  "pattern": "Strategy",
+  "bindings": { "Context": "Loans/Loan", "Strategy": "FinePolicy", "ConcreteStrategy": ["DailyFine", "FlatFine"] },
+  "parent": "Lending/Loans",
+  "diagram": "Fine policy"
+}
+```
+
+```json call_endpoint
+{ "name": "detect_patterns", "body": { "scope": "Lending", "patterns": ["Strategy"] } }
+```
+
+For one class rather than a pattern, `apply_preset` gives it the properties of a kind
+(`interface`, `abstract`, `value-object`, `entity`, `enum`, `static-utility`, `immutable`):
+
+```json call_endpoint
+{ "name": "apply_preset", "body": { "ref": "Loans/Copy", "preset": "entity", "dryRun": true } }
+```
+
+`describe_type` explains what each property of a metamodel type means (`isLeaf`, `aggregation`,
+`navigable`, ...), when a pattern or preset sets one you need to understand.
+
+## 7. Mermaid
 
 `build_diagram` reads `classDiagram`, `sequenceDiagram`, `flowchart`/`graph`, `erDiagram` and
 `stateDiagram` and names the diagram from `name`, front matter `title:` or a `title` line. `kind`
@@ -340,7 +480,7 @@ kind, a title or line breaks, which the built-in importer cannot do:
 
 Prefer a spec when you write the diagram yourself; use Mermaid when the user already has it.
 
-## 6. batch and `$name` references
+## 8. batch and `$name` references
 
 `batch` runs endpoint calls in order as one undo step and, by default, rolls every op back when
 one fails. `as` names an op's result; a later body refers to its id as `"$name"`, to a
@@ -365,7 +505,7 @@ its success and the id it made or acted on; `result: "ids"` or `"full"` returns 
 
 `atomic: false` runs every op and reports each result instead.
 
-## 7. Endpoints without a tool
+## 9. Endpoints without a tool
 
 The default tool list is a core set. The other endpoints (project open/save, views, layout,
 styles, undo/redo, commands, code generation, PDF/HTML export) are one step away:
@@ -385,10 +525,10 @@ Saving is `call_endpoint({name: "save_project", body: {filename: "/absolute/path
 If a session needs one endpoint often, `doctor({tools: "core,layout_diagram"})` lists it as a
 tool, and `doctor({tools: "core"})` goes back.
 
-## 8. Reading, viewing and exporting
+## 10. Reading, viewing and exporting
 
 Read a diagram as text. For a six-class diagram with members, Mermaid or a `describe_diagram`
-summary is about 270 tokens, a PNG about 1,600 (an estimate, billed as an image) and an element
+summary (through `call_endpoint`) is about 270 tokens, a PNG about 1,600 (an estimate, billed as an image) and an element
 dump with `summary: false` about 4,400.
 
 ```json diagram_as_text
@@ -398,20 +538,20 @@ dump with `summary: false` about 4,400.
 `diagram_as_text` writes a diagram (default the current one) as Mermaid, or as PlantUML with
 `format: "plantuml"`, then a line with its `kind` and any `warnings` about what the text cannot
 carry. The Mermaid is the form `build_diagram` reads back: edit it and pass it as `mermaid`, with
-`kind` for use case and activity diagrams, to rebuild. `describe_diagram({diagram})` lists the
+`kind` for use case and activity diagrams, to rebuild. `describe_diagram` lists the
 nodes with their members and the edges as `"tail" -[Type "name"]-> "head"`, without
 multiplicities or composition; `staruml://diagram/{id}.mmd` and `.puml` serve the text as
 resources.
 
-```json search_types
-{ "query": "composition", "limit": 3 }
+```json call_endpoint
+{ "name": "search_types", "body": { "query": "composition", "limit": 3 } }
 ```
 
 `search_types` finds the metamodel type, palette item, relationship kind or command id for a
 word, each with an example request body; use it instead of guessing a `type`.
 
-```json validate_model
-{}
+```json call_endpoint
+{ "name": "validate_model" }
 ```
 
 `validate_model` runs StarUML's validation rules over the project, or `scope` (an element and
@@ -441,7 +581,7 @@ what you see can be named in the next call:
 `export_diagram` returns PNG or JPEG as an image and SVG as text; with `path` it writes the file
 and returns only its size, which is what to do for anything the user wants on disk.
 
-## 9. Keeping token use down
+## 11. Keeping token use down
 
 - Element results are summaries `{_id, _type, name, _parent, path}`. Ask for more with `fields`
   (attribute names), `depth` (owned elements) or, rarely, `summary: false`.
@@ -449,9 +589,10 @@ and returns only its size, which is what to do for anything the user wants on di
 - Results omit null and empty fields and the arguments you sent; a bare `ok` means success.
 - Resources cost nothing until read: `staruml://project/tree` (ownership tree),
   `staruml://diagrams`, `staruml://diagram/{id}.png`, `.mmd` and `.puml`,
-  `staruml://introspect/metamodel` (types and attributes), `staruml://introspect/endpoints`
+  `staruml://introspect/metamodel` (types and attributes), `staruml://patterns` and
+  `staruml://pattern/{name}` (the pattern library), `staruml://introspect/endpoints`
   (every request schema).
-- To understand a diagram, `diagram_as_text` or `describe_diagram`; `view_diagram` only when the
+- To understand a diagram, `diagram_as_text`; `view_diagram` only when the
   layout itself matters.
 - One `build_diagram` or `batch` call replaces dozens of single calls and their results.
 - Export to a `path` instead of inline base64 when the image is for the user, not for you.
@@ -459,7 +600,7 @@ and returns only its size, which is what to do for anything the user wants on di
   returns them alone unless asked for `include` sections; narrow the metamodel with
   `types: ["UMLClass"]`.
 
-## 10. Access token and refusals
+## 12. Access token and refusals
 
 If the extension's access token is set in StarUML (Server Info, Generate Access Token...), the
 server must be started with `--ext-token <token>` or the `STARUML_EXT_TOKEN` environment variable;

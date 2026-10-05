@@ -160,7 +160,10 @@ Point your MCP client at `npx -y staruml-mcp` (stdio) or `http://localhost:58323
 ### Agent skill and plugins
 
 `plugins/` packages a `staruml` agent skill that teaches the workflow: `doctor` first, the
-`build_diagram` spec of each diagram kind with an example, when Mermaid goes where, `batch` and its
+`build_diagram` spec of each diagram kind with an example, the build and lint loop, model first
+(`build_model` with the relationship verbs, responsibilities as documentation), design patterns
+with every property they prescribe (`apply_pattern` bound by path, `detect_patterns` to
+confirm), when Mermaid goes where, `batch` and its
 `$name` references, `describe_endpoints` / `call_endpoint`, viewing and exporting, keeping tokens
 down, and the access token. The Claude Code plugin also registers this server over stdio
 (`npx -y staruml-mcp`, passing `STARUML_EXT_TOKEN` through when it is set).
@@ -290,21 +293,27 @@ default and reaches every other extension endpoint through two generic tools:
 
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
-| `core` (default) | the 7 above; `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`, `search_types`, `describe_diagram`, `validate_model`, `lint_diagram`; `describe_endpoints`, `call_endpoint` | 1,981 |
-| `all` | the 7 above and one tool per manifest endpoint | 10,845 |
+| `core` (default) | the 7 above; `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`, `lint_diagram`, `build_model`, `apply_pattern`; `describe_endpoints`, `call_endpoint` | 1,973 |
+| `all` | the 7 above and one tool per manifest endpoint | 11,896 |
 | `core,create_diagram,…` | the 7 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
-Token counts include the server instructions (o200k_base, extension 0.3.0, `npm run
-benchmark:tokens`). Pick the tier with `--tools`, or `STARUML_MCP_TOOLS` for clients that pass
+Token counts include the server instructions (o200k_base, extension 0.3.0 with 79 endpoints, `npm run
+benchmark:tokens`). 0.6.0 added `build_model` and `apply_pattern` (237 tokens) to the core tier
+and, to stay under 2,000, moved four endpoints out: `introspect` (`doctor` reports the versions),
+`describe_diagram` (`diagram_as_text`, always listed, reads a diagram in as many tokens),
+`validate_model` (a final check that sits with `uml_lint` in the `quality` group) and
+`search_types` (the spec tools take names, not metamodel ids). `--tools
+core,search_types,describe_diagram,validate_model` lists them again. Pick the tier with `--tools`, or `STARUML_MCP_TOOLS` for clients that pass
 environment but no arguments; the flag wins. An agent can switch it at runtime with
 `doctor({tools: "all"})`; the server then sends `notifications/tools/list_changed`, as it does when
 `doctor` finds a manifest with other endpoints. Names that are neither endpoints nor tools are
 reported by the `tier` check.
 
 - **`describe_endpoints()`** returns the endpoints without a tool, grouped (`quality`: lints,
-  validation and `diff_diagram`; `history`: snapshots, undo and redo; `project`, `command`,
-  `meta`, `feature`, `editor`, `code`, `diagram`, `element`; grouped by name, since the manifest
-  has none), one line
+  validation and `diff_diagram`; `history`: snapshots, undo and redo; `patterns`: the pattern
+  library, detection and presets; `model`: messages checked against and synced into operations;
+  `style`: themes and view styles; `project`, `command`, `meta`, `feature`, `editor`, `code`,
+  `diagram`, `element`; grouped by name, since the manifest has none), one line
   each. `describe_endpoints({names: [...]})` or `({group})` returns their full description, `readOnly`
   / `destructive` flags and request schema as `tools/list` would show it. Named endpoints may be
   listed ones.
@@ -365,6 +374,9 @@ the core tier):
 
 | Endpoint | Does |
 |---|---|
+| `build_model` | A model without diagrams from an object-level spec, in one undo step: packages (`contexts`), classes with members and a `responsibility` that becomes their documentation, relationships named by verb (`owns` composition, `has` aggregation, `uses` dependency, `isA` generalization, `implements` realization, `knows` directed association), actors and use cases, collaborations as interactions, lifecycles as state machines; `upsert` extends the model of the same name, `dryRun` names every change by path. |
+| `apply_pattern` / `list_patterns` / `describe_pattern` / `detect_patterns` / `apply_preset` | A design pattern (the 23 GoF and seven domain patterns, kept as data) applied to existing classes bound by path or to new ones, with every property it prescribes on elements, members and relationship ends / the library / one pattern's roles and properties / instances found in the model by structure, with a confidence and what is missing / a kind's properties (value object, entity, immutable, ...) on one class. |
+| `sync_operations` / `check_messages` / `describe_type` / `apply_theme` | Add the operations a sequence diagram's messages name to their receivers / list the messages that name none / a metamodel type's properties and their UML meaning / colour a diagram by a theme preset. |
 | `build_diagram` | A whole diagram in one call and one undo step, from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap, requirement, c4, package, component, deployment) or from Mermaid, PlantUML, SQL DDL or JSON Schema text; laid out with a `layout` preset (default by kind), optionally upserted into the diagram of the same name (`prune` deletes what the spec lacks); elements named like existing ones are shown again, not copied (`reuse`); `dryRun` answers the plan and changes nothing; answers the diagram and counts, with `result: "ids"` the model and view ids by node name. |
 | `lint_diagram` / `uml_lint` | How a diagram reads (stacked, overlapping or off-canvas views, edges through nodes, names wider than their box, unconnected nodes, crowding), each finding with an `autofix` request / modelling mistakes StarUML's validation skips (association ends without multiplicity or navigability, untyped attributes, abstract classes without subclasses, unrealized interfaces, messages naming no operation, use cases without actors, state machines without initial or final state, entities without a key, naming conventions), each with a fix line. |
 | `diff_diagram` / `snapshot` / `diff_since` / `restore_snapshot` | What a spec or diagram text would change on a diagram / a model checkpoint / what changed since one / undo back to one in a single step. |
@@ -386,7 +398,7 @@ the core tier):
 | `list_code_generators` / `generate_code` / `reverse_code` | Installed language generators and their options / source code from a model element / a source directory into the model. |
 | `undo` / `redo` / `is_modified` | History and unsaved state. |
 | `batch` | Several calls in one request, by default one undo step that rolls back when an op fails; each op answers its success and id, or more with `result: "ids"` or `"full"`. |
-| `introspect` / `debug` | Versions, factory ids, metamodel, toolbox and manifest (the `introspect` tool is the summary) / the raw `app` surface. |
+| `introspect` / `debug` | Versions, factory ids, metamodel, toolbox and manifest (the `introspect` tool is the summary; `call_endpoint` applies its defaults) / the raw `app` surface. |
 
 To enable extension tools: install `staruml-mcp-extension` in StarUML (Tools → Extension Manager → Install From URL → `https://github.com/hqqw2h-lgtm/staruml-mcp-extension`).
 
@@ -441,13 +453,25 @@ a finding's paths already name (a view of no model keeps its id); each lint `aut
 which the manifest's run past 100 characters.
 
 `find_elements`, `update_element`, `search_types`, `describe_diagram` and `validate_model` list
-hand-written descriptions too, in 95, 199, 86, 67 and 59 tokens; `update_element` keeps the
+hand-written descriptions too, in 95, 186, 86, 67 and 59 tokens (the last three when named in
+`--tools`); `update_element` keeps the
 meaning of each `op` in one line. These short listings, like `build_diagram`'s and
 `export_diagram`'s, leave string lengths and integer bounds to the check against the whole
 request schema, keep the manifest's `required`, and, like every listing, leave out
 `additionalProperties: {}` and `propertyNames: {type: "string"}`, which hold for every object.
 `search_types` answers its hits without the ranking `score`; `describe_diagram` answers its
 summary text alone, whose first line already names the diagram and counts its nodes and edges.
+
+`build_model` lists `spec` (one line naming the sections and the relationship verbs), `upsert`
+and `dryRun` in 125 tokens against the manifest's 488; `apply_pattern` lists `pattern`,
+`bindings`, `diagram` and `dryRun` in 112 against 454, `bindings` without its two nested unions.
+`parent`, `result`, `variant`, `sequence` and `upsert` pass unlisted, and every body is checked
+against the whole request schema first, so a bad binding is `INVALID_ARGUMENT` before StarUML sees
+it. Their answers, and those of `apply_preset`, `detect_patterns`, `sync_operations` and
+`apply_theme` through `call_endpoint`, name elements by path: each role's elements as paths,
+created and updated elements as `{path: type}` and `{path: fields}`, every property set grouped
+as `{path: {field: value}}`, and a dry run's `/batch` ops counted with the "$name" placeholder ids
+left out (its `changes` name every step).
 
 ### Resources
 
@@ -461,13 +485,17 @@ diagram PNGs out of tool results:
 | `staruml://project/tree` | `application/json` ownership tree of every model element and diagram, `[{_id, _type, name, children}]`, built from paged `find_elements` summaries (needs the extension) | `find_elements` with `type: "Model"` |
 | `staruml://introspect/metamodel` | `application/json` every metamodel type with attributes, supertypes and view types, schema values intact (needs the extension) | `introspect` with `include: ["metamodel"]` |
 | `staruml://introspect/endpoints` | `application/json` the endpoint manifest this server uses (live or bundled), with request and response JSON Schemas | `describe_endpoints` |
+| `staruml://patterns` | `application/json` the pattern library: each pattern's category, intent, roles (`*` many, `?` optional) and variants (needs the extension) | `list_patterns` |
+| `staruml://pattern/{name}` | `application/json` one pattern (percent-encoded name, e.g. `Abstract%20Factory`): roles with element types, properties, stereotypes and members, relationships with their end properties, sequence messages and the checks `uml_lint` holds it to | `describe_pattern` |
 | `ui://staruml/viewer.html` | `text/html;profile=mcp-app` the diagram viewer `view_diagram` names in its `_meta` | |
 | `staruml://diagram/{id}.png` | `image/png` blob; `{id}` is percent-encoded, since ids can contain `/`, `+` and `=` | `get_diagram_image_by_id` |
 | `staruml://diagram/{id}.mmd`, `staruml://diagram/{id}.puml` | `text/plain` Mermaid or PlantUML (no media type is registered for either), `_meta: {kind, warnings?}` (needs the extension) | `diagram_as_text` |
 
 `resources/list` enumerates one `staruml://diagram/{id}.png` per diagram, and
-`resources/templates/list` the three templates; the text forms are not listed per diagram. When StarUML is not
-reachable it lists only the six static resources. A failed read is a JSON-RPC error whose `data`
+`resources/templates/list` the four templates; the text forms and the patterns are not listed one
+by one (`staruml://patterns` names them). The pattern reads are cached like the catalogues until
+`doctor` reloads the catalog. When StarUML is not
+reachable it lists only the seven static resources. A failed read is a JSON-RPC error whose `data`
 holds the same `error` object a failed tool call returns.
 
 StarUML 7.1.1's `/get_diagram_image_by_id` ignores every field except `diagramId` (`scale`,
@@ -476,13 +504,14 @@ image tool and resource offer no size options.
 
 ### Prompts
 
-Clients that surface MCP prompts (as slash commands in Claude Code, for instance) offer three:
+Clients that surface MCP prompts (as slash commands in Claude Code, for instance) offer four:
 
 | Prompt | Arguments | Workflow |
 |---|---|---|
 | `model-codebase` | `path`, `language`, `description`, `name` (all optional) | `doctor`; with a source directory, `list_code_generators` and `reverse_code` (StarUML's Java reverse adds type hierarchy and package overview diagrams by default); otherwise one `build_diagram` of the central classes from the code or the description; then `describe_diagram` and `validate_model` on the result. |
 | `review-diagram` | `diagram`, an id or a path (default `@current`) | `describe_diagram`, `validate_model` scoped to the diagram's owner, `diagram_as_text`; then a review with a concrete fix per finding, changing nothing until asked. |
 | `improve-diagram` | `diagram`, an id or a path (default `@current`) | `snapshot`; `lint_diagram` and `uml_lint` on the diagram's owner; every lint autofix in one `batch`, the `uml_lint` fixes by `update_element` or a `build_diagram` upsert; again until no error or warning is left, at most three rounds; `view_diagram`, `diff_since`, and `restore_snapshot` if the result reads worse. |
+| `apply-pattern` | `pattern`, `scope` (the package holding the classes), `diagram` (all optional) | `staruml://patterns` when no pattern is named; `describe_pattern`; bindings by path; `apply_pattern` with `dryRun`, then for real into `scope`; `view_diagram` with `annotate: "paths"`; `detect_patterns` to confirm confidence 1 and nothing missing. |
 
 The text names each endpoint as a tool when the current tier lists it and as `call_endpoint`
 otherwise, so it is right under `--tools` selections too.
@@ -853,6 +882,32 @@ than their boxes (L005), which only the lint measures. The loop's extra cost is 
 tokens for the seven findings with their paths, fix lines and autofix requests. The batch of
 autofixes answers in 108, since the extension's batches answer each op's success and id unless
 asked for more (350 tokens with every resized view's geometry, as before its phase 1g).
+
+### Applying a design pattern
+
+A seventh scenario applies Strategy to an existing three-class model (`Order`, `FlatRate`,
+`ByWeight`; the strategy interface is new). `scripts/capture-pattern.mjs` built the model in
+StarUML 7.1.1 and recorded both ways into `scripts/benchmark-data/pattern-7.1.1.json`.
+`apply_pattern` reads the pattern through `call_endpoint` and applies it with the roles bound by
+path, optionally after a dry run (the `apply-pattern` prompt's way). The batch way writes the same
+nine changes as ops, after reading the three endpoint schemas they use: the ops of
+`apply_pattern`'s own dry run, which is the best a model can write by hand, with every property
+Strategy prescribes (the strategy's abstract `execute()`, a shared aggregation at the context that
+does not navigate, the far end navigable, named `strategy`, multiplicity 1, the typed `in`
+parameter of `setStrategy`). It is not charged for knowing those. The last column is what
+`detect_patterns` scored afterwards.
+
+| Plan | Calls | Call tokens | Result text | Total | Detect confidence |
+|---|---|---|---|---|---|
+| `apply_pattern`: `describe_pattern`, apply | 2 | 63 | 717 | 780 | 1 |
+| `apply_pattern` with a dry run first | 3 | 111 | 982 | 1093 | 1 |
+| `batch`: 3 schemas, 9 ops | 2 | 430 | 1646 | 2076 | 1 |
+
+`apply_pattern` costs 62% less, 47% with the dry run, and the model writes 63 tokens instead of
+430. Its answer is 276 tokens against the extension's 504: roles and elements by path, the
+properties grouped by path; a dry run's is 265 against 1,098, its `/batch` ops counted. Most of
+the batch way's cost is reading the schemas (1,489 tokens of `describe_endpoints`) before
+writing the ops.
 
 ## Architecture
 

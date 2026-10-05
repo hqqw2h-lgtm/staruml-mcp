@@ -26,7 +26,9 @@ import {
   toolName,
 } from "../src/manifest.js";
 import { sampleArgs } from "./support/schema.js";
-import { diagramImageUri, diagramTextUri } from "../src/server.js";
+import { countedPlan } from "../src/model.js";
+import { patternResult } from "../src/patterns.js";
+import { diagramImageUri, diagramTextUri, patternUri } from "../src/server.js";
 import {
   CORE_ENDPOINTS,
   ENDPOINT_GROUPS,
@@ -407,6 +409,125 @@ describe("path references and aliases", () => {
         const parsed = strict.get(entry.path)!.safeParse(body);
         const issues = parsed.success ? [] : parsed.error.issues;
         expect(issues.filter((i) => i.path[0] === field)).toEqual([]);
+      }),
+    );
+  });
+});
+
+/**
+ * Extension #30's apply_pattern bindings and #23's build_model spec, the two schemas the core
+ * tier lists in brief and checks against the whole request schema before sending.
+ */
+describe("pattern bindings, model specs and their answers", () => {
+  const tools = compileManifest(BUNDLED_MANIFEST).tools;
+  const schema = (name: string) => tools.find((t) => t.name === name)!.requestSchema;
+  const name = fc.string({ minLength: 1, maxLength: 12 });
+  const target = fc.oneof(
+    name,
+    name.map((n) => ({ new: { name: n } })),
+  );
+  const binding = fc.oneof(target, fc.array(target, { maxLength: 4 }));
+  // Role names are any string: the pattern decides which it knows, after the schema check.
+  const bindings = fc.dictionary(fc.string({ maxLength: 12 }), binding, { maxKeys: 6 });
+
+  it("accepts every binding of a path, a name, {new: {name}} or a list of those", () => {
+    fc.assert(
+      fc.property(bindings, (b) => {
+        expect(
+          schema("apply_pattern").safeParse({ pattern: "Strategy", bindings: b }).success,
+        ).toBe(true);
+      }),
+    );
+  });
+
+  it("refuses an empty name, a number or a new element without a name anywhere in a binding", () => {
+    const bad = fc.constantFrom<unknown>(
+      "",
+      7,
+      { new: {} },
+      { new: { name: "" } },
+      [""],
+      [7],
+      null,
+    );
+    fc.assert(
+      fc.property(bindings, fc.string({ maxLength: 12 }), bad, (b, role, value) => {
+        const parsed = schema("apply_pattern").safeParse({
+          pattern: "Strategy",
+          bindings: { ...b, [role]: value },
+        });
+        expect(parsed.success).toBe(false);
+      }),
+    );
+  });
+
+  it("accepts any object as a build_model spec and nothing else", () => {
+    fc.assert(
+      fc.property(fc.jsonValue({ maxDepth: 3 }), (spec) => {
+        const object = typeof spec === "object" && spec !== null && !Array.isArray(spec);
+        expect(schema("build_model").safeParse({ spec }).success).toBe(object);
+      }),
+    );
+  });
+
+  it("counts a dry run's ops and leaves no placeholder id, keeping every other value", () => {
+    const placeholder = fc.string({ maxLength: 4 }).map((s) => `$${s}`);
+    const element = fc.record({ _id: fc.oneof(placeholder, name), path: name });
+    fc.assert(
+      fc.property(
+        fc.array(fc.jsonValue({ maxDepth: 1 }), { maxLength: 5 }),
+        fc.dictionary(fc.string({ maxLength: 6 }), fc.array(element, { maxLength: 3 })),
+        (ops, roles) => {
+          const out = countedPlan({ dryRun: true, roles, plan: { ops } }) as {
+            roles: Record<string, { _id?: string; path: string }[]>;
+            plan: { ops: number };
+          };
+          expect(out.plan.ops).toBe(ops.length);
+          for (const [role, list] of Object.entries(roles)) {
+            list.forEach((e, i) => {
+              const kept = out.roles[role]![i]!;
+              expect(kept.path).toBe(e.path);
+              expect(kept._id).toBe(e._id.startsWith("$") ? undefined : e._id);
+            });
+          }
+        },
+      ),
+    );
+  });
+
+  it("answers every property set exactly once, grouped by path, the last value of a field winning", () => {
+    const property = fc.record({
+      path: fc.constantFrom("A", "A.end1", "B#op()", "__proto__"),
+      field: fc.constantFrom("name", "navigable", "isAbstract", "__proto__"),
+      value: fc.jsonValue({ maxDepth: 1 }),
+    });
+    fc.assert(
+      fc.property(fc.array(property, { maxLength: 12 }), (properties) => {
+        const { content } = patternResult({ pattern: "P", properties }, {});
+        const text = (content[0] as { text: string }).text;
+        const grouped =
+          text === OK
+            ? {}
+            : ((JSON.parse(text) as { properties?: Record<string, Record<string, unknown>> })
+                .properties ?? {});
+        const last = new Map(properties.map((p) => [`${p.path} ${p.field}`, p.value]));
+        for (const [key, value] of last) {
+          const [path, field] = key.split(" ") as [string, string];
+          // serialize prunes null and empty values, as for every answer.
+          if (prune({ v: value }) && JSON.stringify(prune({ v: value })) === "{}") continue;
+          expect(Object.hasOwn(grouped, path)).toBe(true);
+          expect(grouped[path]![field]).toEqual(prune(value));
+        }
+      }),
+    );
+  });
+
+  it("pattern resource URIs carry any name through percent-encoding and back", () => {
+    fc.assert(
+      fc.property(fc.string({ minLength: 1 }), (patternName) => {
+        const match = /^staruml:\/\/pattern\/([^/]+)$/.exec(patternUri(patternName));
+        expect(match).not.toBeNull();
+        expect(decodeURIComponent(match![1]!)).toBe(patternName);
       }),
     );
   });

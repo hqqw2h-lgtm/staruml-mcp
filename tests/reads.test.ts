@@ -19,7 +19,16 @@ let mcp: ConnectedClient;
 
 beforeAll(async () => {
   await Promise.all([builtin.start(), extension.start()]);
-  mcp = await connect({ apiHost: HOST, apiPort: builtin.port, extPort: extension.port });
+  // These three left the core tier in 0.6.0; named, they list their short schemas as before.
+  mcp = await connect({
+    apiHost: HOST,
+    apiPort: builtin.port,
+    extPort: extension.port,
+    catalog: new CatalogState(
+      undefined,
+      parseToolSelection("core,search_types,describe_diagram,validate_model"),
+    ),
+  });
 });
 
 afterEach(() => {

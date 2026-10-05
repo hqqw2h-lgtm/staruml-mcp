@@ -1,7 +1,13 @@
 import { GetPromptResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { bundledCatalog, CatalogState } from "../src/extension-tools.js";
-import { IMPROVE_DIAGRAM, invocation, MODEL_CODEBASE, REVIEW_DIAGRAM } from "../src/prompts.js";
+import {
+  APPLY_PATTERN_PROMPT,
+  IMPROVE_DIAGRAM,
+  invocation,
+  MODEL_CODEBASE,
+  REVIEW_DIAGRAM,
+} from "../src/prompts.js";
 import { parseToolSelection } from "../src/tiers.js";
 import { connect, type ConnectedClient } from "./support/mcp.js";
 
@@ -27,7 +33,7 @@ async function promptText(
 }
 
 describe("prompts/list", () => {
-  it("offers model-codebase, review-diagram and improve-diagram with optional arguments", async () => {
+  it("offers model-codebase, review-diagram, improve-diagram and apply-pattern with optional arguments", async () => {
     const { prompts } = await mcp.client.listPrompts();
 
     expect(prompts).toEqual([
@@ -83,6 +89,29 @@ describe("prompts/list", () => {
           },
         ],
       },
+      {
+        name: APPLY_PATTERN_PROMPT,
+        title: "Apply a design pattern",
+        description:
+          "Bind a pattern's roles to existing classes by path, dry-run, apply, look and detect it back.",
+        arguments: [
+          {
+            name: "pattern",
+            description: "Pattern name, e.g. Strategy; default chosen from the list.",
+            required: false,
+          },
+          {
+            name: "scope",
+            description: "Package or model holding the classes, by path.",
+            required: false,
+          },
+          {
+            name: "diagram",
+            description: "Class diagram to show it on; default '<pattern> pattern'.",
+            required: false,
+          },
+        ],
+      },
     ]);
   });
 });
@@ -102,7 +131,7 @@ describe("model-codebase", () => {
         "1. Run doctor. If the extension check fails, stop and report its fix line.",
         '2. call_endpoint({name: "list_code_generators", body: {}}). If a generator for java is installed, call_endpoint({name: "reverse_code", body: {language: "java", path: "/work/shop/src"}}) reads the source into the model and adds overview diagrams; get_all_diagrams_info lists them. If none is installed, read the source yourself and continue with step 3.',
         '3. Unless reverse engineering drew what is needed, make one build_diagram({kind: "class", name: "Shop", spec: {classes, relations}}) with the central classes (about 5 to 15), their key attributes and operations, and their relations (generalization, realization, composition, aggregation, association, dependency). Split a larger system into one diagram per package, and extend a diagram with upsert: true.',
-        '4. Check the result: describe_diagram({diagram: "Shop"}) and validate_model({scope: <the diagram\'s _parent>}); fix what they show with build_diagram upsert or update_element, then summarise the model in a few sentences.',
+        '4. Check the result: call_endpoint({name: "describe_diagram", body: {diagram: "Shop"}}) and call_endpoint({name: "validate_model", body: {scope: <the diagram\'s _parent>}}); fix what they show with build_diagram upsert or update_element, then summarise the model in a few sentences.',
       ].join("\n"),
     );
   });
@@ -131,13 +160,13 @@ describe("model-codebase", () => {
 });
 
 describe("review-diagram", () => {
-  it("reviews a named diagram with the core tier's tools", async () => {
+  it("reviews a named diagram, through call_endpoint for the reads the core tier left out", async () => {
     expect(await promptText(REVIEW_DIAGRAM, { diagram: "Model/Shop/Main" })).toBe(
       [
         "Review diagram Model/Shop/Main.",
         "",
-        '1. describe_diagram({diagram: "Model/Shop/Main"}) for its nodes, members and edges.',
-        "2. validate_model({scope: <the diagram's _parent>}) for StarUML's rule violations; get_element_by_id gives the _parent.",
+        '1. call_endpoint({name: "describe_diagram", body: {diagram: "Model/Shop/Main"}}) for its nodes, members and edges.',
+        "2. call_endpoint({name: \"validate_model\", body: {scope: <the diagram's _parent>}}) for StarUML's rule violations; get_element_by_id gives the _parent.",
         '3. diagram_as_text({diagram: "Model/Shop/Main"}) when the exact notation matters.',
         "",
         "Report modelling problems (each validation finding with its element, missing types or multiplicities, misused relationship kinds, naming), what a reader would find unclear, and a concrete fix for each as a build_diagram upsert or update_element call. Change nothing until asked.",
@@ -198,11 +227,51 @@ describe("improve-diagram", () => {
   });
 });
 
+describe("apply-pattern", () => {
+  it("reads the pattern, binds by path, dry-runs, applies, looks and detects it back", async () => {
+    expect(await promptText(APPLY_PATTERN_PROMPT, { pattern: "Strategy", scope: "Shipping" })).toBe(
+      [
+        "Apply the Strategy pattern to the existing model in Shipping.",
+        "",
+        '1. call_endpoint({name: "describe_pattern", body: {name: "Strategy"}}): its roles (`*` binds several elements, `?` is optional), what each gets and the relationship ends it sets.',
+        '2. Bind each role to existing classes in Shipping by path; staruml://project/tree and find_elements list them. Write bindings as {Role: "Pkg/Class", ManyRole: ["Pkg/A", "Pkg/B"]}; give a role no class plays a name in the domain\'s words, or leave it unbound for a new element named after the role.',
+        '3. apply_pattern({pattern: "Strategy", bindings, parent: "Shipping", diagram: "Strategy pattern", dryRun: true}): check every role\'s paths, the elements it would create and each property it would set.',
+        '4. apply_pattern({pattern: "Strategy", bindings, parent: "Shipping", diagram: "Strategy pattern"}) applies it in one undo step.',
+        '5. view_diagram({diagram: "Strategy pattern", annotate: "paths"}) to look at it, and call_endpoint({name: "detect_patterns", body: {patterns: ["Strategy"], scope: "Shipping"}}) to confirm it: confidence 1 and nothing missing.',
+        "",
+        "Report the bindings, what was created and anything detect_patterns still lists as missing.",
+      ].join("\n"),
+    );
+  });
+
+  it("starts from the pattern list without a pattern, and names the tools under --tools all", async () => {
+    const all = await connect({
+      catalog: new CatalogState(bundledCatalog(), parseToolSelection("all")),
+    });
+    try {
+      const text = await promptText(APPLY_PATTERN_PROMPT, { diagram: "Billing" }, all);
+
+      expect(text).toMatch(/^Apply the design pattern to the existing model\.\n/);
+      expect(text).toContain("0. Read staruml://patterns, or list_patterns({}), and pick");
+      expect(text).toContain('1. describe_pattern({name: "<pattern>"})');
+      expect(text).toContain("2. Bind each role to existing classes by path;");
+      expect(text).toContain('view_diagram({diagram: "Billing", annotate: "paths"})');
+      expect(text).toContain('detect_patterns({patterns: ["<pattern>"]}) to confirm it');
+    } finally {
+      await all.close();
+    }
+  });
+
+  it("names a default diagram after the pattern", async () => {
+    expect(await promptText(APPLY_PATTERN_PROMPT)).toContain('diagram: "Design pattern"');
+  });
+});
+
 describe("invocation", () => {
   it("names a listed endpoint's tool, otherwise call_endpoint", () => {
     const state = new CatalogState();
 
-    expect(invocation(state, "search_types", '{query: "x"}')).toBe('search_types({query: "x"})');
+    expect(invocation(state, "build_model", "{spec}")).toBe("build_model({spec})");
     expect(invocation(state, "save_project", "{}")).toBe(
       'call_endpoint({name: "save_project", body: {}})',
     );

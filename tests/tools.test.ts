@@ -97,6 +97,8 @@ const INVALID: Record<string, Record<string, unknown>> = {
   "/search_types": { query: 5 },
   "/describe_diagram": { diagram: 5 },
   "/validate_model": { scope: 5 },
+  "/build_model": {},
+  "/apply_pattern": { pattern: 5 },
 };
 
 /** Endpoints listed with a hand-written schema, tested in their own files. */
@@ -112,6 +114,8 @@ const SHORT = new Set([
   "/search_types",
   "/describe_diagram",
   "/validate_model",
+  "/build_model",
+  "/apply_pattern",
 ]);
 
 /** One case per manifest endpoint: required arguments only, an element summary as the answer. */

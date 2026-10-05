@@ -11,15 +11,19 @@
 // batch of four read-only ops, one with a "$name" reference, which adds the per-op schema checks,
 // or with --build a build_diagram of a three-class Mermaid diagram, which adds the check against
 // the whole request schema, or with --lint a lint_diagram of the current diagram, whose findings
-// are reshaped (src/quality.ts). By default StarUML is replaced by an in-process stub so the numbers
+// are reshaped (src/quality.ts), or with --model a build_model dry run of a three-class spec, or
+// with --pattern an apply_pattern dry run of Strategy, whose answers are reshaped by path
+// (src/model.ts, src/patterns.ts). By default StarUML is replaced by an in-process stub so the numbers
 // measure this server, not StarUML; --live targets the real StarUML on 58321 and the extension
 // on 58322 instead. --build --live upserts one diagram named "load-test" into the open project:
-// the first call builds it and every later one finds nothing to add.
+// the first call builds it and every later one finds nothing to add. --model and --pattern are
+// dry runs and change nothing; --pattern --live needs a model in the open project, where Strategy's
+// new elements would go.
 //
 // Usage: npm run build && node scripts/load-test.mjs
 //          [--concurrency 50,200] [--requests 5000] [--warmup 500]
 //          [--max-p99-ms N] [--min-rps N] [--live] [--session]
-//          [--call-endpoint | --batch | --build | --lint]
+//          [--call-endpoint | --batch | --build | --lint | --model | --pattern]
 // STARUML_EXT_TOKEN reaches the server, so --live works with an extension that requires a token.
 // Exits non-zero on any failed request or a breached budget.
 
@@ -41,6 +45,8 @@ const { values: args } = parseArgs({
     batch: { type: "boolean", default: false },
     build: { type: "boolean", default: false },
     lint: { type: "boolean", default: false },
+    model: { type: "boolean", default: false },
+    pattern: { type: "boolean", default: false },
     session: { type: "boolean", default: false },
   },
 });
@@ -63,27 +69,47 @@ const BUILD = {
   name: "load-test",
   upsert: true,
 };
-const params = args.lint
-  ? { name: "lint_diagram", arguments: {} }
-  : args.build
-    ? { name: "build_diagram", arguments: BUILD }
-    : args.batch
-      ? { name: "batch", arguments: { ops: BATCH_OPS } }
-      : callEndpoint
-        ? {
-            name: "call_endpoint",
-            arguments: { name: "find_elements", body: { type: "UMLClass", limit: 10 } },
-          }
-        : { name: "get_all_diagrams_info", arguments: {} };
-const label = args.lint
-  ? "lint_diagram (current diagram)"
-  : args.build
-    ? "build_diagram (3 classes, upsert)"
-    : args.batch
-      ? `batch of ${BATCH_OPS.length} ops`
-      : callEndpoint
-        ? "call_endpoint find_elements"
-        : params.name;
+const MODEL = {
+  spec: {
+    system: "LoadTest",
+    classes: [{ name: "Order" }, { name: "Line" }, { name: "Customer" }],
+    relationships: [
+      { from: "Order", to: "Line", type: "owns", toMult: "1..*" },
+      { from: "Customer", to: "Order", type: "knows" },
+    ],
+  },
+  dryRun: true,
+};
+const PATTERN = { pattern: "Strategy", dryRun: true };
+const params = args.pattern
+  ? { name: "apply_pattern", arguments: PATTERN }
+  : args.model
+    ? { name: "build_model", arguments: MODEL }
+    : args.lint
+      ? { name: "lint_diagram", arguments: {} }
+      : args.build
+        ? { name: "build_diagram", arguments: BUILD }
+        : args.batch
+          ? { name: "batch", arguments: { ops: BATCH_OPS } }
+          : callEndpoint
+            ? {
+                name: "call_endpoint",
+                arguments: { name: "find_elements", body: { type: "UMLClass", limit: 10 } },
+              }
+            : { name: "get_all_diagrams_info", arguments: {} };
+const label = args.pattern
+  ? "apply_pattern (Strategy, dry run)"
+  : args.model
+    ? "build_model (3 classes, dry run)"
+    : args.lint
+      ? "lint_diagram (current diagram)"
+      : args.build
+        ? "build_diagram (3 classes, upsert)"
+        : args.batch
+          ? `batch of ${BATCH_OPS.length} ops`
+          : callEndpoint
+            ? "call_endpoint find_elements"
+            : params.name;
 
 const levels = args.concurrency.split(",").map(Number);
 const requestsPerLevel = Number(args.requests);
@@ -276,6 +302,60 @@ async function startStub() {
       },
     }),
     "POST /find_elements": JSON.stringify({ success: true, data: page }),
+    // Dry runs in the shapes src/handlers/model.ts and patterns.ts answer.
+    "POST /build_model": JSON.stringify({
+      success: true,
+      data: {
+        model: { _id: "$m0", name: "LoadTest", path: "LoadTest" },
+        upserted: false,
+        counts: { created: { UMLModel: 1, UMLClass: 3, UMLAssociation: 2 }, updated: {} },
+        changes: {
+          created: ["LoadTest", "LoadTest/Order", "LoadTest/Line", "LoadTest/Customer"].map(
+            (path) => ({ path, type: path.includes("/") ? "UMLClass" : "UMLModel" }),
+          ),
+          updated: [],
+        },
+        dryRun: true,
+        plan: {
+          ops: Array.from({ length: 6 }, (_, i) => ({
+            path: "/create_element",
+            body: { parent: "$m0", type: "UMLClass", name: `C${i}` },
+            as: `m${i + 1}`,
+          })),
+          creates: [],
+          updates: [],
+          deletes: [],
+        },
+      },
+    }),
+    "POST /apply_pattern": JSON.stringify({
+      success: true,
+      data: {
+        pattern: "Strategy",
+        roles: {
+          Context: [{ _id: "$m0", path: "Model/Context", created: true }],
+          Strategy: [{ _id: "$m1", path: "Model/Strategy", created: true }],
+          ConcreteStrategy: [{ _id: "$m2", path: "Model/ConcreteStrategy", created: true }],
+        },
+        created: 8,
+        updated: 0,
+        unchanged: 0,
+        changes: {
+          created: [
+            { path: "Model/Strategy", type: "UMLInterface" },
+            { path: "Model/Context -> Model/Strategy", type: "UMLAssociation" },
+          ],
+          updated: [],
+        },
+        properties: [
+          { path: "Model/Strategy#execute()", field: "isAbstract", value: true },
+          { path: "Model/Context -> Model/Strategy.end1", field: "aggregation", value: "shared" },
+          { path: "Model/Context -> Model/Strategy.end2", field: "name", value: "strategy" },
+        ],
+        dryRun: true,
+        plan: { ops: [], creates: [], updates: [], deletes: [] },
+      },
+    }),
     // Two findings in the shape src/handlers/lint.ts answers, one with an autofix.
     "POST /lint_diagram": JSON.stringify({
       success: true,

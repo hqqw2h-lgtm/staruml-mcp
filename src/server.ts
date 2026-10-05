@@ -52,6 +52,8 @@ export const PROJECT_URI = "staruml://project";
 export const PROJECT_TREE_URI = "staruml://project/tree";
 export const METAMODEL_URI = "staruml://introspect/metamodel";
 export const ENDPOINTS_URI = "staruml://introspect/endpoints";
+export const PATTERNS_URI = "staruml://patterns";
+export const PATTERN_TEMPLATE = "staruml://pattern/{name}";
 export const DIAGRAM_IMAGE_TEMPLATE = "staruml://diagram/{id}.png";
 export const DIAGRAM_TEXT_TEMPLATES: Record<TextFormat, string> = {
   mermaid: `staruml://diagram/{id}.${TEXT_EXTENSIONS.mermaid}`,
@@ -61,6 +63,11 @@ export const DIAGRAM_TEXT_TEMPLATES: Record<TextFormat, string> = {
 /** Diagram ids are base64-like and may contain `/`, `+` and `=`, so they are percent-encoded. */
 export function diagramImageUri(id: string): string {
   return `staruml://diagram/${encodeURIComponent(id)}.png`;
+}
+
+/** Pattern names have spaces ("Abstract Factory"), so they are percent-encoded too. */
+export function patternUri(name: string): string {
+  return `staruml://pattern/${encodeURIComponent(name)}`;
 }
 
 export function diagramTextUri(id: string, format: TextFormat): string {
@@ -73,7 +80,7 @@ const INSTRUCTIONS =
   "Element fields take an _id or a path: Pkg/Class, Class.attr, Class#op(), Class@Diagram, " +
   "@current. " +
   "Endpoints without a tool: describe_endpoints, then call_endpoint. " +
-  "Resources: diagram PNG, Mermaid, PlantUML; project tree; metamodel; endpoints.";
+  "Resources: diagram PNG, Mermaid, PlantUML; project tree; metamodel; endpoints; patterns.";
 
 export interface ServerConfig {
   apiPort?: number;
@@ -401,6 +408,51 @@ function registerResources(server: McpServer, client: StarUMLClient, catalog: Ca
       mimeType: "application/json",
     },
     async (uri) => rawJsonResource(uri, catalog.current.compiled.manifest),
+  );
+
+  // The pattern library is data shipped with the extension (its src/patterns/library), so reads
+  // are cached like the catalogues until doctor reloads the catalog.
+  server.registerResource(
+    "patterns",
+    PATTERNS_URI,
+    {
+      description: "Design patterns apply_pattern applies: category, intent, roles, variants.",
+      mimeType: "application/json",
+    },
+    async (uri) => {
+      try {
+        const data = await catalog.read("/list_patterns {}", () =>
+          client.callExtension("/list_patterns", {}),
+        );
+        return jsonResource(uri, data);
+      } catch (error) {
+        throw resourceError("read patterns", error);
+      }
+    },
+  );
+
+  // Not enumerated: staruml://patterns names them, and listing 30 more resources would cost a
+  // call to the extension on every resources/list.
+  server.registerResource(
+    "pattern",
+    new ResourceTemplate(PATTERN_TEMPLATE, { list: undefined }),
+    {
+      description:
+        "A pattern's roles, members, relationship ends and the properties each gets; what apply_pattern sets.",
+      mimeType: "application/json",
+    },
+    async (uri, variables) => {
+      try {
+        const name = decodeURIComponent(String(variables.name));
+        const body = { name };
+        const data = await catalog.read(`/describe_pattern ${JSON.stringify(body)}`, () =>
+          client.callExtension("/describe_pattern", body),
+        );
+        return jsonResource(uri, data);
+      } catch (error) {
+        throw resourceError("read pattern", error);
+      }
+    },
   );
 
   server.registerResource(

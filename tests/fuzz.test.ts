@@ -126,9 +126,10 @@ describe("fuzz", () => {
       ["update_element", "ref", { field: "name", value: "x" }],
       ["update_element", "parent", { ref: "Model/A", op: "relocate" }],
       ["export_diagram", "diagram", { format: "svg" }],
-      ["describe_diagram", "diagram", {}],
-      ["validate_model", "scope", {}],
       ["build_diagram", "parent", { kind: "mindmap", spec: { root: { name: "r" } } }],
+      ["build_model", "parent", { spec: { classes: [] } }],
+      ["apply_pattern", "diagram", { pattern: "Strategy" }],
+      ["apply_pattern", "parent", { pattern: "Strategy" }],
     ];
     const segment = fc.oneof(
       fc.string({ minLength: 1, maxLength: 6 }),
@@ -143,6 +144,34 @@ describe("fuzz", () => {
         expect(result.isError, `${tool} ${field}=${JSON.stringify(ref)}`).toBeFalsy();
         const sent = extension.requests.slice(sentBefore).at(-1)!.body as Record<string, unknown>;
         expect(sent[field]).toBe(ref);
+      }),
+      { numRuns: 200 },
+    );
+  }, 60_000);
+
+  it("apply_pattern answers any bindings with a result, refusing bad ones before sending", async () => {
+    await fc.assert(
+      fc.asyncProperty(json, async (bindings) => {
+        const sentBefore = extension.requests.length;
+        const result = await mcp.call("apply_pattern", { pattern: "Strategy", bindings });
+        structured(result);
+        // A refusal is local: the whole request schema checks bindings before anything is sent.
+        if (result.isError) expect(extension.requests.length).toBe(sentBefore);
+      }),
+      { numRuns: 200 },
+    );
+  }, 60_000);
+
+  it("build_model answers any spec with a result, refusing a non-object before sending", async () => {
+    await fc.assert(
+      fc.asyncProperty(json, fc.option(json), async (spec, upsert) => {
+        const sentBefore = extension.requests.length;
+        const args = { spec, ...(upsert === null ? {} : { upsert }) };
+        const result = await mcp.call("build_model", args);
+        structured(result);
+        const object = typeof spec === "object" && spec !== null && !Array.isArray(spec);
+        if (!object) expect(result.isError).toBe(true);
+        if (result.isError) expect(extension.requests.length).toBe(sentBefore);
       }),
       { numRuns: 200 },
     );

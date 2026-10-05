@@ -1,0 +1,805 @@
+{
+  "versions": {
+    "staruml": {
+      "version": "7.1.1",
+      "apiVersion": "7.1.1"
+    },
+    "extension": {
+      "name": "staruml-mcp-extension",
+      "version": "0.3.0"
+    }
+  },
+  "spec": {
+    "system": "Shipping",
+    "classes": [
+      {
+        "name": "Order",
+        "responsibility": "Prices and ships one purchase",
+        "attributes": ["+weight: double"],
+        "operations": ["+shippingCost(): double"]
+      },
+      {
+        "name": "FlatRate",
+        "responsibility": "Charges one price per order"
+      },
+      {
+        "name": "ByWeight",
+        "responsibility": "Charges by the kilogram"
+      }
+    ]
+  },
+  "apply": {
+    "pattern": "Strategy",
+    "bindings": {
+      "Context": "Shipping/Order",
+      "Strategy": "ShippingPolicy",
+      "ConcreteStrategy": ["Shipping/FlatRate", "Shipping/ByWeight"]
+    },
+    "parent": "Shipping"
+  },
+  "detectBody": {
+    "scope": "Shipping",
+    "patterns": ["Strategy"]
+  },
+  "viaPattern": {
+    "describe": {
+      "name": "Strategy",
+      "category": "behavioral",
+      "intent": "Define a family of algorithms, encapsulate each one and make them interchangeable.",
+      "alsoKnownAs": ["Policy"],
+      "roles": [
+        {
+          "name": "Context",
+          "type": "UMLClass",
+          "cardinality": "1",
+          "description": "Is configured with a strategy and delegates to it.",
+          "documentation": "{Context} delegates the varying algorithm to a {Strategy}.",
+          "operations": [
+            {
+              "name": "setStrategy",
+              "parameters": [
+                {
+                  "name": "strategy",
+                  "type": "{Strategy}",
+                  "direction": "in"
+                }
+              ]
+            },
+            {
+              "name": "contextInterface"
+            }
+          ]
+        },
+        {
+          "name": "Strategy",
+          "type": "UMLInterface",
+          "cardinality": "1",
+          "description": "Interface common to all algorithms.",
+          "operations": [
+            {
+              "name": "execute",
+              "isAbstract": true
+            }
+          ]
+        },
+        {
+          "name": "ConcreteStrategy",
+          "type": "UMLClass",
+          "cardinality": "many",
+          "description": "Implements one algorithm.",
+          "operations": [
+            {
+              "name": "execute"
+            }
+          ]
+        }
+      ],
+      "relationships": [
+        {
+          "type": "aggregation",
+          "from": "Context",
+          "to": "Strategy",
+          "fromEnd": {
+            "navigable": "notNavigable"
+          },
+          "toEnd": {
+            "name": "strategy",
+            "navigable": "navigable",
+            "multiplicity": "1"
+          }
+        },
+        {
+          "type": "realization",
+          "from": "ConcreteStrategy",
+          "to": "Strategy"
+        }
+      ],
+      "sequence": {
+        "participants": ["Client", "Context", "ConcreteStrategy"],
+        "messages": [
+          {
+            "from": "Client",
+            "to": "Context",
+            "text": "contextInterface()"
+          },
+          {
+            "from": "Context",
+            "to": "ConcreteStrategy",
+            "text": "execute()"
+          }
+        ]
+      },
+      "variants": {
+        "abstract-class": {
+          "description": "The strategy is an abstract class its concrete strategies extend.",
+          "roles": {
+            "Strategy": {
+              "type": "UMLClass",
+              "properties": {
+                "isAbstract": true
+              }
+            }
+          },
+          "relationships": [
+            {
+              "type": "aggregation",
+              "from": "Context",
+              "to": "Strategy",
+              "fromEnd": {
+                "navigable": "notNavigable"
+              },
+              "toEnd": {
+                "name": "strategy",
+                "navigable": "navigable",
+                "multiplicity": "1"
+              }
+            },
+            {
+              "type": "generalization",
+              "from": "ConcreteStrategy",
+              "to": "Strategy"
+            }
+          ]
+        }
+      },
+      "checks": [
+        {
+          "id": "strategy-context-navigates",
+          "role": "Context",
+          "relationship": 0,
+          "end": "to",
+          "property": "navigable",
+          "equals": "navigable",
+          "message": "A context reaches its strategy: the association end at the strategy is navigable."
+        }
+      ]
+    },
+    "dryRun": {
+      "pattern": "Strategy",
+      "roles": {
+        "Context": [
+          {
+            "_id": "AAAAAAGhDWbC8pAbqn0=",
+            "path": "Shipping/Order",
+            "created": false
+          }
+        ],
+        "Strategy": [
+          {
+            "_id": "$m0",
+            "path": "Shipping/ShippingPolicy",
+            "created": true
+          }
+        ],
+        "ConcreteStrategy": [
+          {
+            "_id": "AAAAAAGhDWbDb5AeUj4=",
+            "path": "Shipping/FlatRate",
+            "created": false
+          },
+          {
+            "_id": "AAAAAAGhDWbD65AhMTo=",
+            "path": "Shipping/ByWeight",
+            "created": false
+          }
+        ]
+      },
+      "created": 9,
+      "updated": 0,
+      "unchanged": 0,
+      "changes": {
+        "created": [
+          {
+            "path": "Shipping/ShippingPolicy",
+            "type": "UMLInterface"
+          },
+          {
+            "path": "Shipping/Order#setStrategy()",
+            "type": "UMLOperation"
+          },
+          {
+            "path": "Shipping/Order#contextInterface()",
+            "type": "UMLOperation"
+          },
+          {
+            "path": "Shipping/ShippingPolicy#execute()",
+            "type": "UMLOperation"
+          },
+          {
+            "path": "Shipping/FlatRate#execute()",
+            "type": "UMLOperation"
+          },
+          {
+            "path": "Shipping/ByWeight#execute()",
+            "type": "UMLOperation"
+          },
+          {
+            "path": "Shipping/Order -> Shipping/ShippingPolicy",
+            "type": "UMLAssociation"
+          },
+          {
+            "path": "Shipping/FlatRate -> Shipping/ShippingPolicy",
+            "type": "UMLInterfaceRealization"
+          },
+          {
+            "path": "Shipping/ByWeight -> Shipping/ShippingPolicy",
+            "type": "UMLInterfaceRealization"
+          }
+        ],
+        "updated": []
+      },
+      "properties": [
+        {
+          "path": "Shipping/Order#setStrategy().strategy",
+          "field": "type",
+          "value": {
+            "$ref": "$m0"
+          }
+        },
+        {
+          "path": "Shipping/Order#setStrategy().strategy",
+          "field": "direction",
+          "value": "in"
+        },
+        {
+          "path": "Shipping/ShippingPolicy#execute()",
+          "field": "isAbstract",
+          "value": true
+        },
+        {
+          "path": "Shipping/Order -> Shipping/ShippingPolicy.end1",
+          "field": "navigable",
+          "value": "notNavigable"
+        },
+        {
+          "path": "Shipping/Order -> Shipping/ShippingPolicy.end1",
+          "field": "aggregation",
+          "value": "shared"
+        },
+        {
+          "path": "Shipping/Order -> Shipping/ShippingPolicy.end2",
+          "field": "name",
+          "value": "strategy"
+        },
+        {
+          "path": "Shipping/Order -> Shipping/ShippingPolicy.end2",
+          "field": "navigable",
+          "value": "navigable"
+        },
+        {
+          "path": "Shipping/Order -> Shipping/ShippingPolicy.end2",
+          "field": "multiplicity",
+          "value": "1"
+        }
+      ],
+      "dryRun": true,
+      "plan": {
+        "ops": [
+          {
+            "path": "/create_element",
+            "as": "m0",
+            "body": {
+              "type": "UMLInterface",
+              "parent": "AAAAAAGhDWbCe5AYIyk=",
+              "name": "ShippingPolicy",
+              "field": "ownedElements"
+            }
+          },
+          {
+            "path": "/add_operation",
+            "as": "m1",
+            "body": {
+              "ref": "AAAAAAGhDWbC8pAbqn0=",
+              "name": "setStrategy",
+              "parameters": [
+                {
+                  "name": "strategy",
+                  "type": {
+                    "$ref": "$m0"
+                  },
+                  "direction": "in"
+                }
+              ]
+            }
+          },
+          {
+            "path": "/add_operation",
+            "as": "m2",
+            "body": {
+              "ref": "AAAAAAGhDWbC8pAbqn0=",
+              "name": "contextInterface"
+            }
+          },
+          {
+            "path": "/add_operation",
+            "as": "m3",
+            "body": {
+              "ref": "$m0",
+              "name": "execute",
+              "isAbstract": true
+            }
+          },
+          {
+            "path": "/add_operation",
+            "as": "m4",
+            "body": {
+              "ref": "AAAAAAGhDWbDb5AeUj4=",
+              "name": "execute"
+            }
+          },
+          {
+            "path": "/add_operation",
+            "as": "m5",
+            "body": {
+              "ref": "AAAAAAGhDWbD65AhMTo=",
+              "name": "execute"
+            }
+          },
+          {
+            "path": "/create_relationship",
+            "as": "m6",
+            "body": {
+              "type": "UMLAssociation",
+              "tail": "AAAAAAGhDWbC8pAbqn0=",
+              "head": "$m0",
+              "tailEnd": {
+                "navigable": "notNavigable",
+                "aggregation": "shared"
+              },
+              "headEnd": {
+                "name": "strategy",
+                "navigable": "navigable",
+                "multiplicity": "1"
+              }
+            }
+          },
+          {
+            "path": "/create_relationship",
+            "as": "m7",
+            "body": {
+              "type": "UMLInterfaceRealization",
+              "tail": "AAAAAAGhDWbDb5AeUj4=",
+              "head": "$m0"
+            }
+          },
+          {
+            "path": "/create_relationship",
+            "as": "m8",
+            "body": {
+              "type": "UMLInterfaceRealization",
+              "tail": "AAAAAAGhDWbD65AhMTo=",
+              "head": "$m0"
+            }
+          }
+        ],
+        "creates": [
+          {
+            "op": "/create_element",
+            "target": "Shipping",
+            "as": "m0",
+            "type": "UMLInterface",
+            "name": "ShippingPolicy"
+          },
+          {
+            "op": "/add_operation",
+            "target": "Shipping/Order",
+            "as": "m1",
+            "name": "setStrategy"
+          },
+          {
+            "op": "/add_operation",
+            "target": "Shipping/Order",
+            "as": "m2",
+            "name": "contextInterface"
+          },
+          {
+            "op": "/add_operation",
+            "target": "$m0",
+            "as": "m3",
+            "name": "execute"
+          },
+          {
+            "op": "/add_operation",
+            "target": "Shipping/FlatRate",
+            "as": "m4",
+            "name": "execute"
+          },
+          {
+            "op": "/add_operation",
+            "target": "Shipping/ByWeight",
+            "as": "m5",
+            "name": "execute"
+          },
+          {
+            "op": "/create_relationship",
+            "target": null,
+            "as": "m6",
+            "type": "UMLAssociation"
+          },
+          {
+            "op": "/create_relationship",
+            "target": null,
+            "as": "m7",
+            "type": "UMLInterfaceRealization"
+          },
+          {
+            "op": "/create_relationship",
+            "target": null,
+            "as": "m8",
+            "type": "UMLInterfaceRealization"
+          }
+        ],
+        "updates": [],
+        "deletes": []
+      }
+    },
+    "applied": {
+      "pattern": "Strategy",
+      "roles": {
+        "Context": [
+          {
+            "_id": "AAAAAAGhDWbC8pAbqn0=",
+            "path": "Shipping/Order",
+            "created": false
+          }
+        ],
+        "Strategy": [
+          {
+            "_id": "AAAAAAGhDWbFqJAtgp8=",
+            "path": "Shipping/ShippingPolicy",
+            "created": true
+          }
+        ],
+        "ConcreteStrategy": [
+          {
+            "_id": "AAAAAAGhDWbDb5AeUj4=",
+            "path": "Shipping/FlatRate",
+            "created": false
+          },
+          {
+            "_id": "AAAAAAGhDWbD65AhMTo=",
+            "path": "Shipping/ByWeight",
+            "created": false
+          }
+        ]
+      },
+      "created": 9,
+      "updated": 0,
+      "unchanged": 0,
+      "changes": {
+        "created": [
+          {
+            "path": "Shipping/ShippingPolicy",
+            "type": "UMLInterface"
+          },
+          {
+            "path": "Shipping/Order#setStrategy()",
+            "type": "UMLOperation"
+          },
+          {
+            "path": "Shipping/Order#contextInterface()",
+            "type": "UMLOperation"
+          },
+          {
+            "path": "Shipping/ShippingPolicy#execute()",
+            "type": "UMLOperation"
+          },
+          {
+            "path": "Shipping/FlatRate#execute()",
+            "type": "UMLOperation"
+          },
+          {
+            "path": "Shipping/ByWeight#execute()",
+            "type": "UMLOperation"
+          },
+          {
+            "path": "Shipping/Order -> Shipping/ShippingPolicy",
+            "type": "UMLAssociation"
+          },
+          {
+            "path": "Shipping/FlatRate -> Shipping/ShippingPolicy",
+            "type": "UMLInterfaceRealization"
+          },
+          {
+            "path": "Shipping/ByWeight -> Shipping/ShippingPolicy",
+            "type": "UMLInterfaceRealization"
+          }
+        ],
+        "updated": []
+      },
+      "properties": [
+        {
+          "path": "Shipping/Order#setStrategy().strategy",
+          "field": "type",
+          "value": {
+            "$ref": "AAAAAAGhDWbFqJAtgp8="
+          }
+        },
+        {
+          "path": "Shipping/Order#setStrategy().strategy",
+          "field": "direction",
+          "value": "in"
+        },
+        {
+          "path": "Shipping/ShippingPolicy#execute()",
+          "field": "isAbstract",
+          "value": true
+        },
+        {
+          "path": "Shipping/Order -> Shipping/ShippingPolicy.end1",
+          "field": "navigable",
+          "value": "notNavigable"
+        },
+        {
+          "path": "Shipping/Order -> Shipping/ShippingPolicy.end1",
+          "field": "aggregation",
+          "value": "shared"
+        },
+        {
+          "path": "Shipping/Order -> Shipping/ShippingPolicy.end2",
+          "field": "name",
+          "value": "strategy"
+        },
+        {
+          "path": "Shipping/Order -> Shipping/ShippingPolicy.end2",
+          "field": "navigable",
+          "value": "navigable"
+        },
+        {
+          "path": "Shipping/Order -> Shipping/ShippingPolicy.end2",
+          "field": "multiplicity",
+          "value": "1"
+        }
+      ],
+      "style": {
+        "profile": "uml-standard"
+      }
+    },
+    "detect": {
+      "count": 1,
+      "detections": [
+        {
+          "pattern": "Strategy",
+          "confidence": 1,
+          "roles": {
+            "Strategy": [
+              {
+                "_id": "AAAAAAGhDWbFqJAtgp8=",
+                "path": "Shipping/ShippingPolicy"
+              }
+            ],
+            "Context": [
+              {
+                "_id": "AAAAAAGhDWbC8pAbqn0=",
+                "path": "Shipping/Order"
+              }
+            ],
+            "ConcreteStrategy": [
+              {
+                "_id": "AAAAAAGhDWbDb5AeUj4=",
+                "path": "Shipping/FlatRate"
+              },
+              {
+                "_id": "AAAAAAGhDWbD65AhMTo=",
+                "path": "Shipping/ByWeight"
+              }
+            ]
+          },
+          "missing": []
+        }
+      ]
+    }
+  },
+  "byHand": {
+    "ops": [
+      {
+        "path": "/create_element",
+        "as": "m0",
+        "body": {
+          "type": "UMLInterface",
+          "parent": "AAAAAAGhDWbCe5AYIyk=",
+          "name": "ShippingPolicy",
+          "field": "ownedElements"
+        }
+      },
+      {
+        "path": "/add_operation",
+        "as": "m1",
+        "body": {
+          "ref": "AAAAAAGhDWbC8pAbqn0=",
+          "name": "setStrategy",
+          "parameters": [
+            {
+              "name": "strategy",
+              "type": {
+                "$ref": "$m0"
+              },
+              "direction": "in"
+            }
+          ]
+        }
+      },
+      {
+        "path": "/add_operation",
+        "as": "m2",
+        "body": {
+          "ref": "AAAAAAGhDWbC8pAbqn0=",
+          "name": "contextInterface"
+        }
+      },
+      {
+        "path": "/add_operation",
+        "as": "m3",
+        "body": {
+          "ref": "$m0",
+          "name": "execute",
+          "isAbstract": true
+        }
+      },
+      {
+        "path": "/add_operation",
+        "as": "m4",
+        "body": {
+          "ref": "AAAAAAGhDWbDb5AeUj4=",
+          "name": "execute"
+        }
+      },
+      {
+        "path": "/add_operation",
+        "as": "m5",
+        "body": {
+          "ref": "AAAAAAGhDWbD65AhMTo=",
+          "name": "execute"
+        }
+      },
+      {
+        "path": "/create_relationship",
+        "as": "m6",
+        "body": {
+          "type": "UMLAssociation",
+          "tail": "AAAAAAGhDWbC8pAbqn0=",
+          "head": "$m0",
+          "tailEnd": {
+            "navigable": "notNavigable",
+            "aggregation": "shared"
+          },
+          "headEnd": {
+            "name": "strategy",
+            "navigable": "navigable",
+            "multiplicity": "1"
+          }
+        }
+      },
+      {
+        "path": "/create_relationship",
+        "as": "m7",
+        "body": {
+          "type": "UMLInterfaceRealization",
+          "tail": "AAAAAAGhDWbDb5AeUj4=",
+          "head": "$m0"
+        }
+      },
+      {
+        "path": "/create_relationship",
+        "as": "m8",
+        "body": {
+          "type": "UMLInterfaceRealization",
+          "tail": "AAAAAAGhDWbD65AhMTo=",
+          "head": "$m0"
+        }
+      }
+    ],
+    "batch": {
+      "atomic": true,
+      "succeeded": 9,
+      "failed": 0,
+      "results": [
+        {
+          "path": "/create_element",
+          "as": "m0",
+          "success": true,
+          "id": "AAAAAAGhDWbJ/pBiwlg="
+        },
+        {
+          "path": "/add_operation",
+          "as": "m1",
+          "success": true,
+          "id": "AAAAAAGhDWbKdpBlTUs="
+        },
+        {
+          "path": "/add_operation",
+          "as": "m2",
+          "success": true,
+          "id": "AAAAAAGhDWbK8ZBqj/c="
+        },
+        {
+          "path": "/add_operation",
+          "as": "m3",
+          "success": true,
+          "id": "AAAAAAGhDWbLbJBtC1c="
+        },
+        {
+          "path": "/add_operation",
+          "as": "m4",
+          "success": true,
+          "id": "AAAAAAGhDWbL5pBwDWM="
+        },
+        {
+          "path": "/add_operation",
+          "as": "m5",
+          "success": true,
+          "id": "AAAAAAGhDWbMYJBzTiw="
+        },
+        {
+          "path": "/create_relationship",
+          "as": "m6",
+          "success": true
+        },
+        {
+          "path": "/create_relationship",
+          "as": "m7",
+          "success": true
+        },
+        {
+          "path": "/create_relationship",
+          "as": "m8",
+          "success": true
+        }
+      ]
+    },
+    "detect": {
+      "count": 1,
+      "detections": [
+        {
+          "pattern": "Strategy",
+          "confidence": 1,
+          "roles": {
+            "Strategy": [
+              {
+                "_id": "AAAAAAGhDWbJ/pBiwlg=",
+                "path": "Shipping/ShippingPolicy"
+              }
+            ],
+            "Context": [
+              {
+                "_id": "AAAAAAGhDWbC8pAbqn0=",
+                "path": "Shipping/Order"
+              }
+            ],
+            "ConcreteStrategy": [
+              {
+                "_id": "AAAAAAGhDWbDb5AeUj4=",
+                "path": "Shipping/FlatRate"
+              },
+              {
+                "_id": "AAAAAAGhDWbD65AhMTo=",
+                "path": "Shipping/ByWeight"
+              }
+            ]
+          },
+          "missing": []
+        }
+      ]
+    }
+  }
+}

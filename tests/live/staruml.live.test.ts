@@ -8,7 +8,7 @@
  * original file at the end. Unsaved changes of the original survive only in the temp copy,
  * whose path is printed.
  */
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -23,7 +23,14 @@ import { diagnose, healthy } from "../../src/doctor.js";
 import { CatalogState } from "../../src/extension-tools.js";
 import { main, type RunningServer } from "../../src/index.js";
 import { BUNDLED_MANIFEST, toolName } from "../../src/manifest.js";
-import { diagramImageUri, diagramTextUri, ENDPOINTS_URI, METAMODEL_URI } from "../../src/server.js";
+import {
+  diagramImageUri,
+  diagramTextUri,
+  ENDPOINTS_URI,
+  METAMODEL_URI,
+  PATTERNS_URI,
+  patternUri,
+} from "../../src/server.js";
 import { StarUMLClient } from "../../src/staruml-client.js";
 import { VIEWER_URI } from "../../src/viewer.js";
 import { CORE_ENDPOINTS, parseToolSelection } from "../../src/tiers.js";
@@ -128,7 +135,13 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
   }, 30_000);
 
   afterAll(async () => {
-    await mcp.call("open_project", { filename: originalFile ?? snapshot });
+    // open_project is not in the core tier; calling it as a tool left StarUML on the suite's
+    // last project until 0.6.0.
+    const reopened = await mcp.call("call_endpoint", {
+      name: "open_project",
+      body: { filename: originalFile ?? snapshot },
+    });
+    if (reopened.isError) console.warn(`[live] could not reopen ${snapshot}: ${text(reopened)}`);
     await mcp.close();
   }, 30_000);
 
@@ -805,6 +818,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         "model-codebase",
         "review-diagram",
         "improve-diagram",
+        "apply-pattern",
       ]);
 
       const review = await mcp.client.getPrompt({
@@ -812,7 +826,9 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         arguments: { diagram: classDiagramId },
       });
       const steps = (review.messages[0]!.content as { text: string }).text;
-      expect(steps).toContain(`describe_diagram({diagram: "${classDiagramId}"})`);
+      expect(steps).toContain(
+        `call_endpoint({name: "describe_diagram", body: {diagram: "${classDiagramId}"}})`,
+      );
       expect(steps).toContain(`diagram_as_text({diagram: "${classDiagramId}"})`);
       // Step 2 as the prompt describes it: the diagram's owner from get_element_by_id.
       const owner = payload<Summary>(
@@ -1356,6 +1372,318 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       });
     });
 
+    /**
+     * Model first and patterns (extension #23, #30; this server's #13): a model from an object
+     * spec, a pattern applied to three of its classes by path and detected back, the pattern
+     * resources and prompt, presets, themes, and messages synced into operations.
+     */
+    // StarUML answers more slowly once the ThingsBoard model is in the project.
+    describe("model first and patterns (#13)", { timeout: 30_000 }, () => {
+      const SHIPPING = {
+        system: "Shipping",
+        classes: [
+          {
+            name: "Order",
+            responsibility: "Prices and ships one purchase",
+            attributes: ["+weight: double"],
+            operations: ["+shippingCost(): double"],
+          },
+          { name: "FlatRate", responsibility: "Charges one price per order" },
+          { name: "ByWeight", responsibility: "Charges by the kilogram" },
+        ],
+        relationships: [{ from: "Order", to: "FlatRate", type: "uses" }],
+      };
+      const BINDINGS = {
+        Context: "Shipping/Order",
+        Strategy: "ShippingPolicy",
+        ConcreteStrategy: ["Shipping/FlatRate", "Shipping/ByWeight"],
+      };
+      const policies = async () =>
+        payload<{ count: number }>(
+          await call("find_elements", { type: "UMLInterface", name: "ShippingPolicy" }),
+        ).count;
+
+      it("builds a model from an object spec: dry run, build, responsibilities as documentation", async () => {
+        const planned = payload<{
+          changes: { created: { path: string }[] };
+          plan: { ops: number };
+        }>(await call("build_model", { spec: SHIPPING, dryRun: true }));
+        expect(planned.changes.created.map((c) => c.path)).toEqual(
+          expect.arrayContaining(["Shipping", "Shipping/Order", "Shipping/Order#shippingCost()"]),
+        );
+        expect(planned.plan.ops).toBeGreaterThan(0);
+        expect(
+          payload<{ count: number }>(
+            await call("find_elements", { type: "UMLModel", name: "Shipping" }),
+          ).count,
+        ).toBe(0);
+
+        const built = payload<{ model: Summary; counts: { created: Record<string, number> } }>(
+          await call("build_model", { spec: SHIPPING }),
+        );
+        expect(built.model.path).toBe("Shipping");
+        expect(built.counts.created).toMatchObject({ UMLModel: 1, UMLClass: 3 });
+        const order = payload<Summary>(
+          await call("get_element_by_id", { ref: "Shipping/Order", fields: ["documentation"] }),
+        );
+        expect(order.documentation).toContain("Prices and ships one purchase");
+
+        const again = payload<{ upserted: boolean; counts: { unchanged: number } }>(
+          await call("build_model", { spec: SHIPPING, upsert: true }),
+        );
+        expect(again.upserted).toBe(true);
+        expect(again.counts.unchanged).toBeGreaterThan(0);
+      });
+
+      it(
+        "builds the ThingsBoard model from its 93-class object spec",
+        // 644 ops; 22 s on StarUML 7.1.1 while nothing else uses it.
+        { timeout: 120_000 },
+        async () => {
+          const spec = JSON.parse(
+            readFileSync(new URL("../fixtures/thingsboard.oo.json", import.meta.url), "utf8"),
+          ) as { classes: unknown[]; system: string };
+          const built = payload<{
+            model: Summary;
+            counts: { created: Record<string, number> };
+            skipped?: { section: string }[];
+          }>(
+            // The SDK client gives up on a request after 60 s by default.
+            (await mcp.client.callTool({ name: "build_model", arguments: { spec } }, undefined, {
+              timeout: 110_000,
+            })) as CallToolResult,
+          );
+          expect(built.model.name).toBe(spec.system);
+          const classifiers = ["UMLClass", "UMLInterface", "UMLEnumeration"]
+            .map((t) => built.counts.created[t] ?? 0)
+            .reduce((a, b) => a + b);
+          expect(classifiers).toBe(spec.classes.length);
+          // Diagram sections are left to build_diagram.
+          expect(built.skipped?.map((s) => s.section)).toEqual(
+            expect.arrayContaining(["classViews", "erd"]),
+          );
+          // A thousand elements slow every later call; the rest of the suite does not need them.
+          ok(await call("delete_element", { ref: built.model._id }));
+        },
+      );
+
+      it("reads the pattern library as resources and through describe_pattern", async () => {
+        const list = JSON.parse(
+          ((await mcp.client.readResource({ uri: PATTERNS_URI })).contents[0] as { text: string })
+            .text,
+        ) as { count: number; patterns: { name: string; roles: string[] }[] };
+        expect(list.count).toBeGreaterThanOrEqual(30);
+        expect(list.patterns.find((p) => p.name === "Strategy")?.roles).toEqual([
+          "Context",
+          "Strategy",
+          "ConcreteStrategy*",
+        ]);
+        const strategy = JSON.parse(
+          (
+            (await mcp.client.readResource({ uri: patternUri("Strategy") })).contents[0] as {
+              text: string;
+            }
+          ).text,
+        ) as { roles: { name: string }[]; relationships: unknown[] };
+        expect(strategy.roles.map((r) => r.name)).toEqual([
+          "Context",
+          "Strategy",
+          "ConcreteStrategy",
+        ]);
+        // The tool drops the name it was asked for, as every echo.
+        const { name: _echo, ...described } = strategy as { name?: string };
+        expect(payload(await call("describe_pattern", { name: "Strategy" }))).toEqual(described);
+        expect(
+          payload<{ count: number }>(await call("list_patterns", { category: "behavioral" })).count,
+        ).toBeGreaterThan(5);
+        const abstractFactory = await mcp.client.readResource({
+          uri: patternUri("Abstract Factory"),
+        });
+        expect((abstractFactory.contents[0] as { text: string }).text).toContain("AbstractFactory");
+      });
+
+      it(
+        "applies Strategy to three existing classes by path and detects it back",
+        { timeout: 30_000 },
+        async () => {
+          const planned = payload<{
+            roles: Record<string, string[]>;
+            properties: Record<string, Record<string, unknown>>;
+            plan: { ops: number };
+          }>(
+            await call("apply_pattern", {
+              pattern: "Strategy",
+              bindings: BINDINGS,
+              parent: "Shipping",
+              dryRun: true,
+            }),
+          );
+          expect(planned.roles).toEqual({
+            Context: ["Shipping/Order"],
+            Strategy: ["Shipping/ShippingPolicy"],
+            ConcreteStrategy: ["Shipping/FlatRate", "Shipping/ByWeight"],
+          });
+          expect(planned.plan.ops).toBeGreaterThan(0);
+          expect(await policies()).toBe(0);
+
+          const applied = payload<{
+            created: number;
+            diagram: string;
+            sequenceDiagram: string;
+            properties: Record<string, Record<string, unknown>>;
+          }>(
+            await call("apply_pattern", {
+              pattern: "Strategy",
+              bindings: BINDINGS,
+              parent: "Shipping",
+              diagram: "Shipping strategy",
+              sequence: true,
+            }),
+          );
+          expect(applied.created).toBeGreaterThan(0);
+          expect(await policies()).toBe(1);
+          // The properties Strategy prescribes, set on the association's ends.
+          const ends = Object.entries(applied.properties).filter(([path]) => path.includes(" -> "));
+          expect(Object.fromEntries(ends)).toMatchObject({
+            "Shipping/Order -> Shipping/ShippingPolicy.end1": {
+              aggregation: "shared",
+              navigable: "notNavigable",
+            },
+            "Shipping/Order -> Shipping/ShippingPolicy.end2": {
+              name: "strategy",
+              navigable: "navigable",
+              multiplicity: "1",
+            },
+          });
+          expect(applied.properties["Shipping/ShippingPolicy#execute()"]).toEqual({
+            isAbstract: true,
+          });
+
+          const { detections } = payload<{
+            detections: { pattern: string; confidence: number; roles: Record<string, string[]> }[];
+          }>(await call("detect_patterns", { scope: "Shipping", patterns: ["Strategy"] }));
+          expect(detections[0]).toMatchObject({
+            pattern: "Strategy",
+            confidence: 1,
+            roles: {
+              Context: ["Shipping/Order"],
+              Strategy: ["Shipping/ShippingPolicy"],
+              ConcreteStrategy: expect.arrayContaining(["Shipping/FlatRate", "Shipping/ByWeight"]),
+            },
+          });
+          expect(detections[0]).not.toHaveProperty("missing");
+
+          const shown = await call("view_diagram", { diagram: applied.diagram, annotate: "paths" });
+          expect((shown.content[0] as { type: string }).type).toBe("image");
+          // The pattern's messages, already operations of their receivers.
+          expect(
+            payload<{ problems?: unknown[] }>(
+              await call("check_messages", { diagram: applied.sequenceDiagram }),
+            ).problems ?? [],
+          ).toEqual([]);
+        },
+      );
+
+      it("the apply-pattern prompt's calls run against StarUML as written", async () => {
+        const prompt = await mcp.client.getPrompt({
+          name: "apply-pattern",
+          arguments: { pattern: "Strategy", scope: "Shipping" },
+        });
+        const steps = (prompt.messages[0]!.content as { text: string }).text;
+        expect(steps).toContain(
+          'call_endpoint({name: "describe_pattern", body: {name: "Strategy"}})',
+        );
+        expect(steps).toContain('apply_pattern({pattern: "Strategy", bindings, parent: "Shipping"');
+        expect(steps).toContain(
+          'call_endpoint({name: "detect_patterns", body: {patterns: ["Strategy"], scope: "Shipping"}})',
+        );
+        ok(
+          await mcp.call("call_endpoint", { name: "describe_pattern", body: { name: "Strategy" } }),
+        );
+        ok(
+          await mcp.call("call_endpoint", {
+            name: "detect_patterns",
+            body: { patterns: ["Strategy"], scope: "Shipping" },
+          }),
+        );
+      });
+
+      it("gives a class a preset's properties and explains a type's", async () => {
+        const planned = payload<{ element: string; properties: Record<string, unknown> }>(
+          await call("apply_preset", {
+            ref: "Shipping/FlatRate",
+            preset: "immutable",
+            dryRun: true,
+          }),
+        );
+        expect(planned.element).toBe("Shipping/FlatRate");
+        expect(planned.properties["Shipping/FlatRate"]).toEqual({ isLeaf: true });
+        ok(await call("apply_preset", { ref: "Shipping/FlatRate", preset: "immutable" }));
+        expect(
+          payload<Summary>(
+            await call("get_element_by_id", { ref: "Shipping/FlatRate", fields: ["isLeaf"] }),
+          ).isLeaf,
+        ).toBe(true);
+
+        const described = payload<{ properties: { name: string }[] }>(
+          await call("describe_type", { type: "UMLAssociationEnd" }),
+        );
+        expect(described.properties.map((p) => p.name)).toEqual(
+          expect.arrayContaining(["aggregation", "navigable", "multiplicity"]),
+        );
+      });
+
+      it("themes the pattern's diagram in one step", async () => {
+        const planned = payload<{ styles: { views: number }[]; plan: { ops: number } }>(
+          await call("apply_theme", { ref: "Shipping strategy", theme: "blueprint", dryRun: true }),
+        );
+        expect(planned.plan.ops).toBeGreaterThan(0);
+        const themed = payload<{ styles: { views: number }[] }>(
+          await call("apply_theme", { ref: "Shipping strategy", theme: "blueprint" }),
+        );
+        expect(themed.styles.reduce((n, s) => n + s.views, 0)).toBeGreaterThan(0);
+      });
+
+      it(
+        "finds a message naming no operation and syncs it into the receiver",
+        { timeout: 20_000 },
+        async () => {
+          ok(
+            await call("build_diagram", {
+              kind: "sequence",
+              name: "Quote shipping",
+              parent: "Shipping",
+              spec: {
+                participants: ["Order", "ByWeight"],
+                messages: [{ from: "Order", to: "ByWeight", text: "quote(kilograms: double)" }],
+              },
+            }),
+          );
+          const before = payload<{ problems: { problem: string; receiver: string }[] }>(
+            await call("check_messages", { diagram: "Quote shipping" }),
+          );
+          expect(before.problems).toEqual([
+            expect.objectContaining({ problem: "no-operation", receiver: "Shipping/ByWeight" }),
+          ]);
+          const planned = payload<{ plan: { ops: number } }>(
+            await call("sync_operations", { diagram: "Quote shipping", dryRun: true }),
+          );
+          expect(planned.plan.ops).toBeGreaterThan(0);
+          ok(await call("sync_operations", { diagram: "Quote shipping" }));
+          expect(
+            payload<{ problems?: unknown[] }>(
+              await call("check_messages", { diagram: "Quote shipping" }),
+            ).problems ?? [],
+          ).toEqual([]);
+          expect(
+            payload<Summary>(
+              await call("get_element_by_id", { ref: "Shipping/ByWeight#quote(double)" }),
+            ).name,
+          ).toBe("quote");
+        },
+      );
+    });
+
     it("called every listed tool and every endpoint of the bundled manifest", async () => {
       const { tools } = await mcp.client.listTools();
       const live = catalog.current.compiled.manifest.endpoints.map((e) => e.path);
@@ -1756,7 +2084,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       expect(message.result!.isError).toBeUndefined();
 
       const prompt = await rpc(base, 3, "prompts/get", { name: "review-diagram" });
-      expect(JSON.stringify(prompt.message.result)).toContain("describe_diagram(");
+      expect(JSON.stringify(prompt.message.result)).toContain("describe_diagram");
     });
 
     /** An SDK client in its own HTTP session, as Claude Code connects with --transport http. */
