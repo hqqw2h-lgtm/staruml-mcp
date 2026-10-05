@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Soak test over stdio: starts the built server (dist/index.js) against an in-process stub of both
 // StarUML ports, sends tool calls one after another through the MCP SDK client (a rotation of
-// get_all_diagrams_info, call_endpoint find_elements, batch, build_diagram, lint_diagram, and dry
-// runs of build_model and apply_pattern), and compares the first and the last --window of --calls
+// get_all_diagrams_info, call_endpoint find_elements, batch, build_diagram, lint_diagram through
+// call_endpoint, diagram_quality, and dry runs of improve_diagram, build_model and apply_pattern),
+// and compares the first and the last --window of --calls
 // measured calls. The server's resident set
 // size is sampled with ps every --sample calls, and its live heap after a full GC is read at the
 // end of both windows. Exits non-zero when any call failed, or when the mean RSS, the live heap or the p99
@@ -77,7 +78,9 @@ const ROTATION = [
     name: "build_diagram",
     arguments: { mermaid: "classDiagram\n  Order --> Line", name: "soak", upsert: true },
   },
-  { name: "lint_diagram", arguments: { diagram: "soak" } },
+  { name: "call_endpoint", arguments: { name: "lint_diagram", body: { diagram: "soak" } } },
+  { name: "diagram_quality", arguments: { ref: "soak" } },
+  { name: "improve_diagram", arguments: { ref: "soak", dryRun: true } },
   {
     name: "build_model",
     arguments: { spec: { system: "Soak", classes: [{ name: "Order" }] }, dryRun: true },
@@ -254,6 +257,32 @@ async function startStub() {
       properties: [{ path: "Model/Strategy#execute()", field: "isAbstract", value: true }],
       dryRun: true,
       plan: { ops: [], creates: [], updates: [], deletes: [] },
+    }),
+    "POST /diagram_quality": ok({
+      diagram: { _id: "D1", name: "soak", _type: "UMLClassDiagram" },
+      kind: "class",
+      score: 91,
+      rating: 5,
+      target: 80,
+      passes: true,
+      metrics: { nodes: 2, edges: 1, overlapArea: 0 },
+      penalties: { overlap: 0, whitespace: 4.5, aspect: 4.5 },
+      findings: [{ rule: "L005", name: "label-overflow", severity: "warning", count: 1 }],
+    }),
+    "POST /improve_diagram": ok({
+      diagram: { _id: "D1", name: "soak", _type: "UMLClassDiagram" },
+      kind: "class",
+      quality: {
+        score: 97,
+        rating: 5,
+        before: 91,
+        target: 80,
+        passes: true,
+        iterations: 1,
+        steps: ["snap", "trim"],
+        findings: [],
+      },
+      dryRun: true,
     }),
     "POST /lint_diagram": ok({
       diagram: { _id: "D1", _type: "UMLClassDiagram", name: "soak", path: "soak" },

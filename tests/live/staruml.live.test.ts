@@ -1127,10 +1127,10 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     });
 
     it(
-      "runs improve-diagram's loop: snapshot, lint, autofixes in one batch, re-lint, restore (#13)",
-      { timeout: 20_000 },
+      "runs improve-diagram's quality loop as written: look, score, improve, look (#16)",
+      { timeout: 30_000 },
       async () => {
-        // Three classes stacked at one point: L001 at least, and associations without multiplicity.
+        // Three classes stacked at one point, as an agent placing views by hand leaves them.
         const messy = payload<{ results: { data: Created & Summary }[] }>(
           await call("batch", {
             result: "full",
@@ -1164,54 +1164,87 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           arguments: { diagram: messyId },
         });
         const steps = (prompt.messages[0]!.content as { text: string }).text;
-        expect(steps).toContain(`lint_diagram({diagram: "${messyId}"})`);
-        expect(steps).toContain(
-          'call_endpoint({name: "snapshot", body: {label: "before-improve"}})',
-        );
-
-        // Step 1 and 2 as written.
-        ok(await call("snapshot", { label: "before-improve" }));
-        interface Finding {
-          rule: string;
-          severity: string;
-          autofix?: { path: string; body: Record<string, unknown> };
+        for (const step of [
+          `1. view_diagram({diagram: "${messyId}"})`,
+          `2. diagram_quality({ref: "${messyId}"})`,
+          `3. improve_diagram({ref: "${messyId}"})`,
+          `4. view_diagram({diagram: "${messyId}"})`,
+        ]) {
+          expect(steps).toContain(step);
         }
-        const lint = async () =>
-          payload<{ count: number; findings?: Finding[] }>(
-            await call("lint_diagram", { diagram: messyId }),
-          );
-        const before = await lint();
-        expect(before.findings!.map((f) => f.rule)).toContain("L001");
-        const owner = payload<Summary>(await call("get_element_by_id", { ref: messyId }))._parent!;
-        const uml = payload<{ findings: { rule: string; path: string }[] }>(
-          await call("uml_lint", { scope: owner }),
-        );
-        expect(uml.findings.some((f) => f.rule === "U001")).toBe(true);
 
-        // Step 3: every autofix in one batch, as each stands.
-        const fixes = before.findings!.flatMap((f) => (f.autofix ? [f.autofix] : []));
-        expect(fixes.length).toBeGreaterThan(0);
-        ok(await call("batch", { ops: fixes }));
-        const after = await lint();
-        const serious = (r: { findings?: Finding[] }) =>
-          (r.findings ?? []).filter((f) => f.severity !== "info").length;
-        expect(serious(after)).toBeLessThan(serious(before));
-        expect((after.findings ?? []).map((f) => f.rule)).not.toContain("L001");
+        // The steps as written.
+        expect((await call("view_diagram", { diagram: messyId })).content[0]!.type).toBe("image");
+        interface Scored {
+          score: number;
+          target: number;
+          penalties?: Record<string, number>;
+          findings?: Record<string, number>;
+        }
+        const before = payload<Scored>(await call("diagram_quality", { ref: messyId }));
+        expect(before.score).toBeLessThan(before.target);
+        expect(Object.keys(before.penalties ?? {})).toContain("overlap");
+        // dryRun: true echoes the argument and is dropped from the answer.
+        const planned = payload<{ quality: Scored }>(
+          await call("improve_diagram", { ref: messyId, dryRun: true }),
+        );
+        expect(payload<Scored>(await call("diagram_quality", { ref: messyId })).score).toBe(
+          before.score,
+        );
+        const improved = payload<{ diagram: string; quality: Scored & { iterations: number } }>(
+          await call("improve_diagram", { ref: messyId }),
+        );
+        expect(improved.diagram).toBe("Messy");
+        expect(improved.quality.score).toBeGreaterThanOrEqual(improved.quality.target);
+        expect(improved.quality.score).toBe(planned.quality.score);
+        const after = payload<Scored>(await call("diagram_quality", { ref: messyId }));
+        expect(after.score).toBe(improved.quality.score);
+        expect((await call("view_diagram", { diagram: messyId })).content[0]!.type).toBe("image");
 
-        // Step 5: the picture, what changed, and the way back.
-        const view = await call("view_diagram", { diagram: messyId });
-        expect(view.content[0]!.type).toBe("image");
-        const since = payload<{ counts: { changed: number } }>(
-          await call("diff_since", { snapshot: "before-improve" }),
+        // One undo step takes the whole loop back.
+        ok(await call("undo"));
+        expect(payload<Scored>(await call("diagram_quality", { ref: messyId })).score).toBe(
+          before.score,
         );
-        expect(since.counts.changed).toBeGreaterThanOrEqual(0);
-        const restored = payload<{ undone: number }>(
-          await call("restore_snapshot", { snapshot: "before-improve" }),
-        );
-        expect(restored.undone).toBeGreaterThan(0);
-        expect((await lint()).findings!.map((f) => f.rule)).toContain("L001");
+        ok(await call("redo"));
       },
     );
+
+    it("lints a messy diagram and sends its autofixes in one batch (#13)", async () => {
+      interface Finding {
+        rule: string;
+        severity: string;
+        autofix?: { path: string; body: Record<string, unknown> };
+      }
+      const drawn = payload<{ results: { data: Created & Summary }[] }>(
+        await call("batch", {
+          result: "full",
+          ops: [
+            {
+              path: "/create_diagram",
+              body: { type: "UMLClassDiagram", parent: packageId, name: "Stacked" },
+              as: "d",
+            },
+            ...["LintShelf", "LintBin"].map((name) => ({
+              path: "/create_element_with_view",
+              body: { type: "UMLClass", parent: packageId, diagram: "$d", name, x: 40, y: 40 },
+            })),
+          ],
+        }),
+      );
+      const stacked = drawn.results[0]!.data._id;
+      const lint = async () =>
+        payload<{ findings?: Finding[] }>(await call("lint_diagram", { diagram: stacked }));
+      const before = await lint();
+      expect(before.findings!.map((f) => f.rule)).toContain("L001");
+      const owner = payload<Summary>(await call("get_element_by_id", { ref: stacked }))._parent!;
+      expect(
+        payload<{ findings?: unknown[] }>(await call("uml_lint", { scope: owner })).findings,
+      ).toBeDefined();
+      ok(await call("batch", { ops: before.findings!.flatMap((f) => f.autofix ?? []) }));
+      expect(((await lint()).findings ?? []).map((f) => f.rule)).not.toContain("L001");
+      ok(await call("delete_element", { ref: stacked }));
+    });
 
     it("explains AMBIGUOUS_REF, DUPLICATE_NAME, SNAPSHOT_STALE and UNSUPPORTED_SYNTAX (#13)", async () => {
       const made = payload<{ results: { data: Summary }[] }>(
@@ -1455,10 +1488,9 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         expect(classifiers).toBe(spec.classes.length);
         expect(planned.plan.ops).toBeGreaterThan(600);
         expect(planned.changes.created.map((c) => c.path)).toContain(`${spec.system}`);
-        // Diagram sections are left to build_diagram.
-        expect(planned.skipped?.map((s) => s.section)).toEqual(
-          expect.arrayContaining(["classViews", "erd"]),
-        );
+        // Since extension #33 the view sections are stored with the model for derive_diagrams,
+        // not skipped.
+        expect(planned.skipped).toBeUndefined();
       });
 
       it("reads the pattern library as resources and through describe_pattern", async () => {
@@ -1676,6 +1708,97 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           ).toBe("quote");
         },
       );
+    });
+
+    describe("style profile and its guardrails (#16, #17)", { timeout: 30_000 }, () => {
+      /** Back to the preference's built-in whatever a test left. */
+      const reset = async () => ok(await call("set_style_profile", { reset: true }));
+
+      it("reads, checks names against, applies and stores the style profile", async () => {
+        const read = payload<{ profile: { name: string; strict: boolean }; builtIns: string[] }>(
+          await call("get_style_profile"),
+        );
+        expect(read.profile.name).toBe("uml-standard");
+        expect(read.builtIns).toEqual(expect.arrayContaining(["minimal", "presentation"]));
+        const checked = payload<{ ok: boolean; violations: { expected: string }[] }>(
+          await call("explain_style_violation", { kind: "classifier", name: "order_line" }),
+        );
+        expect(checked.ok).toBe(false);
+        expect(checked.violations[0]!.expected).toBe("OrderLine");
+        const planned = payload<{ profile: string; diagrams: number }>(
+          await call("apply_style_profile", { scope: modelId, dryRun: true }),
+        );
+        expect(planned.profile).toBe("uml-standard");
+        expect(planned.diagrams).toBeGreaterThan(0);
+
+        const stored = payload<Record<string, unknown>>(
+          await call("set_style_profile", { profile: "minimal" }),
+        );
+        // The name and the switches, not the whole profile.
+        expect(stored).toMatchObject({ profile: "minimal", source: "project", changed: true });
+        expect(stored).not.toHaveProperty("naming");
+        await reset();
+      });
+
+      it("a strict profile refuses placing views with STYLE_LOCKED and its hint, unless override", async () => {
+        const diagram = payload<{ diagram: Summary }>(
+          await call("build_diagram", {
+            kind: "class",
+            name: "Strict",
+            parent: modelId,
+            spec: { classes: [{ name: "Locked" }] },
+          }),
+        ).diagram;
+        const view = "Locked@Strict";
+        ok(await call("set_style_profile", { patch: { strict: true } }));
+        try {
+          const refused = failure(await call("move_views", { refs: [view], dx: 40, dy: 0 }));
+          expect(refused).toMatchObject({ code: "STYLE_LOCKED", status: 403 });
+          const result = await call("move_views", { refs: [view], dx: 40, dy: 0 });
+          expect(text(result)).toContain("Hint: The style profile 'uml-standard' is strict");
+          // improve_diagram is how a strict diagram is rearranged.
+          ok(await call("improve_diagram", { ref: diagram._id }));
+          ok(await call("move_views", { refs: [view], dx: 40, dy: 0, override: true }));
+        } finally {
+          await reset();
+        }
+        ok(await call("move_views", { refs: [view], dx: -40, dy: 0 }));
+      });
+
+      it("blockSaveOnErrors refuses saving with SAVE_BLOCKED naming model_lint's error", async () => {
+        const cycle = {
+          system: "Cycle",
+          contexts: [
+            { id: "a", name: "alpha", dependsOn: ["b"] },
+            { id: "b", name: "beta", dependsOn: ["a"] },
+          ],
+          classes: [
+            { name: "Ledger", context: "a", responsibility: "Books entries" },
+            { name: "Journal", context: "b", responsibility: "Lists entries" },
+          ],
+        };
+        ok(await call("build_model", { spec: cycle }));
+        const lint = payload<{ findings: { rule: string; path: string; fix: string }[] }>(
+          await call("model_lint", { scope: "Cycle" }),
+        );
+        // M003 is an error by default; M006 (two unused classes) a warning, which saves.
+        expect(lint.findings).toEqual(
+          expect.arrayContaining([expect.objectContaining({ rule: "M003", path: "Cycle/alpha" })]),
+        );
+        ok(await call("set_style_profile", { patch: { blockSaveOnErrors: true } }));
+        const file = join(dir, "blocked.mdj");
+        try {
+          const result = await call("save_project", { filename: file });
+          expect(failure(result)).toMatchObject({ code: "SAVE_BLOCKED", status: 409 });
+          expect(text(result)).toContain("Hint: 1 lint error (M003 Cycle/alpha) blocks saving");
+          expect(existsSync(file)).toBe(false);
+          ok(await call("save_project", { filename: file, override: true }));
+          expect(existsSync(file)).toBe(true);
+        } finally {
+          await reset();
+          ok(await call("delete_element", { ref: "Cycle" }));
+        }
+      });
     });
 
     it("called every listed tool and every endpoint of the bundled manifest", async () => {

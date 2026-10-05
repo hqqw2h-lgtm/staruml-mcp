@@ -91,7 +91,8 @@ const ARGS: Record<string, Record<string, unknown>> = {
  */
 const INVALID: Record<string, Record<string, unknown>> = {
   "/build_diagram": { name: 5 },
-  "/export_diagram": { format: "gif" },
+  // format lists no enum since 0.7.0; a bad one is INVALID_ARGUMENT from the whole schema.
+  "/export_diagram": { diagram: 5 },
   "/find_elements": { type: 5 },
   "/update_element": { ref: 5 },
   "/search_types": { query: 5 },
@@ -99,6 +100,8 @@ const INVALID: Record<string, Record<string, unknown>> = {
   "/validate_model": { scope: 5 },
   "/build_model": {},
   "/apply_pattern": { pattern: 5 },
+  "/diagram_quality": { ref: 5 },
+  "/improve_diagram": { ref: 5 },
 };
 
 /** Endpoints listed with a hand-written schema, tested in their own files. */
@@ -116,6 +119,8 @@ const SHORT = new Set([
   "/validate_model",
   "/build_model",
   "/apply_pattern",
+  "/diagram_quality",
+  "/improve_diagram",
 ]);
 
 /** One case per manifest endpoint: required arguments only, an element summary as the answer. */
@@ -147,7 +152,6 @@ const UNDESCRIBED = new Set([
   "apply_theme.dryRun",
   "derive_diagrams.dryRun",
   "apply_style_profile.dryRun",
-  "improve_diagram.dryRun",
 ]);
 
 const HOST = "http://127.0.0.1";

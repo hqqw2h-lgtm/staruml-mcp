@@ -102,7 +102,9 @@ const GenerateDiagramInput = unstamped(
   z.object({
     code: nonEmpty().describe(`Mermaid: ${SUPPORTED_MERMAID_DIAGRAMS.join("|")}.`),
     name: z.string().optional().describe("Diagram name; default the Mermaid title."),
-    kind: z.enum(["activity", "usecase"]).optional().describe("Build a flowchart as this kind."),
+    kind: unlisted(z.enum(["activity", "usecase"]), "enum", "type")
+      .optional()
+      .describe("activity|usecase: build a flowchart as this kind."),
   }),
 );
 

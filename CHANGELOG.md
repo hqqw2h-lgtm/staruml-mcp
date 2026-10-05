@@ -7,11 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `lint_diagram` leaves the core tier for `diagram_quality` and `improve_diagram`: `improve_diagram` runs its autofixes in its loop and `diagram_quality` reports what it still finds, by rule. `--tools core,lint_diagram` lists it again (#8, #16).
+- The `improve-diagram` prompt walks the quality loop: `view_diagram`, `diagram_quality`, `improve_diagram`, `view_diagram`; below target it splits a diagram past the profile's element limit, tries another preset or runs `uml_lint`, and never places views by hand (#16).
+- `update_element`'s `op`, `export_diagram`'s `format` and `generate_diagram`'s `kind` list their values in the description only (the request schemas still check them), which keeps the core tier of 20 tools at 1,995 tokens (#8).
+
 ### Added
 - Bundled manifest synced from the extension's phase 1h build with 88 endpoints: `/derive_diagrams`, `/explain_model`, `/model_lint` (model first, extension #33), `/get_style_profile`, `/set_style_profile`, `/apply_style_profile`, `/explain_style_violation` (the style profile, #31), `/diagram_quality` and `/improve_diagram` (the quality loop, #32); `override` on the endpoints a strict profile locks and on saving and exporting; `capabilities` on `/introspect`. `/build_model`'s spec is strict: a key outside the object vocabulary, geometry or colour included, is `INVALID_ARGUMENT` before the extension sees it (#4).
 - `describe_endpoints` groups the style profile endpoints under `style`, `diagram_quality`, `improve_diagram` and `model_lint` under `quality`, and `derive_diagrams` and `explain_model` under `model` (#8).
 - Authoring answers carry the extension's `style` and `quality` reports compacted wherever they appear: renames as `{from: to}`, the loop's outcome as `{score, target, iterations, findings}` with the findings left counted by rule name; 25 tokens instead of 62 for a report with one finding (#16).
 - `STYLE_LOCKED` (403) and `SAVE_BLOCKED` (409) come with hints: a strict profile's remedies (`improve_diagram`, `apply_style_profile`, a rebuild, `override: true` only for a change the user asked for, turning strict off), and the first lint errors that block saving with `uml_lint`, `model_lint` and `override` (#16, #17).
+- `diagram_quality` and `improve_diagram` in the core tier (#16): the score of a diagram's layout against the profile's target, and the quality loop on an existing diagram in one undo step. They list `ref` (56 tokens) and `ref` and `dryRun` (74); `target`, `maxIterations`, `relayout` and `preset` pass unlisted. `diagram_quality` answers the diagram by name, the score, the target, the penalties that cost points and the findings by rule (27 tokens instead of 189 for a two-class diagram); `improve_diagram` the diagram by name and the loop's report.
+- The style profile endpoints in the `style` group through `call_endpoint` (#16): `get_style_profile`, `set_style_profile` (answering the profile's name, `strict`, `blockSaveOnErrors`, where it is stored and whether it changed, not the whole merged profile of about 600 tokens), `apply_style_profile` and `explain_style_violation`; `model_lint` findings without the ids their paths name.
+- The skill's section 5, "Consistent, good-looking diagrams": set the profile once, let the engine lay out and never place views by hand unless asked, read `quality` and iterate with `improve_diagram`, split diagrams past the profile's `maxElements`; the build loop's third step scores instead of linting (#16, #12).
+- `npm run benchmark:tokens`'s "fix a messy diagram" adds the quality loop (look, `diagram_quality`, `improve_diagram`, look) and every plan's score: 58 → 98 in two calls whose text costs 192 tokens, against 1,292 for the lint loop's (58 → 95); recorded again from the phase 1h build by `scripts/capture-messy-diagram.mjs`, which undoes each way instead of restoring snapshots (#16, #5).
+- `scripts/load-test.mjs --quality` and `--improve` (a `diagram_quality`, an `improve_diagram` dry run), in CI in one session and in the live workflow; the soak rotation adds both and calls `lint_diagram` through `call_endpoint` (#14, #16).
 
 ## [0.6.0] - 2026-10-06
 

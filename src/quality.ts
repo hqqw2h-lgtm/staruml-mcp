@@ -1,17 +1,23 @@
 /**
  * Listings and result shapes of extension 0.3.0's checks: `/lint_diagram` (src/handlers/lint.ts
- * there), which the core tier lists, `/uml_lint` and `/diff_diagram`. Each finding names its
- * elements by id and by path, and a lint finding carries an `autofix`, a `{path, body}` request
- * shaped like a `batch` op, so every autofix of an answer can be sent as one batch.
+ * there), `/uml_lint`, `/diff_diagram` and `/model_lint`, and the quality loop of extension #32
+ * (src/handlers/quality.ts there), `/diagram_quality` and `/improve_diagram`, which the core tier
+ * lists. Each finding names its elements by id and by path, and a lint finding carries an
+ * `autofix`, a `{path, body}` request shaped like a `batch` op, so every autofix of an answer can
+ * be sent as one batch.
  */
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { z } from "zod";
 import { shortInput, type ManifestEntry } from "./manifest.js";
+import { countsByRule } from "./reports.js";
 import { jsonResult } from "./tool-result.js";
 
 export const LINT_DIAGRAM = "lint_diagram";
 export const UML_LINT = "uml_lint";
 export const DIFF_DIAGRAM = "diff_diagram";
+export const MODEL_LINT = "model_lint";
+export const DIAGRAM_QUALITY = "diagram_quality";
+export const IMPROVE_DIAGRAM = "improve_diagram";
 
 /** One line for tools/list; the extension's description lists the seven rules in 390 characters. */
 export const LINT_DIAGRAM_DESCRIPTION =
@@ -64,4 +70,81 @@ export function findingsResult(data: unknown, input: Json): CallToolResult {
     },
     input,
   );
+}
+
+/** The extension's descriptions list the nine measures and the loop's steps in 330 and 640 characters. */
+export const DIAGRAM_QUALITY_DESCRIPTION =
+  "Score a diagram's layout 0-100 against a target; penalties say what costs points.";
+
+export const IMPROVE_DIAGRAM_DESCRIPTION =
+  "Re-lay out a diagram by the style profile until it scores its target.";
+
+/** The diagram, as the canonical `ref` (`diagram` and `id` are its aliases). */
+const DIAGRAM_REF = "Id or path; default the current one.";
+
+export function diagramQualityInput(entry: ManifestEntry): z.ZodObject {
+  return shortInput(entry, { ref: DIAGRAM_REF });
+}
+
+/**
+ * `ref` and `dryRun`. `target` (default the profile's threshold for the kind, 80 in every
+ * built-in), `maxIterations`, `relayout` and `preset` pass unlisted for the rare call that wants
+ * another goal or preset, and describe_endpoints shows them: listed, they cost 60 tokens of the
+ * core tier's 2,000.
+ */
+export function improveDiagramInput(entry: ManifestEntry): z.ZodObject {
+  return shortInput(
+    entry,
+    { ref: DIAGRAM_REF, dryRun: "Change nothing; answer the score it would reach." },
+    new Set(["dryRun"]),
+  );
+}
+
+interface DiagramSummary {
+  _id?: unknown;
+  name?: unknown;
+}
+
+/** The scored diagram by name, which a later call takes as a reference; its id when unnamed. */
+function diagramName(diagram: unknown): unknown {
+  const summary = (diagram ?? {}) as DiagramSummary;
+  return typeof summary.name === "string" && summary.name !== "" ? summary.name : summary._id;
+}
+
+/**
+ * A /diagram_quality answer for the model: the diagram by name, the score against the target,
+ * the penalties that cost points (the zero ones left out, the largest first) and the findings
+ * counted by rule. `rating` and `passes` follow from the score and the target, and the raw
+ * `metrics` are what the penalties are computed from: for a two-class diagram from StarUML 7.1.1
+ * the answer goes from 189 o200k_base tokens to 27.
+ */
+export function qualityResult(data: unknown, input: Json): CallToolResult {
+  const answer = data as Json | null;
+  if (typeof answer?.score !== "number") return jsonResult(data, input);
+  const penalties = Object.entries((answer.penalties ?? {}) as Record<string, number>)
+    .filter(([, lost]) => lost > 0)
+    .sort(([, a], [, b]) => b - a);
+  return jsonResult(
+    {
+      diagram: diagramName(answer.diagram),
+      kind: answer.kind,
+      score: answer.score,
+      target: answer.target,
+      penalties: Object.fromEntries(penalties),
+      findings: countsByRule(answer.findings),
+    },
+    input,
+  );
+}
+
+/**
+ * An /improve_diagram answer with the diagram by name; its `quality` report is compacted with
+ * every other answer's (reports.ts).
+ */
+export function improveResult(data: unknown, input: Json): CallToolResult {
+  const answer = data as Json | null;
+  if (typeof answer !== "object" || answer === null || !("diagram" in answer)) {
+    return jsonResult(data, input);
+  }
+  return jsonResult({ ...answer, diagram: diagramName(answer.diagram) }, input);
 }

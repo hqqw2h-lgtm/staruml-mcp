@@ -293,7 +293,7 @@ default and reaches every other extension endpoint through two generic tools:
 
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
-| `core` (default) | the 7 above; `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`, `lint_diagram`, `build_model`, `apply_pattern`; `describe_endpoints`, `call_endpoint` | 1,973 |
+| `core` (default) | the 7 above; `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`, `build_model`, `apply_pattern`, `diagram_quality`, `improve_diagram`; `describe_endpoints`, `call_endpoint` | 1,995 |
 | `all` | the 7 above and one tool per manifest endpoint | 11,896 |
 | `core,create_diagram,…` | the 7 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
@@ -302,17 +302,23 @@ benchmark:tokens`). 0.6.0 added `build_model` and `apply_pattern` (237 tokens) t
 and, to stay under 2,000, moved four endpoints out: `introspect` (`doctor` reports the versions),
 `describe_diagram` (`diagram_as_text`, always listed, reads a diagram in as many tokens),
 `validate_model` (a final check that sits with `uml_lint` in the `quality` group) and
-`search_types` (the spec tools take names, not metamodel ids). `--tools
-core,search_types,describe_diagram,validate_model` lists them again. Pick the tier with `--tools`, or `STARUML_MCP_TOOLS` for clients that pass
+`search_types` (the spec tools take names, not metamodel ids). 0.7.0 added the quality loop,
+`diagram_quality` and `improve_diagram` (130 tokens), and moved `lint_diagram` out (70):
+`improve_diagram` applies its autofixes in its loop and `diagram_quality` reports what it still
+finds by rule. `update_element`'s `op`, `export_diagram`'s `format` and `generate_diagram`'s `kind`
+list their values in the description only (the request schemas still check them), which paid for
+the rest. `--tools core,lint_diagram,search_types,describe_diagram,validate_model` lists them
+again. Pick the tier with `--tools`, or `STARUML_MCP_TOOLS` for clients that pass
 environment but no arguments; the flag wins. An agent can switch it at runtime with
 `doctor({tools: "all"})`; the server then sends `notifications/tools/list_changed`, as it does when
 `doctor` finds a manifest with other endpoints. Names that are neither endpoints nor tools are
 reported by the `tier` check.
 
 - **`describe_endpoints()`** returns the endpoints without a tool, grouped (`quality`: lints,
-  validation and `diff_diagram`; `history`: snapshots, undo and redo; `patterns`: the pattern
-  library, detection and presets; `model`: messages checked against and synced into operations;
-  `style`: themes and view styles; `project`, `command`, `meta`, `feature`, `editor`, `code`,
+  validation, `diff_diagram` and the quality loop; `history`: snapshots, undo and redo;
+  `patterns`: the pattern library, detection and presets; `model`: diagrams derived from a model,
+  its text explanation, messages checked against and synced into operations; `style`: the style
+  profile, themes and view styles; `project`, `command`, `meta`, `feature`, `editor`, `code`,
   `diagram`, `element`; grouped by name, since the manifest has none), one line
   each. `describe_endpoints({names: [...]})` or `({group})` returns their full description, `readOnly`
   / `destructive` flags and request schema as `tools/list` would show it. Named endpoints may be
@@ -448,8 +454,18 @@ A `build_diagram` dry run answers the plan's `creates`,
 part of the answer, and the build runs them. Its `ids` and `edges`, "$name" placeholders for
 elements that do not exist yet, are left out too.
 
-`lint_diagram` (core) lists `diagram` and `rules` in 70 tokens. Its findings, and those of
-`uml_lint` and `diff_diagram`, come back with the checked diagram as its path and without the ids
+`diagram_quality` and `improve_diagram` (core) list `ref` (the diagram, default the current one)
+in 56 tokens, and `ref` and `dryRun` in 74; `target`, `maxIterations`, `relayout` and `preset`
+pass unlisted. `diagram_quality` answers the diagram by name, the score and the target, the
+penalties that cost points (largest first, the zero ones left out) and the lint findings counted
+by rule; the raw metrics, the 1–5 rating and `passes` follow from those and are left out (27
+tokens instead of 189 for a two-class diagram). `improve_diagram` answers the diagram by name and
+the loop's compacted report. `set_style_profile` answers the profile's name, `strict`,
+`blockSaveOnErrors`, where it is stored and whether it changed, not the whole merged profile
+(about 600 tokens), which `get_style_profile` reads.
+
+`lint_diagram` (`--tools core,lint_diagram`) lists `diagram` and `rules` in 70 tokens. Its
+findings, and those of `uml_lint`, `model_lint` and `diff_diagram`, come back with the checked diagram as its path and without the ids
 a finding's paths already name (a view of no model keeps its id); each lint `autofix` is a
 `{path, body}` request, the shape of a `batch` op, so every autofix of an answer goes into one
 `batch`. `get_element_by_id` and `delete_element` list `ref` and a whole one-line description,
@@ -520,7 +536,7 @@ Clients that surface MCP prompts (as slash commands in Claude Code, for instance
 |---|---|---|
 | `model-codebase` | `path`, `language`, `description`, `name` (all optional) | `doctor`; with a source directory, `list_code_generators` and `reverse_code` (StarUML's Java reverse adds type hierarchy and package overview diagrams by default); otherwise one `build_diagram` of the central classes from the code or the description; then `describe_diagram` and `validate_model` on the result. |
 | `review-diagram` | `diagram`, an id or a path (default `@current`) | `describe_diagram`, `validate_model` scoped to the diagram's owner, `diagram_as_text`; then a review with a concrete fix per finding, changing nothing until asked. |
-| `improve-diagram` | `diagram`, an id or a path (default `@current`) | `snapshot`; `lint_diagram` and `uml_lint` on the diagram's owner; every lint autofix in one `batch`, the `uml_lint` fixes by `update_element` or a `build_diagram` upsert; again until no error or warning is left, at most three rounds; `view_diagram`, `diff_since`, and `restore_snapshot` if the result reads worse. |
+| `improve-diagram` | `diagram`, an id or a path (default `@current`) | `view_diagram`; `diagram_quality` (score, target, penalties); `improve_diagram` (the profile's layout and the lint autofixes in one undo step, each step kept only when the score rises); `view_diagram` again; below target, split a diagram past the profile's `maxElements`, try another preset, `uml_lint` for the model; never placing views by hand. |
 | `apply-pattern` | `pattern`, `scope` (the package holding the classes), `diagram` (all optional) | `staruml://patterns` when no pattern is named; `describe_pattern`; bindings by path; `apply_pattern` with `dryRun`, then for real into `scope`; `view_diagram` with `annotate: "paths"`; `detect_patterns` to confirm confidence 1 and nothing missing. |
 
 The text names each endpoint as a tool when the current tier lists it and as `call_endpoint`
@@ -905,24 +921,28 @@ and about 4,190 against the dump.
 A sixth scenario, "fix a messy diagram", also on the current server only, fixes one class diagram
 drawn as an agent placing views by hand leaves it: five classes with long names, three stacked at
 one point and two overlapping, four associations. `scripts/capture-messy-diagram.mjs` drew it in
-StarUML 7.1.1 and recorded both ways of fixing it from the same start into
-`scripts/benchmark-data/messy-diagram-7.1.1.json`. "By eye" is the way without the lint: look at
-the PNG, run Format > Layout through `call_endpoint` after reading its schema, look again. The
-lint loop is the #13 way (the `improve-diagram` prompt): `lint_diagram`, every autofix in one
-`batch`, `lint_diagram` again, one look at the PNG. The last column is what `lint_diagram` still
-finds after each.
+StarUML 7.1.1 with the extension's phase 1h build and recorded three ways of fixing it from the
+same start into `scripts/benchmark-data/messy-diagram-7.1.1.json`. "By eye" is the way without
+the lint: look at the PNG, run Format > Layout through `call_endpoint` after reading its schema,
+look again. The lint loop is the #13 way: `lint_diagram`, every autofix in one `batch`,
+`lint_diagram` again, one look at the PNG (`lint_diagram` listed, as `--tools core,lint_diagram`
+would). The quality loop is the #16 way the `improve-diagram` prompt walks: look,
+`diagram_quality`, `improve_diagram`, look again. The last columns are what `lint_diagram` still
+finds after each and `diagram_quality`'s score against the profile's target of 80.
 
-| Plan | Calls | Call tokens | Result text | Images (est.) | Total | Findings left |
-|---|---|---|---|---|---|---|
-| By eye: PNG, layout, PNG | 4 | 96 | 463 | 1287 | 1846 | 5 |
-| Lint loop: lint, batch of autofixes, lint, PNG | 4 | 298 | 975 | 1052 | 2325 | 0 |
+| Plan | Calls | Call tokens | Result text | Images (est.) | Total | Findings left | Score |
+|---|---|---|---|---|---|---|---|
+| By eye: PNG, layout, PNG | 4 | 99 | 478 | 1306 | 1883 | 0 | 58 → 97 |
+| Lint loop: lint, batch of autofixes, lint, PNG | 4 | 307 | 985 | 1054 | 2346 | 0 | 58 → 95 |
+| Quality loop: PNG, `diagram_quality`, `improve_diagram`, PNG | 4 | 100 | 92 | 1595 | 1787 | 0 | 58 → 98 |
 
-The lint loop costs 479 tokens more and leaves nothing to fix; looking at the picture and laying
-it out separates the stacked and overlapping classes but cannot see that five names are wider
-than their boxes (L005), which only the lint measures. The loop's extra cost is its text: 839
-tokens for the seven findings with their paths, fix lines and autofix requests. The batch of
-autofixes answers in 108, since the extension's batches answer each op's success and id unless
-asked for more (350 tokens with every resized view's geometry, as before its phase 1g).
+Messy diagram → quality ≥ 80: the quality loop gets there in two calls whose text costs 192
+tokens (100 for the calls, 92 for the answers: the score with the penalties that cost points, then
+the score reached), against 1,292 for the lint loop's text, and scores highest. Its two looks are
+the rest of its cost; they are what the prompt asks for and can be left out. Since the phase 1h
+build `layout_diagram` runs the quality loop as well, so "by eye" now clears the stacked views
+and the long names too; under 0.6.0's build it left five findings. The lint loop's text is 839
+tokens for the seven findings with their paths, fix lines and autofix requests.
 
 ### Applying a design pattern
 

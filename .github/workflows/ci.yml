@@ -85,3 +85,8 @@ jobs:
         run: |
           npm run load-test -- --model --session --requests 2000 --max-p99-ms 4000 --min-rps 100
           npm run load-test -- --pattern --session --requests 2000 --max-p99-ms 4000 --min-rps 100
+
+      - name: Load test (diagram_quality and an improve_diagram dry run, one session)
+        run: |
+          npm run load-test -- --quality --session --requests 2000 --max-p99-ms 4000 --min-rps 100
+          npm run load-test -- --improve --session --requests 2000 --max-p99-ms 4000 --min-rps 100

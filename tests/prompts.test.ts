@@ -80,7 +80,7 @@ describe("prompts/list", () => {
       {
         name: IMPROVE_DIAGRAM,
         title: "Improve a diagram",
-        description: "Lint a diagram and its model, apply the fixes, repeat, then look at it.",
+        description: "Score a diagram, let the quality loop re-lay it out, then look at it.",
         arguments: [
           {
             name: "diagram",
@@ -193,36 +193,37 @@ describe("review-diagram", () => {
 });
 
 describe("improve-diagram", () => {
-  it("lints, fixes in one batch, repeats and looks, with core tools where listed", async () => {
+  it("looks, scores, runs the quality loop and looks again, with core tools where listed", async () => {
     expect(await promptText(IMPROVE_DIAGRAM, { diagram: "Shop/Main" })).toBe(
       [
-        "Improve diagram Shop/Main until it reads cleanly and models correctly.",
+        "Improve diagram Shop/Main until its layout scores its target and its model is sound.",
         "",
-        '1. call_endpoint({name: "snapshot", body: {label: "before-improve"}}), to compare with and go back to.',
-        '2. lint_diagram({diagram: "Shop/Main"}) for layout problems and call_endpoint({name: "uml_lint", body: {scope: <the diagram\'s _parent>}}) for modelling ones; get_element_by_id gives the _parent.',
-        "3. Send the autofix of every lint finding that has one in a single batch({ops: [...]}): each autofix is a {path, body} op as it stands. Fix each uml_lint finding as its fix line says, with update_element, a build_diagram upsert (missing multiplicities, types, role names) or a rename.",
-        "4. Repeat steps 2 and 3 until lint_diagram reports no error or warning, at most three rounds. A finding that survives its autofix needs another remedy: layout_diagram with another preset, fewer nodes, or splitting the diagram by package or concern.",
-        '5. view_diagram({diagram: "Shop/Main"}) to look at the result and call_endpoint({name: "diff_since", body: {snapshot: "before-improve"}}) for what changed. If it reads worse than before, call_endpoint({name: "restore_snapshot", body: {snapshot: "before-improve"}}) undoes everything in one step.',
+        '1. view_diagram({diagram: "Shop/Main"}) to see it.',
+        '2. diagram_quality({ref: "Shop/Main"}): the score against the target (80 in every built-in profile), the penalties that cost points and the lint findings by rule.',
+        '3. improve_diagram({ref: "Shop/Main"}) lays it out by the style profile and applies the lint autofixes in one undo step, keeping each step only when it raises the score; its quality says the score reached. Do not move or resize views by hand.',
+        '4. view_diagram({diagram: "Shop/Main"}) to look at the result.',
+        "5. Below target still: a diagram with more elements than the profile's maxElements (30) reads better split by package or concern into several diagrams; " +
+          'improve_diagram({ref: "Shop/Main", preset: "hierarchy-right"}) tries another preset. ' +
+          'call_endpoint({name: "uml_lint", body: {scope: <the diagram\'s _parent>}}) finds modelling problems the score does not measure; get_element_by_id gives the _parent. undo reverts an improve_diagram in one step.',
         "",
-        "Report what was fixed and what still needs a decision from a person.",
+        "Report the score before and after and what still needs a decision from a person.",
       ].join("\n"),
     );
   });
 
-  it("improves the current diagram, naming every endpoint's tool under --tools all", async () => {
-    const all = await connect({
-      catalog: new CatalogState(bundledCatalog(), parseToolSelection("all")),
+  it("improves the current diagram, through call_endpoint where the tier lists no tool", async () => {
+    const narrow = await connect({
+      catalog: new CatalogState(bundledCatalog(), parseToolSelection("find_elements")),
     });
     try {
-      const text = await promptText(IMPROVE_DIAGRAM, {}, all);
+      const text = await promptText(IMPROVE_DIAGRAM, {}, narrow);
 
       expect(text).toMatch(/^Improve the diagram open in StarUML until/);
-      expect(text).toContain('1. snapshot({label: "before-improve"})');
-      expect(text).toContain('lint_diagram({diagram: "@current"})');
-      expect(text).toContain("uml_lint({scope: <the diagram's _parent>})");
-      expect(text).toContain('restore_snapshot({snapshot: "before-improve"})');
+      expect(text).toContain('call_endpoint({name: "diagram_quality", body: {ref: "@current"}})');
+      expect(text).toContain('call_endpoint({name: "improve_diagram", body: {ref: "@current"}})');
+      expect(text).toContain('view_diagram({diagram: "@current"})');
     } finally {
-      await all.close();
+      await narrow.close();
     }
   });
 });

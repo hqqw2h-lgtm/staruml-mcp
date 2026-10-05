@@ -8,19 +8,20 @@
 
 /**
  * The core tier: the element CRUD every session uses, the composite endpoints that replace
- * dozens of calls (`/batch`, `/build_diagram`, `/export_diagram`), `/lint_diagram`, whose
- * findings carry the fix for each layout problem a model cannot see in text, and since 0.6.0 the
- * model-first pair: `/build_model` (a model from an object spec) and `/apply_pattern` (a design
- * pattern with every property it prescribes, which a model writing batch ops by hand gets wrong
- * or leaves out). Names missing from the running manifest are ignored.
+ * dozens of calls (`/batch`, `/build_diagram`, `/export_diagram`), the model-first pair since
+ * 0.6.0: `/build_model` (a model from an object spec) and `/apply_pattern` (a design pattern with
+ * every property it prescribes, which a model writing batch ops by hand gets wrong or leaves
+ * out), and since 0.7.0 the quality loop of extension #32: `/diagram_quality` scores a diagram
+ * from its geometry, which a model cannot see in text, and `/improve_diagram` lays it out by the
+ * style profile and applies the lint autofixes until the score reaches the profile's target.
+ * Names missing from the running manifest are ignored.
  *
- * The pair cost 237 tokens, so four endpoints left the tier in 0.6.0 to keep it under 2,000:
- * `/introspect` (doctor reports both versions; call_endpoint gives it the summary tool's
- * defaults, extension-tools.ts), `/describe_diagram` (diagram_as_text, always listed, reads a
- * diagram in as many tokens), `/validate_model` (a final check that sits with `/uml_lint` in the
- * quality group) and `/search_types` (the spec tools take names, not metamodel ids; the type an
- * op body needs is a describe_endpoints step away anyway). `--tools core,search_types` and the
- * like list them again.
+ * Budget, 2,000 tools/list tokens with the instructions: 0.6.0 moved `/introspect` (doctor
+ * reports both versions), `/describe_diagram` (diagram_as_text reads a diagram in as many
+ * tokens), `/validate_model` and `/search_types` out to make room for the pair. In 0.7.0
+ * `/lint_diagram` (70 tokens) leaves for the quality pair: improve_diagram runs its autofixes in
+ * its loop and diagram_quality reports what it still finds, by rule. `--tools core,lint_diagram`
+ * and the like list them again.
  */
 export const CORE_ENDPOINTS: readonly string[] = [
   "find_elements",
@@ -30,9 +31,10 @@ export const CORE_ENDPOINTS: readonly string[] = [
   "batch",
   "build_diagram",
   "export_diagram",
-  "lint_diagram",
   "build_model",
   "apply_pattern",
+  "diagram_quality",
+  "improve_diagram",
 ];
 
 /** `all` lists every endpoint; otherwise `names` are listed, `core` expanded to {@link CORE_ENDPOINTS}. */

@@ -32,23 +32,23 @@ extension's endpoints, so run it after the user upgrades the extension.
 
 | The user wants | Use |
 |---|---|
-| A domain model from a description or requirements | `build_model` with an object spec (section 5), then diagrams of it |
+| A domain model from a description or requirements | `build_model` with an object spec (section 6), then diagrams of it |
 | A new diagram of a kind below | `build_diagram` with a `spec`: exact names, one undo step |
-| A design pattern, or a class to be a value object or entity | `apply_pattern`, or `apply_preset` (section 6) |
-| Their Mermaid source rendered | `generate_diagram` (routes itself, see section 7) |
+| A design pattern, or a class to be a value object or entity | `apply_pattern`, or `apply_preset` (section 7) |
+| Their Mermaid source rendered | `generate_diagram` (routes itself, see section 8) |
 | Small edits to an existing model | `find_elements`, then `update_element` / `delete_element` |
 | Many related creations or edits | one `batch` |
-| To read or explain a diagram | `diagram_as_text` (section 10), not a picture |
+| To read or explain a diagram | `diagram_as_text` (section 11), not a picture |
 | The `type` or command id to pass | `search_types` through `call_endpoint` |
 | To check a model | `uml_lint` and `validate_model` through `call_endpoint` (section 4) |
-| To check how a diagram reads | `lint_diagram`, then its autofixes in one `batch` (section 4) |
+| A diagram that reads badly, or one look for every diagram | `diagram_quality`, then `improve_diagram`; the style profile (section 5) |
 | To see what a build would change | `build_diagram` with `dryRun: true`, or `diff_diagram` |
 | Anything else StarUML can do | `describe_endpoints`, then `call_endpoint` |
 | To see a diagram | `view_diagram`; `export_diagram` for files |
 
 A user may also start the server's prompts `model-codebase` (reverse-engineer a source directory
-or build class diagrams from a description), `review-diagram`, `improve-diagram` (the lint and
-fix loop of section 4) and `apply-pattern` (section 6); they spell out the same calls.
+or build class diagrams from a description), `review-diagram`, `improve-diagram` (the quality
+loop of section 5) and `apply-pattern` (section 7); they spell out the same calls.
 
 ### Ids and paths
 
@@ -68,7 +68,7 @@ need to look an id up first:
 A `\` escapes `/ . # @ ( ) ,` inside a name. Element results carry the `path` each element
 resolves by. A path that fits several elements is refused as `AMBIGUOUS_REF` with the candidates'
 ids and paths; pass one of those or a longer path. Use paths for what already exists and `$name`
-references (section 8) for what a batch creates.
+references (section 9) for what a batch creates.
 
 ## 3. build_diagram: one spec per kind
 
@@ -262,11 +262,12 @@ Draw every diagram in this loop:
    paths it would create, update and delete. Check the names and that `reuse` found the existing
    elements you meant.
 2. **Build**: the same call without `dryRun` (with `upsert: true` once the diagram exists).
-3. **Lint**: `lint_diagram` lists what makes the picture hard to read (stacked or overlapping
-   nodes, edges through nodes, names wider than their box, crowding); every finding with an
-   `autofix` carries a `{path, body}` request, the shape of a `batch` op, so send them all in one
-   `batch`. `uml_lint` (through `call_endpoint`) lists modelling mistakes, each with a `fix` line;
-   apply those with a `build_diagram` upsert or `update_element`.
+3. **Score**: the build already ran the quality loop; its answer's `quality: {score, target}`
+   says how the picture reads. Below target, `improve_diagram` lays the diagram out again by the
+   style profile and applies the lint autofixes (stacked or overlapping nodes, edges through
+   nodes, names wider than their box), keeping each step only when the score rises (section 5).
+   `uml_lint` (through `call_endpoint`) lists modelling mistakes, each with a `fix` line; apply
+   those with a `build_diagram` upsert or `update_element`.
 4. **Look**: `view_diagram` once, or `diagram_as_text` when the content is what matters.
 
 Take a `snapshot` before a larger change: `diff_since` lists what changed since, and
@@ -285,8 +286,8 @@ Take a `snapshot` before a larger change: `diff_since` lists what changed since,
 }
 ```
 
-```json lint_diagram
-{ "diagram": "Ordering" }
+```json improve_diagram
+{ "ref": "Ordering" }
 ```
 
 ```json call_endpoint
@@ -322,7 +323,48 @@ What a diagram needs to read well:
 - **ER diagrams**: a primary key on every entity (U011), foreign keys marked `FK` with a
   relationship giving both cardinalities, one naming style for tables and columns.
 
-## 5. Model first
+## 5. Consistent, good-looking diagrams
+
+The project's style profile holds every convention a diagram follows: naming rules, colours,
+fonts and edge style, the layout preset per kind, the element limit per diagram and the quality
+target. Every authoring call (`build_diagram`, `build_model`, `apply_pattern`,
+`derive_diagrams`) applies it and runs the quality loop, so diagrams look alike without being
+told to.
+
+- **Set the profile once**, at the start of a project: a built-in (`uml-standard`, the default;
+  `minimal`, `presentation`, `print`) or a patch of the current one. It is stored in the `.mdj`.
+  `apply_style_profile` brings what the project (or a `scope`) already has in line, with a dry
+  run first.
+- **Let the engine lay out.** Name what a diagram shows and leave positions, sizes and colours to
+  the build. Never pass coordinates or call `move_views`, `resize_node` or `set_view_style`
+  unless the user asks for that placement; a `strict` profile refuses them with `STYLE_LOCKED`,
+  and `override: true` is for a change the user asked for, not a way around the profile.
+- **Read `quality` and iterate.** Every build answers `quality: {score, target, iterations,
+  findings}`; `diagram_quality` scores an existing diagram and its `penalties` say what costs
+  points. Below target, `improve_diagram`, then `view_diagram`.
+- **Split big diagrams.** More nodes than the profile's `maxElements` (30) never score well:
+  split by package or concern, one diagram each, before improving further.
+- `explain_style_violation` says which rule a name breaks before you create it; with
+  `blockSaveOnErrors` in the profile, saving and exporting answer `SAVE_BLOCKED` until
+  `uml_lint` and `model_lint` report no errors.
+
+```json call_endpoint
+{ "name": "set_style_profile", "body": { "profile": "uml-standard" } }
+```
+
+```json call_endpoint
+{ "name": "apply_style_profile", "body": { "dryRun": true } }
+```
+
+```json diagram_quality
+{ "ref": "Ordering" }
+```
+
+```json call_endpoint
+{ "name": "explain_style_violation", "body": { "kind": "classifier", "name": "order_line" } }
+```
+
+## 6. Model first
 
 When the user describes a domain, requirements or a system rather than a picture, build the
 model first and draw diagrams of it afterwards. `build_model` makes the packages, classes,
@@ -383,7 +425,7 @@ elements rather than copies. For a collaboration drawn as a sequence diagram,
 `call_endpoint({name: "check_messages", body: {diagram}})` lists the messages that name no
 operation of their receiver, and `sync_operations` adds those operations to the classes.
 
-## 6. Design patterns with correct properties
+## 7. Design patterns with correct properties
 
 A pattern is more than its class shapes: Strategy wants the strategy's operation abstract, the
 context's end of the association a shared aggregation that does not navigate, and the far end
@@ -440,7 +482,7 @@ For one class rather than a pattern, `apply_preset` gives it the properties of a
 `describe_type` explains what each property of a metamodel type means (`isLeaf`, `aggregation`,
 `navigable`, ...), when a pattern or preset sets one you need to understand.
 
-## 7. Mermaid
+## 8. Mermaid
 
 `build_diagram` reads `classDiagram`, `sequenceDiagram`, `flowchart`/`graph`, `erDiagram` and
 `stateDiagram` and names the diagram from `name`, front matter `title:` or a `title` line. `kind`
@@ -460,7 +502,7 @@ kind, a title or line breaks, which the built-in importer cannot do:
 
 Prefer a spec when you write the diagram yourself; use Mermaid when the user already has it.
 
-## 8. batch and `$name` references
+## 9. batch and `$name` references
 
 `batch` runs endpoint calls in order as one undo step and, by default, rolls every op back when
 one fails. `as` names an op's result; a later body refers to its id as `"$name"`, to a
@@ -485,7 +527,7 @@ its success and the id it made or acted on; `result: "ids"` or `"full"` returns 
 
 `atomic: false` runs every op and reports each result instead.
 
-## 9. Endpoints without a tool
+## 10. Endpoints without a tool
 
 The default tool list is a core set. The other endpoints (project open/save, views, layout,
 styles, undo/redo, commands, code generation, PDF/HTML export) are one step away:
@@ -505,7 +547,7 @@ Saving is `call_endpoint({name: "save_project", body: {filename: "/absolute/path
 If a session needs one endpoint often, `doctor({tools: "core,layout_diagram"})` lists it as a
 tool, and `doctor({tools: "core"})` goes back.
 
-## 10. Reading, viewing and exporting
+## 11. Reading, viewing and exporting
 
 Read a diagram as text. For a six-class diagram with members, Mermaid or a `describe_diagram`
 summary (through `call_endpoint`) is about 270 tokens, a PNG about 1,600 (an estimate, billed as an image) and an element
@@ -561,7 +603,7 @@ what you see can be named in the next call:
 `export_diagram` returns PNG or JPEG as an image and SVG as text; with `path` it writes the file
 and returns only its size, which is what to do for anything the user wants on disk.
 
-## 11. Keeping token use down
+## 12. Keeping token use down
 
 - Element results are summaries `{_id, _type, name, _parent, path}`. Ask for more with `fields`
   (attribute names), `depth` (owned elements) or, rarely, `summary: false`.
@@ -580,7 +622,7 @@ and returns only its size, which is what to do for anything the user wants on di
   returns them alone unless asked for `include` sections; narrow the metamodel with
   `types: ["UMLClass"]`.
 
-## 12. Access token and refusals
+## 13. Access token and refusals
 
 If the extension's access token is set in StarUML (Server Info, Generate Access Token...), the
 server must be started with `--ext-token <token>` or the `STARUML_EXT_TOKEN` environment variable;
@@ -595,4 +637,6 @@ inside a batch). `DIALOG_REQUIRED` means the command would open a dialog: pass t
 `DUPLICATE_NAME` means a sibling of that kind has the name: refer to the existing element, keep
 `build_diagram`'s `reuse` on, rename, or pass `allowDuplicateNames: true`. `SNAPSHOT_STALE` means
 the undo history no longer reaches the snapshot; `UNSUPPORTED_SYNTAX` names a construct of the
-diagram text and its line that StarUML cannot draw.
+diagram text and its line that StarUML cannot draw. `STYLE_LOCKED` means the style profile is
+strict (section 5): use `improve_diagram` or `apply_style_profile` instead of placing views.
+`SAVE_BLOCKED` lists the lint errors that block saving; fix them first.

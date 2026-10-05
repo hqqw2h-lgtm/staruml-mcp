@@ -6,10 +6,16 @@
 //
 // - by eye: Format > Layout through /layout_diagram, the PNG before and after;
 // - the lint loop (#13): /lint_diagram, every finding's autofix in one /batch, /lint_diagram
-//   again, the PNG once.
+//   again, the PNG once;
+// - the quality loop (#16, extension #32): /diagram_quality, /improve_diagram, the PNG once.
 //
-// /lint_diagram also runs after the layout, to record what looking at the picture left. Snapshots
-// put the project back: the diagram is gone afterwards.
+// /diagram_quality scores the result of each way, so the benchmark can say which reaches the
+// profile's target (80 in every built-in profile).
+//
+// /lint_diagram also runs after the layout, to record what looking at the picture left. Each way
+// is one undo step and is undone before the next starts (the phase 1h build answers
+// SNAPSHOT_STALE to a /restore_snapshot past /layout_diagram's quality step), and the capture's
+// model is deleted at the end.
 //
 // Usage: node scripts/capture-messy-diagram.mjs [--url http://localhost] (needs StarUML 7 with its
 // API server on 58321 and staruml-mcp-extension 0.3 with /lint_diagram on 58322; STARUML_EXT_TOKEN
@@ -64,7 +70,7 @@ const EDGES = [
   [3, 4],
 ];
 
-const start = await ext("/snapshot", { label: "capture-messy-start" });
+let model;
 try {
   const parent = (await ext("/get_project_info")).project._id;
   const ops = [
@@ -92,32 +98,44 @@ try {
   // result: "full" asks a newer /batch for every op's answer, which 0.3.0 gives unasked; 0.3.0
   // drops the unknown key.
   const drawn = await ext("/batch", { ops, result: "full" });
+  model = drawn.results[0].data._id;
   const diagramId = drawn.results[1].data._id;
   const png = async () => pngSize(await post(58321, "/get_diagram_image_by_id", { diagramId }));
   const lint = () => ext("/lint_diagram", { diagram: diagramId });
+  const score = () => ext("/diagram_quality", { ref: diagramId });
 
-  const before = { png: await png(), lint: await lint() };
+  const before = { png: await png(), lint: await lint(), quality: await score() };
 
-  await ext("/snapshot", { label: "capture-messy-drawn" });
   const layout = await ext("/layout_diagram", { diagram: diagramId });
-  const byEye = { layout, png: await png(), lint: await lint() };
-  await ext("/restore_snapshot", { snapshot: "capture-messy-drawn" });
+  const byEye = { layout, png: await png(), lint: await lint(), quality: await score() };
+  await ext("/undo");
 
   const fixes = before.lint.findings.flatMap((f) => (f.autofix ? [f.autofix] : []));
   // The answer as the batch tool gets it: terse by default since the extension's phase 1g.
   const batch = await ext("/batch", { ops: fixes });
-  const loop = { fixes, batch, lint: await lint(), png: await png() };
+  const loop = { fixes, batch, lint: await lint(), png: await png(), quality: await score() };
+  await ext("/undo");
+
+  const improved = await ext("/improve_diagram", { ref: diagramId });
+  const quality = { improved, png: await png(), lint: await lint(), after: await score() };
 
   const versions = await ext("/introspect", { include: [] });
   const out = new URL("benchmark-data/messy-diagram-7.1.1.json", import.meta.url);
   writeFileSync(
     out,
-    `${JSON.stringify({ versions, nodes: NODES, edges: EDGES, diagramId, before, byEye, loop }, null, 2)}\n`,
+    `${JSON.stringify({ versions, nodes: NODES, edges: EDGES, diagramId, before, byEye, loop, quality }, null, 2)}\n`,
   );
   console.log(
     `Wrote ${out.pathname}: ${before.lint.count} findings before, ${byEye.lint.count} after the ` +
-      `layout, ${loop.lint.count} after ${fixes.length} autofixes.`,
+      `layout, ${loop.lint.count} after ${fixes.length} autofixes; score ${before.quality.score} ` +
+      `before, ${byEye.quality.score} after the layout, ${loop.quality.score} after the autofixes, ` +
+      `${quality.after.score} after improve_diagram.`,
   );
 } finally {
-  await ext("/restore_snapshot", { snapshot: start.label });
+  // A failed clean-up must not hide the error that got here.
+  if (model !== undefined) {
+    await ext("/delete_element", { ref: model }).catch((error) =>
+      console.error(`Could not delete the capture's model ${model}: ${error.message}`),
+    );
+  }
 }

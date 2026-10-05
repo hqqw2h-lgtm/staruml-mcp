@@ -228,9 +228,10 @@ describe("core tier (default)", () => {
       "export_diagram",
       "batch",
       "build_diagram",
-      "lint_diagram",
       "build_model",
       "apply_pattern",
+      "diagram_quality",
+      "improve_diagram",
       "describe_endpoints",
       "call_endpoint",
     ]);
@@ -445,14 +446,13 @@ describe("describe_endpoints", () => {
         JSON.parse(text(await mcp.call("describe_endpoints", { group: name }))) as object,
       );
 
-    // lint_diagram is a core tool, so the group lists the rest.
+    // diagram_quality and improve_diagram are core tools, so the group lists the rest.
     expect(await group("quality")).toEqual([
       "validate_model",
+      "lint_diagram",
       "uml_lint",
       "diff_diagram",
       "model_lint",
-      "diagram_quality",
-      "improve_diagram",
     ]);
     expect(await group("history")).toEqual([
       "undo",

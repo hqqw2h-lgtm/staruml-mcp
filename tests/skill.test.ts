@@ -125,7 +125,8 @@ describe("SKILL.md", () => {
         "view_diagram",
         "export_diagram",
         "diagram_as_text",
-        "lint_diagram",
+        "improve_diagram",
+        "diagram_quality",
         "build_model",
         "apply_pattern",
       ]),
@@ -161,9 +162,14 @@ describe("SKILL.md", () => {
     )?.[1];
 
     expect(section).toBeDefined();
-    const loop = ["**Plan**", "dryRun", "**Build**", "**Lint**", "autofix", "**Look**"].map(
-      (step) => section!.indexOf(step),
-    );
+    const loop = [
+      "**Plan**",
+      "dryRun",
+      "**Build**",
+      "**Score**",
+      "improve_diagram",
+      "**Look**",
+    ].map((step) => section!.indexOf(step));
     expect(loop.every((at, i) => at >= 0 && (i === 0 || at > loop[i - 1]!))).toBe(true);
     for (const topic of [
       "One concern per diagram",
@@ -178,6 +184,30 @@ describe("SKILL.md", () => {
     ]) {
       expect(section, topic).toContain(topic);
     }
+  });
+
+  it("teaches consistent, good-looking diagrams: profile once, engine layout, quality, split (#16)", () => {
+    const section =
+      /^## 5\. Consistent, good-looking diagrams\n([\s\S]*?)^## /m.exec(readSkill())?.[1] ?? "";
+
+    for (const topic of [
+      "**Set the profile once**",
+      "**Let the engine lay out.**",
+      "STYLE_LOCKED",
+      "**Read `quality` and iterate.**",
+      "`improve_diagram`",
+      "**Split big diagrams.**",
+      "maxElements",
+      "SAVE_BLOCKED",
+    ]) {
+      expect(section, topic).toContain(topic);
+    }
+    const named = (name: string) =>
+      examples.some((e) => e.tool === "call_endpoint" && e.args.name === name);
+    expect(named("set_style_profile")).toBe(true);
+    expect(named("apply_style_profile")).toBe(true);
+    expect(named("explain_style_violation")).toBe(true);
+    expect(section).toContain("```json diagram_quality");
   });
 
   it("is copied unchanged, apart from a source note, to the Codex and Copilot plugins", () => {

@@ -125,13 +125,20 @@ describe("short listings", () => {
       "parent",
     ]);
     expect(tool.inputSchema.required).toEqual(["ref"]);
-    expect((tool.inputSchema.properties!.op as { enum: string[] }).enum).toEqual([
-      "set",
-      "add",
-      "remove",
-      "reorder",
-      "relocate",
-    ]);
+    // The five ops are named by the description alone since 0.7.0; the schema still checks them.
+    expect(tool.inputSchema.properties!.op).toEqual({
+      description:
+        "set (default) field to value; add/remove value's ids in a reference list; " +
+        "reorder item value to index; relocate to parent.",
+    });
+  });
+
+  it("refuses an op the request schema does not take before sending", async () => {
+    const result = await mcp.call("update_element", { ref: "C1", op: "rename" });
+
+    expect(result.structuredContent).toMatchObject({
+      error: { code: "INVALID_ARGUMENT", endpoint: "/update_element" },
+    });
   });
 
   it("lists the same under --tools all", async () => {

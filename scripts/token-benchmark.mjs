@@ -730,13 +730,16 @@ console.table(await measureReads());
 
 // --- Fix a messy diagram ---------------------------------------------------------------------
 
-// What StarUML 7.1.1 and the extension answered while one messy class diagram was fixed both
+// What StarUML 7.1.1 and the extension answered while one messy class diagram was fixed three
 // ways, recorded by scripts/capture-messy-diagram.mjs in benchmark-data/messy-diagram-7.1.1.json:
 // five classes with long names, three stacked at one point and two overlapping. "By eye" is the
 // way without the lint: look at the PNG, run Format > Layout through call_endpoint (after reading
 // its schema), look again. "Lint loop" is the #13 way: lint_diagram, every autofix in one batch,
-// lint_diagram again, one look at the PNG. The PNG estimate is the one above; the last column is
-// what lint_diagram still finds after each.
+// lint_diagram again, one look at the PNG. "Quality loop" is the #16 way the improve-diagram
+// prompt walks: look, diagram_quality, improve_diagram, look again. The PNG estimate is the one
+// above; the last columns are what lint_diagram still finds after each and /diagram_quality's
+// score (the profile's target is 80). lint_diagram left the core tier in 0.7.0, so the server
+// here lists it as `core,lint_diagram` would, which is how the 0.6.0 loop ran.
 const messy = JSON.parse(
   readFileSync(new URL("benchmark-data/messy-diagram-7.1.1.json", import.meta.url), "utf8"),
 );
@@ -761,6 +764,7 @@ const fixPlans = [
   {
     name: "By eye: PNG, layout, PNG",
     left: messy.byEye.lint.count,
+    score: messy.byEye.quality.score,
     steps: [
       look(messy.before.png),
       fixStep("describe_endpoints", { names: ["layout_diagram"] }, []),
@@ -773,6 +777,7 @@ const fixPlans = [
   {
     name: "Lint loop: lint, batch of autofixes, lint, PNG",
     left: messy.loop.lint.count,
+    score: messy.loop.quality.score,
     steps: [
       lintStep(messy.before.lint),
       fixStep("batch", { ops: messy.loop.fixes }, [["extension", "/batch", messy.loop.batch]]),
@@ -780,12 +785,27 @@ const fixPlans = [
       look(messy.loop.png),
     ],
   },
+  {
+    name: "Quality loop: PNG, diagram_quality, improve_diagram, PNG",
+    left: messy.quality.lint.count,
+    score: messy.quality.after.score,
+    steps: [
+      look(messy.before.png),
+      fixStep("diagram_quality", { ref: messy.diagramId }, [
+        ["extension", "/diagram_quality", messy.before.quality],
+      ]),
+      fixStep("improve_diagram", { ref: messy.diagramId }, [
+        ["extension", "/improve_diagram", messy.quality.improved],
+      ]),
+      look(messy.quality.png),
+    ],
+  },
 ];
 
 async function measureFixes() {
   const builtin = await new UpstreamFixture().start();
   const extension = await new UpstreamFixture().start();
-  const server = withTools("core")({
+  const server = withTools("core,lint_diagram")({
     apiHost: "http://127.0.0.1",
     apiPort: builtin.port,
     extPort: extension.port,
@@ -817,6 +837,7 @@ async function measureFixes() {
         "images (est.)": images,
         total: calls + results + images,
         "findings left": plan.left,
+        score: `${messy.before.quality.score} -> ${plan.score}`,
       });
     }
     return rows;
@@ -831,8 +852,8 @@ async function measureFixes() {
 console.log(
   `\nFix a messy diagram: ${messy.nodes.length} classes, ${messy.before.lint.count} lint findings ` +
     `(${messy.before.lint.findings.map((f) => f.rule).join(", ")}), StarUML ` +
-    `${messy.versions.staruml.version}, extension ${messy.versions.extension.version}; core tier, ` +
-    "results and calls counted, definitions left out:",
+    `${messy.versions.staruml.version}, extension ${messy.versions.extension.version}; core tier ` +
+    "with lint_diagram, results and calls counted, definitions left out:",
 );
 console.table(await measureFixes());
 

@@ -59,6 +59,8 @@ export function updateElementInput(entry: ManifestEntry): z.ZodObject {
       index: "reorder: position after the item is taken out.",
       parent: "relocate: the new owner.",
     },
-    new Set(["index"]),
+    // The op enum repeats the five ops op's description names (12 tokens); the request schema
+    // checks it.
+    new Set(["index", "op"]),
   );
 }

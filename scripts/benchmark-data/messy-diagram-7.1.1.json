@@ -22,7 +22,7 @@
     [0, 3],
     [3, 4]
   ],
-  "diagramId": "AAAAAAGhDLkbG+FeggY=",
+  "diagramId": "AAAAAAGhDiJfUlMJ0zQ=",
   "before": {
     "png": {
       "width": 1076,
@@ -31,10 +31,10 @@
     },
     "lint": {
       "diagram": {
-        "_id": "AAAAAAGhDLkbG+FeggY=",
+        "_id": "AAAAAAGhDiJfUlMJ0zQ=",
         "_type": "UMLClassDiagram",
         "name": "Billing jobs",
-        "_parent": "AAAAAAGhDLkaauFYkJE=",
+        "_parent": "AAAAAAGhDiJfQVMGCnQ=",
         "path": "Messy capture/Billing jobs"
       },
       "count": 7,
@@ -50,7 +50,7 @@
           "name": "stacked",
           "severity": "error",
           "message": "3 views start at the same point (120,120): \"SubscriptionRenewalScheduler\", \"InvoiceNumberingPolicy\", \"CustomerNotificationGateway\"",
-          "ids": ["AAAAAAGhDLkb0uFmWsI=", "AAAAAAGhDLkcfOGPoto=", "AAAAAAGhDLkdJeG4dAg="],
+          "ids": ["AAAAAAGhDiJffVMOWrM=", "AAAAAAGhDiJfklM4Bx4=", "AAAAAAGhDiJfqVNi6bw="],
           "paths": [
             "Messy capture/SubscriptionRenewalScheduler@Messy capture/Billing jobs",
             "Messy capture/InvoiceNumberingPolicy@Messy capture/Billing jobs",
@@ -60,7 +60,7 @@
           "autofix": {
             "path": "/layout_diagram",
             "body": {
-              "diagram": "AAAAAAGhDLkbG+FeggY="
+              "diagram": "AAAAAAGhDiJfUlMJ0zQ="
             }
           }
         },
@@ -69,7 +69,7 @@
           "name": "overlap",
           "severity": "warning",
           "message": "\"PaymentRetryStrategy\" and \"LedgerPostingService\" overlap by 109x20",
-          "ids": ["AAAAAAGhDLkd3eHhZnY=", "AAAAAAGhDLkeruIK57U="],
+          "ids": ["AAAAAAGhDiJfwVOMjns=", "AAAAAAGhDiJf2VO2JCk="],
           "paths": [
             "Messy capture/PaymentRetryStrategy@Messy capture/Billing jobs",
             "Messy capture/LedgerPostingService@Messy capture/Billing jobs"
@@ -78,7 +78,7 @@
           "autofix": {
             "path": "/move_views",
             "body": {
-              "refs": ["AAAAAAGhDLkeruIK57U="],
+              "refs": ["AAAAAAGhDiJf2VO2JCk="],
               "dx": 129,
               "dy": 0
             }
@@ -89,13 +89,13 @@
           "name": "label-overflow",
           "severity": "warning",
           "message": "The name of \"SubscriptionRenewalScheduler\" needs about 216px and its box is 205px wide, so it wraps or is cut",
-          "ids": ["AAAAAAGhDLkb0uFmWsI="],
+          "ids": ["AAAAAAGhDiJffVMOWrM="],
           "paths": ["Messy capture/SubscriptionRenewalScheduler@Messy capture/Billing jobs"],
           "fix": "Widen it to 216.",
           "autofix": {
             "path": "/resize_node",
             "body": {
-              "ref": "AAAAAAGhDLkb0uFmWsI=",
+              "ref": "AAAAAAGhDiJffVMOWrM=",
               "width": 216,
               "height": 50
             }
@@ -106,13 +106,13 @@
           "name": "label-overflow",
           "severity": "warning",
           "message": "The name of \"InvoiceNumberingPolicy\" needs about 174px and its box is 162px wide, so it wraps or is cut",
-          "ids": ["AAAAAAGhDLkcfOGPoto="],
+          "ids": ["AAAAAAGhDiJfklM4Bx4="],
           "paths": ["Messy capture/InvoiceNumberingPolicy@Messy capture/Billing jobs"],
           "fix": "Widen it to 174.",
           "autofix": {
             "path": "/resize_node",
             "body": {
-              "ref": "AAAAAAGhDLkcfOGPoto=",
+              "ref": "AAAAAAGhDiJfklM4Bx4=",
               "width": 174,
               "height": 50
             }
@@ -123,13 +123,13 @@
           "name": "label-overflow",
           "severity": "warning",
           "message": "The name of \"CustomerNotificationGateway\" needs about 209px and its box is 196px wide, so it wraps or is cut",
-          "ids": ["AAAAAAGhDLkdJeG4dAg="],
+          "ids": ["AAAAAAGhDiJfqVNi6bw="],
           "paths": ["Messy capture/CustomerNotificationGateway@Messy capture/Billing jobs"],
           "fix": "Widen it to 209.",
           "autofix": {
             "path": "/resize_node",
             "body": {
-              "ref": "AAAAAAGhDLkdJeG4dAg=",
+              "ref": "AAAAAAGhDiJfqVNi6bw=",
               "width": 209,
               "height": 50
             }
@@ -140,13 +140,13 @@
           "name": "label-overflow",
           "severity": "warning",
           "message": "The name of \"PaymentRetryStrategy\" needs about 160px and its box is 149px wide, so it wraps or is cut",
-          "ids": ["AAAAAAGhDLkd3eHhZnY="],
+          "ids": ["AAAAAAGhDiJfwVOMjns="],
           "paths": ["Messy capture/PaymentRetryStrategy@Messy capture/Billing jobs"],
           "fix": "Widen it to 160.",
           "autofix": {
             "path": "/resize_node",
             "body": {
-              "ref": "AAAAAAGhDLkd3eHhZnY=",
+              "ref": "AAAAAAGhDiJfwVOMjns=",
               "width": 160,
               "height": 50
             }
@@ -157,133 +157,156 @@
           "name": "label-overflow",
           "severity": "warning",
           "message": "The name of \"LedgerPostingService\" needs about 160px and its box is 147px wide, so it wraps or is cut",
-          "ids": ["AAAAAAGhDLkeruIK57U="],
+          "ids": ["AAAAAAGhDiJf2VO2JCk="],
           "paths": ["Messy capture/LedgerPostingService@Messy capture/Billing jobs"],
           "fix": "Widen it to 160.",
           "autofix": {
             "path": "/resize_node",
             "body": {
-              "ref": "AAAAAAGhDLkeruIK57U=",
+              "ref": "AAAAAAGhDiJf2VO2JCk=",
               "width": 160,
               "height": 50
             }
           }
+        }
+      ]
+    },
+    "quality": {
+      "diagram": {
+        "_id": "AAAAAAGhDiJfUlMJ0zQ=",
+        "name": "Billing jobs",
+        "_type": "UMLClassDiagram"
+      },
+      "kind": "class",
+      "score": 58,
+      "rating": 2,
+      "target": 80,
+      "passes": false,
+      "metrics": {
+        "nodes": 5,
+        "edges": 4,
+        "overlapArea": 28141,
+        "overlapPairs": 4,
+        "overlapRatio": 0.6551324991687719,
+        "nodeEdgeCrossings": 0,
+        "edgeCrossings": 0,
+        "lengthVariation": 1.5870541697645983,
+        "bends": 0,
+        "alignment": 0.6,
+        "whitespace": 0.23689656036275264,
+        "aspect": 4.8726806640625,
+        "width": 487.26806640625,
+        "height": 100
+      },
+      "penalties": {
+        "overlap": 25.9,
+        "nodeEdge": 0,
+        "edgeEdge": 0,
+        "length": 5,
+        "bends": 0,
+        "alignment": 4,
+        "whitespace": 3.8,
+        "aspect": 3.1,
+        "page": 0
+      },
+      "findings": [
+        {
+          "rule": "L001",
+          "name": "stacked",
+          "severity": "error",
+          "count": 1
+        },
+        {
+          "rule": "L002",
+          "name": "overlap",
+          "severity": "warning",
+          "count": 1
+        },
+        {
+          "rule": "L005",
+          "name": "label-overflow",
+          "severity": "warning",
+          "count": 5
         }
       ]
     }
   },
   "byEye": {
     "layout": {
-      "_id": "AAAAAAGhDLkbG+FeggY=",
-      "direction": "TB"
+      "_id": "AAAAAAGhDiJfUlMJ0zQ=",
+      "direction": "TB",
+      "quality": {
+        "score": 97,
+        "rating": 5,
+        "before": 97,
+        "target": 80,
+        "passes": true,
+        "iterations": 1,
+        "steps": ["fit labels", "snap", "trim"],
+        "findings": []
+      }
     },
     "png": {
-      "width": 1234,
+      "width": 1262,
       "height": 520,
-      "bytes": 46083
+      "bytes": 48596
     },
     "lint": {
       "diagram": {
-        "_id": "AAAAAAGhDLkbG+FeggY=",
+        "_id": "AAAAAAGhDiJfUlMJ0zQ=",
         "_type": "UMLClassDiagram",
         "name": "Billing jobs",
-        "_parent": "AAAAAAGhDLkaauFYkJE=",
+        "_parent": "AAAAAAGhDiJfQVMGCnQ=",
         "path": "Messy capture/Billing jobs"
       },
-      "count": 5,
+      "count": 0,
       "counts": {
         "error": 0,
-        "warning": 5,
+        "warning": 0,
         "info": 0
       },
       "truncated": false,
-      "findings": [
-        {
-          "rule": "L005",
-          "name": "label-overflow",
-          "severity": "warning",
-          "message": "The name of \"SubscriptionRenewalScheduler\" needs about 216px and its box is 205px wide, so it wraps or is cut",
-          "ids": ["AAAAAAGhDLkb0uFmWsI="],
-          "paths": ["Messy capture/SubscriptionRenewalScheduler@Messy capture/Billing jobs"],
-          "fix": "Widen it to 216.",
-          "autofix": {
-            "path": "/resize_node",
-            "body": {
-              "ref": "AAAAAAGhDLkb0uFmWsI=",
-              "width": 216,
-              "height": 50
-            }
-          }
-        },
-        {
-          "rule": "L005",
-          "name": "label-overflow",
-          "severity": "warning",
-          "message": "The name of \"InvoiceNumberingPolicy\" needs about 174px and its box is 162px wide, so it wraps or is cut",
-          "ids": ["AAAAAAGhDLkcfOGPoto="],
-          "paths": ["Messy capture/InvoiceNumberingPolicy@Messy capture/Billing jobs"],
-          "fix": "Widen it to 174.",
-          "autofix": {
-            "path": "/resize_node",
-            "body": {
-              "ref": "AAAAAAGhDLkcfOGPoto=",
-              "width": 174,
-              "height": 50
-            }
-          }
-        },
-        {
-          "rule": "L005",
-          "name": "label-overflow",
-          "severity": "warning",
-          "message": "The name of \"CustomerNotificationGateway\" needs about 209px and its box is 196px wide, so it wraps or is cut",
-          "ids": ["AAAAAAGhDLkdJeG4dAg="],
-          "paths": ["Messy capture/CustomerNotificationGateway@Messy capture/Billing jobs"],
-          "fix": "Widen it to 209.",
-          "autofix": {
-            "path": "/resize_node",
-            "body": {
-              "ref": "AAAAAAGhDLkdJeG4dAg=",
-              "width": 209,
-              "height": 50
-            }
-          }
-        },
-        {
-          "rule": "L005",
-          "name": "label-overflow",
-          "severity": "warning",
-          "message": "The name of \"PaymentRetryStrategy\" needs about 160px and its box is 149px wide, so it wraps or is cut",
-          "ids": ["AAAAAAGhDLkd3eHhZnY="],
-          "paths": ["Messy capture/PaymentRetryStrategy@Messy capture/Billing jobs"],
-          "fix": "Widen it to 160.",
-          "autofix": {
-            "path": "/resize_node",
-            "body": {
-              "ref": "AAAAAAGhDLkd3eHhZnY=",
-              "width": 160,
-              "height": 50
-            }
-          }
-        },
-        {
-          "rule": "L005",
-          "name": "label-overflow",
-          "severity": "warning",
-          "message": "The name of \"LedgerPostingService\" needs about 160px and its box is 147px wide, so it wraps or is cut",
-          "ids": ["AAAAAAGhDLkeruIK57U="],
-          "paths": ["Messy capture/LedgerPostingService@Messy capture/Billing jobs"],
-          "fix": "Widen it to 160.",
-          "autofix": {
-            "path": "/resize_node",
-            "body": {
-              "ref": "AAAAAAGhDLkeruIK57U=",
-              "width": 160,
-              "height": 50
-            }
-          }
-        }
-      ]
+      "findings": []
+    },
+    "quality": {
+      "diagram": {
+        "_id": "AAAAAAGhDiJfUlMJ0zQ=",
+        "name": "Billing jobs",
+        "_type": "UMLClassDiagram"
+      },
+      "kind": "class",
+      "score": 97,
+      "rating": 5,
+      "target": 80,
+      "passes": true,
+      "metrics": {
+        "nodes": 5,
+        "edges": 4,
+        "overlapArea": 0,
+        "overlapPairs": 0,
+        "overlapRatio": 0,
+        "nodeEdgeCrossings": 0,
+        "edgeCrossings": 0,
+        "lengthVariation": 0.6068989880991323,
+        "bends": 4,
+        "alignment": 1,
+        "whitespace": 1,
+        "aspect": 2.761904761904762,
+        "width": 580,
+        "height": 210
+      },
+      "penalties": {
+        "overlap": 0,
+        "nodeEdge": 0,
+        "edgeEdge": 0,
+        "length": 2,
+        "bends": 1.3,
+        "alignment": 0,
+        "whitespace": 0,
+        "aspect": 0,
+        "page": 0
+      },
+      "findings": []
     }
   },
   "loop": {
@@ -291,13 +314,13 @@
       {
         "path": "/layout_diagram",
         "body": {
-          "diagram": "AAAAAAGhDLkbG+FeggY="
+          "diagram": "AAAAAAGhDiJfUlMJ0zQ="
         }
       },
       {
         "path": "/move_views",
         "body": {
-          "refs": ["AAAAAAGhDLkeruIK57U="],
+          "refs": ["AAAAAAGhDiJf2VO2JCk="],
           "dx": 129,
           "dy": 0
         }
@@ -305,7 +328,7 @@
       {
         "path": "/resize_node",
         "body": {
-          "ref": "AAAAAAGhDLkb0uFmWsI=",
+          "ref": "AAAAAAGhDiJffVMOWrM=",
           "width": 216,
           "height": 50
         }
@@ -313,7 +336,7 @@
       {
         "path": "/resize_node",
         "body": {
-          "ref": "AAAAAAGhDLkcfOGPoto=",
+          "ref": "AAAAAAGhDiJfklM4Bx4=",
           "width": 174,
           "height": 50
         }
@@ -321,7 +344,7 @@
       {
         "path": "/resize_node",
         "body": {
-          "ref": "AAAAAAGhDLkdJeG4dAg=",
+          "ref": "AAAAAAGhDiJfqVNi6bw=",
           "width": 209,
           "height": 50
         }
@@ -329,7 +352,7 @@
       {
         "path": "/resize_node",
         "body": {
-          "ref": "AAAAAAGhDLkd3eHhZnY=",
+          "ref": "AAAAAAGhDiJfwVOMjns=",
           "width": 160,
           "height": 50
         }
@@ -337,7 +360,7 @@
       {
         "path": "/resize_node",
         "body": {
-          "ref": "AAAAAAGhDLkeruIK57U=",
+          "ref": "AAAAAAGhDiJf2VO2JCk=",
           "width": 160,
           "height": 50
         }
@@ -351,7 +374,7 @@
         {
           "path": "/layout_diagram",
           "success": true,
-          "id": "AAAAAAGhDLkbG+FeggY="
+          "id": "AAAAAAGhDiJfUlMJ0zQ="
         },
         {
           "path": "/move_views",
@@ -360,36 +383,36 @@
         {
           "path": "/resize_node",
           "success": true,
-          "id": "AAAAAAGhDLkb0uFmWsI="
+          "id": "AAAAAAGhDiJffVMOWrM="
         },
         {
           "path": "/resize_node",
           "success": true,
-          "id": "AAAAAAGhDLkcfOGPoto="
+          "id": "AAAAAAGhDiJfklM4Bx4="
         },
         {
           "path": "/resize_node",
           "success": true,
-          "id": "AAAAAAGhDLkdJeG4dAg="
+          "id": "AAAAAAGhDiJfqVNi6bw="
         },
         {
           "path": "/resize_node",
           "success": true,
-          "id": "AAAAAAGhDLkd3eHhZnY="
+          "id": "AAAAAAGhDiJfwVOMjns="
         },
         {
           "path": "/resize_node",
           "success": true,
-          "id": "AAAAAAGhDLkeruIK57U="
+          "id": "AAAAAAGhDiJf2VO2JCk="
         }
       ]
     },
     "lint": {
       "diagram": {
-        "_id": "AAAAAAGhDLkbG+FeggY=",
+        "_id": "AAAAAAGhDiJfUlMJ0zQ=",
         "_type": "UMLClassDiagram",
         "name": "Billing jobs",
-        "_parent": "AAAAAAGhDLkaauFYkJE=",
+        "_parent": "AAAAAAGhDiJfQVMGCnQ=",
         "path": "Messy capture/Billing jobs"
       },
       "count": 0,
@@ -402,9 +425,131 @@
       "findings": []
     },
     "png": {
-      "width": 1516,
+      "width": 1520,
       "height": 520,
-      "bytes": 50914
+      "bytes": 52413
+    },
+    "quality": {
+      "diagram": {
+        "_id": "AAAAAAGhDiJfUlMJ0zQ=",
+        "name": "Billing jobs",
+        "_type": "UMLClassDiagram"
+      },
+      "kind": "class",
+      "score": 95,
+      "rating": 5,
+      "target": 80,
+      "passes": true,
+      "metrics": {
+        "nodes": 5,
+        "edges": 4,
+        "overlapArea": 0,
+        "overlapPairs": 0,
+        "overlapRatio": 0,
+        "nodeEdgeCrossings": 0,
+        "edgeCrossings": 0,
+        "lengthVariation": 0.43787484272972066,
+        "bends": 4,
+        "alignment": 0.8,
+        "whitespace": 1,
+        "aspect": 3.376190476190476,
+        "width": 709,
+        "height": 210
+      },
+      "penalties": {
+        "overlap": 0,
+        "nodeEdge": 0,
+        "edgeEdge": 0,
+        "length": 1.5,
+        "bends": 1.3,
+        "alignment": 2,
+        "whitespace": 0,
+        "aspect": 0.6,
+        "page": 0
+      },
+      "findings": []
+    }
+  },
+  "quality": {
+    "improved": {
+      "diagram": {
+        "_id": "AAAAAAGhDiJfUlMJ0zQ=",
+        "name": "Billing jobs",
+        "_type": "UMLClassDiagram"
+      },
+      "kind": "class",
+      "quality": {
+        "score": 98,
+        "rating": 5,
+        "before": 58,
+        "target": 80,
+        "passes": true,
+        "iterations": 1,
+        "steps": ["layout hierarchy-down", "fit labels", "snap", "trim"],
+        "findings": []
+      }
+    },
+    "png": {
+      "width": 1342,
+      "height": 650,
+      "bytes": 50827
+    },
+    "lint": {
+      "diagram": {
+        "_id": "AAAAAAGhDiJfUlMJ0zQ=",
+        "_type": "UMLClassDiagram",
+        "name": "Billing jobs",
+        "_parent": "AAAAAAGhDiJfQVMGCnQ=",
+        "path": "Messy capture/Billing jobs"
+      },
+      "count": 0,
+      "counts": {
+        "error": 0,
+        "warning": 0,
+        "info": 0
+      },
+      "truncated": false,
+      "findings": []
+    },
+    "after": {
+      "diagram": {
+        "_id": "AAAAAAGhDiJfUlMJ0zQ=",
+        "name": "Billing jobs",
+        "_type": "UMLClassDiagram"
+      },
+      "kind": "class",
+      "score": 98,
+      "rating": 5,
+      "target": 80,
+      "passes": true,
+      "metrics": {
+        "nodes": 5,
+        "edges": 4,
+        "overlapArea": 0,
+        "overlapPairs": 0,
+        "overlapRatio": 0,
+        "nodeEdgeCrossings": 0,
+        "edgeCrossings": 0,
+        "lengthVariation": 0.4510463387785307,
+        "bends": 2,
+        "alignment": 1,
+        "whitespace": 1,
+        "aspect": 2.2545454545454544,
+        "width": 620,
+        "height": 275
+      },
+      "penalties": {
+        "overlap": 0,
+        "nodeEdge": 0,
+        "edgeEdge": 0,
+        "length": 1.5,
+        "bends": 0.6,
+        "alignment": 0,
+        "whitespace": 0,
+        "aspect": 0,
+        "page": 0
+      },
+      "findings": []
     }
   }
 }

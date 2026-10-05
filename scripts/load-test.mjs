@@ -13,17 +13,21 @@
 // the whole request schema, or with --lint a lint_diagram of the current diagram, whose findings
 // are reshaped (src/quality.ts), or with --model a build_model dry run of a three-class spec, or
 // with --pattern an apply_pattern dry run of Strategy, whose answers are reshaped by path
-// (src/model.ts, src/patterns.ts). By default StarUML is replaced by an in-process stub so the numbers
+// (src/model.ts, src/patterns.ts), or with --quality a diagram_quality of the current diagram, or
+// with --improve an improve_diagram dry run of it (src/quality.ts). --lint lists lint_diagram
+// with --tools core,lint_diagram, since it left the core tier in 0.7.0. By default StarUML is replaced by an in-process stub so the numbers
 // measure this server, not StarUML; --live targets the real StarUML on 58321 and the extension
 // on 58322 instead. --build --live upserts one diagram named "load-test" into the open project:
 // the first call builds it and every later one finds nothing to add. --model and --pattern are
-// dry runs and change nothing; --pattern --live needs a model in the open project, where Strategy's
-// new elements would go.
+// dry runs and change nothing, and so do --quality and --improve; --pattern --live needs a model in
+// the open project, where Strategy's new elements would go, and --quality --live and --improve
+// --live an open diagram.
 //
 // Usage: npm run build && node scripts/load-test.mjs
 //          [--concurrency 50,200] [--requests 5000] [--warmup 500]
 //          [--max-p99-ms N] [--min-rps N] [--live] [--session]
-//          [--call-endpoint | --batch | --build | --lint | --model | --pattern]
+//          [--call-endpoint | --batch | --build | --lint | --model | --pattern | --quality
+//           | --improve]
 // STARUML_EXT_TOKEN reaches the server, so --live works with an extension that requires a token.
 // Exits non-zero on any failed request or a breached budget.
 
@@ -47,11 +51,12 @@ const { values: args } = parseArgs({
     lint: { type: "boolean", default: false },
     model: { type: "boolean", default: false },
     pattern: { type: "boolean", default: false },
+    quality: { type: "boolean", default: false },
+    improve: { type: "boolean", default: false },
     session: { type: "boolean", default: false },
   },
 });
 
-const callEndpoint = args["call-endpoint"];
 const HEADERS = {
   "Content-Type": "application/json",
   Accept: "application/json, text/event-stream",
@@ -81,35 +86,38 @@ const MODEL = {
   dryRun: true,
 };
 const PATTERN = { pattern: "Strategy", dryRun: true };
-const params = args.pattern
-  ? { name: "apply_pattern", arguments: PATTERN }
-  : args.model
-    ? { name: "build_model", arguments: MODEL }
-    : args.lint
-      ? { name: "lint_diagram", arguments: {} }
-      : args.build
-        ? { name: "build_diagram", arguments: BUILD }
-        : args.batch
-          ? { name: "batch", arguments: { ops: BATCH_OPS } }
-          : callEndpoint
-            ? {
-                name: "call_endpoint",
-                arguments: { name: "find_elements", body: { type: "UMLClass", limit: 10 } },
-              }
-            : { name: "get_all_diagrams_info", arguments: {} };
-const label = args.pattern
-  ? "apply_pattern (Strategy, dry run)"
-  : args.model
-    ? "build_model (3 classes, dry run)"
-    : args.lint
-      ? "lint_diagram (current diagram)"
-      : args.build
-        ? "build_diagram (3 classes, upsert)"
-        : args.batch
-          ? `batch of ${BATCH_OPS.length} ops`
-          : callEndpoint
-            ? "call_endpoint find_elements"
-            : params.name;
+/** The first mode given wins; each names the tool call, its label and the tier it needs. */
+const MODES = [
+  ["pattern", { name: "apply_pattern", arguments: PATTERN }, "apply_pattern (Strategy, dry run)"],
+  ["model", { name: "build_model", arguments: MODEL }, "build_model (3 classes, dry run)"],
+  [
+    "lint",
+    { name: "lint_diagram", arguments: {} },
+    "lint_diagram (current diagram)",
+    "core,lint_diagram",
+  ],
+  ["quality", { name: "diagram_quality", arguments: {} }, "diagram_quality (current diagram)"],
+  [
+    "improve",
+    { name: "improve_diagram", arguments: { dryRun: true } },
+    "improve_diagram (current diagram, dry run)",
+  ],
+  ["build", { name: "build_diagram", arguments: BUILD }, "build_diagram (3 classes, upsert)"],
+  ["batch", { name: "batch", arguments: { ops: BATCH_OPS } }, `batch of ${BATCH_OPS.length} ops`],
+  [
+    "call-endpoint",
+    {
+      name: "call_endpoint",
+      arguments: { name: "find_elements", body: { type: "UMLClass", limit: 10 } },
+    },
+    "call_endpoint find_elements",
+  ],
+];
+const [, params, label, tools] = MODES.find(([flag]) => args[flag]) ?? [
+  undefined,
+  { name: "get_all_diagrams_info", arguments: {} },
+  "get_all_diagrams_info",
+];
 
 const levels = args.concurrency.split(",").map(Number);
 const requestsPerLevel = Number(args.requests);
@@ -356,6 +364,40 @@ async function startStub() {
         plan: { ops: [], creates: [], updates: [], deletes: [] },
       },
     }),
+    // A messy diagram's score and the loop's dry run, in the shapes src/handlers/quality.ts
+    // answers.
+    "POST /diagram_quality": JSON.stringify({
+      success: true,
+      data: {
+        diagram: { _id: "AAAAAAFF+qBtyKM79qY=", name: "Main", _type: "UMLClassDiagram" },
+        kind: "class",
+        score: 58,
+        rating: 3,
+        target: 80,
+        passes: false,
+        metrics: { nodes: 5, edges: 4, overlapArea: 15400, overlapPairs: 4 },
+        penalties: { overlap: 30, nodeEdge: 8, edgeEdge: 0, whitespace: 4 },
+        findings: [{ rule: "L001", name: "stacked", severity: "error", count: 3 }],
+      },
+    }),
+    "POST /improve_diagram": JSON.stringify({
+      success: true,
+      data: {
+        diagram: { _id: "AAAAAAFF+qBtyKM79qY=", name: "Main", _type: "UMLClassDiagram" },
+        kind: "class",
+        quality: {
+          score: 98,
+          rating: 5,
+          before: 58,
+          target: 80,
+          passes: true,
+          iterations: 1,
+          steps: ["layout hierarchy-down", "snap", "trim"],
+          findings: [],
+        },
+        dryRun: true,
+      },
+    }),
     // Two findings in the shape src/handlers/lint.ts answers, one with an autofix.
     "POST /lint_diagram": JSON.stringify({
       success: true,
@@ -424,6 +466,7 @@ function startMcp(port) {
       // Stub runs point the extension port at the stub too, so a StarUML running on the same
       // machine does not change what is measured; --live reads the real extension.
       ...(args.live ? [] : ["--ext-port", String(port)]),
+      ...(tools === undefined ? [] : ["--tools", tools]),
     ],
     { stdio: ["ignore", "ignore", "pipe"] },
   );

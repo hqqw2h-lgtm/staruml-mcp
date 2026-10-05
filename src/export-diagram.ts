@@ -20,7 +20,7 @@ export const EXPORT_DIAGRAM_DESCRIPTION =
 
 const LISTED: Record<string, string> = {
   diagram: "Diagram id or path; default the current one.",
-  format: "Default png.",
+  format: "png (default), jpeg or svg.",
   scale: "PNG/JPEG pixels per unit, up to 4.",
   background: "CSS colour; default transparent.",
   path: "Absolute file to write it to.",
@@ -28,5 +28,5 @@ const LISTED: Record<string, string> = {
 };
 
 export function exportDiagramInput(entry: ManifestEntry): z.ZodObject {
-  return shortInput(entry, LISTED, new Set(["background", "scale", "annotate"]));
+  return shortInput(entry, LISTED, new Set(["format", "background", "scale", "annotate"]));
 }

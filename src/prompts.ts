@@ -18,9 +18,6 @@ export const REVIEW_DIAGRAM = "review-diagram";
 export const IMPROVE_DIAGRAM = "improve-diagram";
 export const APPLY_PATTERN_PROMPT = "apply-pattern";
 
-/** The snapshot improve-diagram takes first, to compare with and to go back to. */
-export const IMPROVE_SNAPSHOT = "before-improve";
-
 /**
  * How the model calls endpoint `name` with `args` (a JSON-like object literal): the tool when it
  * is listed, otherwise call_endpoint. Hand-written tools are always listed and are named directly.
@@ -107,36 +104,35 @@ export function reviewDiagram(state: CatalogState, diagram: string | undefined):
 }
 
 /**
- * The fix loop over extension 0.3.0's checks: a snapshot, lint_diagram for the layout and
- * uml_lint for the model, every lint autofix in one batch (an autofix is a `{path, body}` request,
- * the shape of a batch op), uml_lint's fixes by hand, again until clean, then a look at the
- * picture. A rule that keeps firing after its autofix needs another remedy, so the loop is capped.
+ * The quality loop of extension #32: look, score, let /improve_diagram lay the diagram out by
+ * the style profile and apply the lint autofixes (each step kept only when it raises the score,
+ * all in one undo step), look again. Placing views by hand is what a strict profile refuses and
+ * what the loop replaces, so the prompt offers the remedies the loop cannot apply itself: another
+ * preset, splitting a diagram past the profile's element limit, and the model's own problems.
  */
 export function improveDiagram(state: CatalogState, diagram: string | undefined): GetPromptResult {
   const which = diagram === undefined ? "the diagram open in StarUML" : `diagram ${diagram}`;
   const ref = diagram ?? "@current";
   const call = (endpoint: string, body: string) => invocation(state, endpoint, body);
-  const snapshot = `{snapshot: "${IMPROVE_SNAPSHOT}"}`;
   return message(
     [
-      `Improve ${which} until it reads cleanly and models correctly.`,
+      `Improve ${which} until its layout scores its target and its model is sound.`,
       "",
-      `1. ${call("snapshot", `{label: "${IMPROVE_SNAPSHOT}"}`)}, to compare with and go back to.`,
-      `2. ${call("lint_diagram", `{diagram: "${ref}"}`)} for layout problems and ` +
-        `${call("uml_lint", "{scope: <the diagram's _parent>}")} for modelling ones; ` +
-        "get_element_by_id gives the _parent.",
-      "3. Send the autofix of every lint finding that has one in a single batch({ops: [...]}): " +
-        "each autofix is a {path, body} op as it stands. Fix each uml_lint finding as its fix " +
-        "line says, with update_element, a build_diagram upsert (missing multiplicities, types, " +
-        "role names) or a rename.",
-      "4. Repeat steps 2 and 3 until lint_diagram reports no error or warning, at most three " +
-        "rounds. A finding that survives its autofix needs another remedy: layout_diagram with " +
-        "another preset, fewer nodes, or splitting the diagram by package or concern.",
-      `5. view_diagram({diagram: "${ref}"}) to look at the result and ` +
-        `${call("diff_since", snapshot)} for what changed. If it reads worse than before, ` +
-        `${call("restore_snapshot", snapshot)} undoes everything in one step.`,
+      `1. view_diagram({diagram: "${ref}"}) to see it.`,
+      `2. ${call("diagram_quality", `{ref: "${ref}"}`)}: the score against the target (80 in ` +
+        "every built-in profile), the penalties that cost points and the lint findings by rule.",
+      `3. ${call("improve_diagram", `{ref: "${ref}"}`)} lays it out by the style profile and ` +
+        "applies the lint autofixes in one undo step, keeping each step only when it raises the " +
+        "score; its quality says the score reached. Do not move or resize views by hand.",
+      `4. view_diagram({diagram: "${ref}"}) to look at the result.`,
+      "5. Below target still: a diagram with more elements than the profile's maxElements (30) " +
+        "reads better split by package or concern into several diagrams; " +
+        `${call("improve_diagram", `{ref: "${ref}", preset: "hierarchy-right"}`)} tries another ` +
+        `preset. ${call("uml_lint", "{scope: <the diagram's _parent>}")} finds modelling ` +
+        "problems the score does not measure; get_element_by_id gives the _parent. undo reverts " +
+        "an improve_diagram in one step.",
       "",
-      "Report what was fixed and what still needs a decision from a person.",
+      "Report the score before and after and what still needs a decision from a person.",
     ].join("\n"),
   );
 }
@@ -242,7 +238,7 @@ export function registerPrompts(server: McpServer, state: CatalogState): void {
       IMPROVE_DIAGRAM,
       {
         title: "Improve a diagram",
-        description: "Lint a diagram and its model, apply the fixes, repeat, then look at it.",
+        description: "Score a diagram, let the quality loop re-lay it out, then look at it.",
         argsSchema: ImproveDiagramArgs,
       },
       ({ diagram }) => improveDiagram(state, diagram),

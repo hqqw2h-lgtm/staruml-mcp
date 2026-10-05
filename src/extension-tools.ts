@@ -57,11 +57,20 @@ import {
   validateModelInput,
 } from "./reads.js";
 import {
+  DIAGRAM_QUALITY,
+  DIAGRAM_QUALITY_DESCRIPTION,
+  diagramQualityInput,
   DIFF_DIAGRAM,
   findingsResult,
+  IMPROVE_DIAGRAM,
+  IMPROVE_DIAGRAM_DESCRIPTION,
+  improveDiagramInput,
+  improveResult,
   LINT_DIAGRAM,
   LINT_DIAGRAM_DESCRIPTION,
   lintDiagramInput,
+  MODEL_LINT,
+  qualityResult,
   UML_LINT,
 } from "./quality.js";
 import {
@@ -82,6 +91,7 @@ import {
   patternResult,
 } from "./patterns.js";
 import { withReports } from "./reports.js";
+import { SET_STYLE_PROFILE, setProfileResult } from "./style.js";
 import type { StarUMLClient } from "./staruml-client.js";
 import {
   CORE_ENDPOINTS,
@@ -299,6 +309,14 @@ const SHORT_LISTED: Record<
     description: APPLY_PATTERN_DESCRIPTION,
     input: (tool) => applyPatternInput(tool.entry),
   },
+  [DIAGRAM_QUALITY]: {
+    description: DIAGRAM_QUALITY_DESCRIPTION,
+    input: (tool) => diagramQualityInput(tool.entry),
+  },
+  [IMPROVE_DIAGRAM]: {
+    description: IMPROVE_DIAGRAM_DESCRIPTION,
+    input: (tool) => improveDiagramInput(tool.entry),
+  },
 };
 
 function specs(server: McpServer, client: StarUMLClient, state: CatalogState): ToolSpec[] {
@@ -370,6 +388,12 @@ const RESULT_SHAPES: Record<
   [LINT_DIAGRAM]: findingsResult,
   [UML_LINT]: findingsResult,
   [DIFF_DIAGRAM]: findingsResult,
+  [MODEL_LINT]: findingsResult,
+  // The quality loop: the score against its target and what costs points; the style profile's
+  // answers name the profile instead of repeating it whole.
+  [DIAGRAM_QUALITY]: qualityResult,
+  [IMPROVE_DIAGRAM]: improveResult,
+  [SET_STYLE_PROFILE]: setProfileResult,
   // Endpoints that run a batch of their own answer a dry run's ops counted; patterns and presets
   // name their elements and properties by path.
   [BUILD_MODEL]: modelResult,

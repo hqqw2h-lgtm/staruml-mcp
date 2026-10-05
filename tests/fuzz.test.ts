@@ -130,6 +130,8 @@ describe("fuzz", () => {
       ["build_model", "parent", { spec: { classes: [] } }],
       ["apply_pattern", "diagram", { pattern: "Strategy" }],
       ["apply_pattern", "parent", { pattern: "Strategy" }],
+      ["diagram_quality", "ref", {}],
+      ["improve_diagram", "ref", { dryRun: true }],
     ];
     const segment = fc.oneof(
       fc.string({ minLength: 1, maxLength: 6 }),
@@ -173,6 +175,35 @@ describe("fuzz", () => {
         if (!object) expect(result.isError).toBe(true);
         if (result.isError) expect(extension.requests.length).toBe(sentBefore);
       }),
+      { numRuns: 200 },
+    );
+  }, 60_000);
+
+  it("improve_diagram answers any arguments with a result, refusing bad ones before sending", async () => {
+    const argument = fc.oneof(
+      fc.integer({ min: -20, max: 120 }),
+      fc.constantFrom("flow-down", "hierarchy-right", "spiral"),
+      json,
+    );
+    await fc.assert(
+      fc.asyncProperty(
+        fc.dictionary(
+          fc.constantFrom("ref", "target", "maxIterations", "relayout", "preset", "dryRun", "x"),
+          argument,
+        ),
+        async (args) => {
+          const sentBefore = extension.requests.length;
+          const result = await mcp.call("improve_diagram", args);
+          structured(result);
+          if (result.isError) expect(extension.requests.length).toBe(sentBefore);
+          // What reached the extension is what its whole request schema takes.
+          else {
+            const sent = extension.requests.at(-1)!.body as Record<string, unknown>;
+            if ("target" in sent) expect(sent.target).toEqual(expect.any(Number));
+            expect(sent).not.toHaveProperty("x");
+          }
+        },
+      ),
       { numRuns: 200 },
     );
   }, 60_000);

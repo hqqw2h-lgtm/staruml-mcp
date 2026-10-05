@@ -503,6 +503,39 @@ describe("pattern bindings, model specs and their answers", () => {
     expect(schema("build_model").safeParse({ spec: [] }).success).toBe(false);
   });
 
+  it("improve_diagram takes an integer target 0-100 and a preset of the eight, nothing else", () => {
+    const PRESETS = ["flow", "hierarchy"].flatMap((p) =>
+      ["down", "up", "right", "left"].map((d) => `${p}-${d}`),
+    );
+    fc.assert(
+      fc.property(
+        fc.oneof(fc.integer({ min: -50, max: 150 }), fc.double(), fc.string()),
+        fc.oneof(fc.constantFrom(...PRESETS), fc.string({ maxLength: 16 })),
+        (target, preset) => {
+          const valid =
+            Number.isInteger(target) &&
+            (target as number) >= 0 &&
+            (target as number) <= 100 &&
+            PRESETS.includes(preset);
+          expect(schema("improve_diagram").safeParse({ target, preset }).success).toBe(valid);
+        },
+      ),
+    );
+  });
+
+  it("diagram_quality takes only a diagram reference", () => {
+    fc.assert(
+      fc.property(fc.string({ maxLength: 8 }), fc.jsonValue({ maxDepth: 1 }), (key, value) => {
+        const parsed = schema("diagram_quality").safeParse({ [key]: value });
+        // `ref` (a non-empty string) only; the aliases are renamed before this check.
+        const valid = key === "ref" && typeof value === "string" && value !== "";
+        expect(parsed.success, `${key}=${JSON.stringify(value)}`).toBe(
+          valid || key === "__proto__",
+        );
+      }),
+    );
+  });
+
   it("counts a dry run's ops and leaves no placeholder id, keeping every other value", () => {
     const placeholder = fc.string({ maxLength: 4 }).map((s) => `$${s}`);
     const element = fc.record({ _id: fc.oneof(placeholder, name), path: name });
