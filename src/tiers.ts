@@ -12,10 +12,14 @@
  * the reads that answer in a few hundred tokens what a PNG or an element dump answers in
  * thousands (`/search_types`, `/describe_diagram`, `/validate_model`), and `/lint_diagram`, whose
  * findings carry the fix for each layout problem, which a model cannot see in text.
- * Names missing from the running manifest are ignored. `introspect` is the summary tool.
+ * Names missing from the running manifest are ignored.
+ *
+ * `/introspect` left the tier in 0.6.0 to make room for the model-first tools under the 2,000
+ * token budget: doctor reports both versions, search_types and staruml://introspect/metamodel
+ * answer the type questions, and call_endpoint gives it the summary tool's defaults
+ * (extension-tools.ts). `--tools core,introspect` lists the summary tool again.
  */
 export const CORE_ENDPOINTS: readonly string[] = [
-  "introspect",
   "find_elements",
   "get_element_by_id",
   "update_element",

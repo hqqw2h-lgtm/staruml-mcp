@@ -17,7 +17,7 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 ```
   AI Agent  ──MCP──►  staruml-mcp (this package)  ──HTTP──►  StarUML
                                                   :58321 (built-in, 4 tools)
-                                                  :58322 (extension 0.3.x, 69 endpoints
+                                                  :58322 (extension 0.3.x, 79 endpoints
                                                           from its manifest: core ones as
                                                           tools, the rest via call_endpoint)
 ```
@@ -25,10 +25,10 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 | Package | What it is | Where it runs |
 |---|---|---|
 | **`staruml-mcp`** (this repo) | MCP server for AI agents | your machine via `npx -y staruml-mcp` |
-| **[`staruml-mcp-extension`](https://github.com/hqqw2h-lgtm/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 69 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
+| **[`staruml-mcp-extension`](https://github.com/hqqw2h-lgtm/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 79 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
 
 - Using only Mermaid-based diagram tools? Install `staruml-mcp` only. The 4 built-in tools, `doctor` and `view_diagram` (as a PNG) work.
-- Want the extension's 69 endpoints (whole diagrams from a spec or Mermaid in one call, elements addressed by path instead of id, diagram and UML lint with fixes, diffs and snapshots, diagrams read back as Mermaid, PlantUML or a text summary, type search, model validation, project save/open, element CRUD, relationships, attributes and operations, layout presets and edge routing, styling, export, undo, batches, code generation, any StarUML command)? Install **both**.
+- Want the extension's 79 endpoints (whole diagrams from a spec or Mermaid in one call, elements addressed by path instead of id, diagram and UML lint with fixes, diffs and snapshots, diagrams read back as Mermaid, PlantUML or a text summary, type search, model validation, project save/open, element CRUD, relationships, attributes and operations, layout presets and edge routing, styling, export, undo, batches, code generation, any StarUML command)? Install **both**.
 
 ## Prerequisites
 
@@ -218,7 +218,7 @@ node         ok    22.23.3
 staruml api  ok    http://localhost:58321
 extension    ok    0.3.0 at http://localhost:58322
 staruml      ok    7.1.1
-manifest     ok    69 endpoints from the live manifest
+manifest     ok    79 endpoints from the live manifest
 tier         ok    core: 11 extension tools listed, 50 endpoints through call_endpoint
 ```
 
@@ -253,7 +253,7 @@ extension    fail  http://localhost:58322 refused the request: Missing or wrong 
 | `get_all_diagrams_info` | List all diagrams in the current project (id, name, type). |
 | `get_current_diagram_info` | Get metadata of the currently focused diagram. |
 | `get_diagram_image_by_id` | Export a diagram as PNG by its ID. |
-| `view_diagram` | Show `diagram` (an id or a path; default the current one): an interactive SVG viewer in clients that render MCP Apps, the `get_diagram_image_by_id` PNG otherwise ([below](#inline-viewer-mcp-apps)). The SVG comes from the extension, which also resolves a path to the id the PNG needs. |
+| `view_diagram` | Show `diagram` (an id or a path; default the current one): an interactive SVG viewer in clients that render MCP Apps, the `get_diagram_image_by_id` PNG otherwise ([below](#inline-viewer-mcp-apps)). The SVG comes from the extension, which also resolves a path to the id the PNG needs. `annotate: "paths"` or `"ids"` labels every view with its element on the picture (never on the model); a labelled PNG comes from the extension's `export_diagram`, since the built-in PNG has no labels. |
 | `diagram_as_text` | `diagram` (an id or a path; default the current one) as Mermaid, or PlantUML with `format: "plantuml"`, through the extension's `export_text`: the text in a block of its own, then `{id?, kind, warnings?}`. The Mermaid is the form `build_diagram` reads back. |
 | `doctor` | Check Node, both StarUML ports, the extension and StarUML versions; reloads the extension's tools and, given `tools`, switches the tier. |
 
@@ -290,7 +290,7 @@ default and reaches every other extension endpoint through two generic tools:
 
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
-| `core` (default) | the 7 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`, `search_types`, `describe_diagram`, `validate_model`, `lint_diagram`; `describe_endpoints`, `call_endpoint` | 1,992 |
+| `core` (default) | the 7 above; `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`, `search_types`, `describe_diagram`, `validate_model`, `lint_diagram`; `describe_endpoints`, `call_endpoint` | 1,981 |
 | `all` | the 7 above and one tool per manifest endpoint | 10,845 |
 | `core,create_diagram,…` | the 7 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
@@ -314,8 +314,10 @@ reported by the `tier` check.
   extension errors look exactly like those of a dedicated tool.
 - **`introspect`** is a summary: StarUML and extension versions, plus `factory`, `metamodel` (narrow
   it with `types`) or `toolbox` when asked for. The endpoint manifest is left to
-  `describe_endpoints` and `staruml://introspect/endpoints`; the full `/introspect` stays callable
-  through `call_endpoint`.
+  `describe_endpoints` and `staruml://introspect/endpoints`. Since 0.6.0 it is outside the core
+  tier (`doctor` reports both versions, `search_types` and the metamodel resource answer type
+  questions); `--tools core,introspect` lists it, and `call_endpoint({name: "introspect"})`
+  applies the same defaults, since the extension's own default, every section, is 522 KB.
 
 ### Extension tools (require [`staruml-mcp-extension`](https://github.com/hqqw2h-lgtm/staruml-mcp-extension) 0.3.x, port 58322)
 
@@ -351,7 +353,7 @@ project down, or only the trailing steps when they name one element), `Order.tot
 with `AMBIGUOUS_REF` and the candidates' ids and paths. Element summaries carry the `path` each
 element resolves by.
 
-A copy of the 0.3.0 manifest (69 endpoints) is bundled (`src/extension-manifest.json`), so `tools/list` is
+A copy of the 0.3.0 manifest (79 endpoints) is bundled (`src/extension-manifest.json`), so `tools/list` is
 complete while StarUML is closed; calls then fail with `EXTENSION_UNREACHABLE` and an install hint.
 `npm run sync:manifest` refreshes the copy from a running extension (`-- --url <base>`) or from a
 recorded `/introspect` response (`-- --from <file>`). When the running extension's version is
@@ -380,7 +382,7 @@ the core tier):
 | `get_views_of` / `get_edge_views_of` / `get_relationships_of` / `get_refs_to` / `get_connected_node_views` | Lookups between models, views and relationships. |
 | `layout_diagram` / `route_edges` / `move_views` / `resize_node` / `set_view_style` / `set_z_order` | Arrange and style views; `layout_diagram` takes a preset (`flow-down`, `hierarchy-right`, …), node and rank separations and `fit`, `route_edges` gives every edge one line style. |
 | `get_selection` / `set_selection` / `get_editor_state` / `set_editor_state` | Selection, current diagram, zoom and grid. |
-| `export_diagram` / `export_diagrams` / `export_pdf` / `export_html` | Diagram as PNG, JPEG or SVG (inline or to a file) / many diagrams into a directory / PDF / HTML docs. |
+| `export_diagram` / `export_diagrams` / `export_pdf` / `export_html` | Diagram as PNG, JPEG or SVG (inline or to a file), with `annotate` labelling each view by its element's path or id / many diagrams into a directory / PDF / HTML docs. |
 | `list_code_generators` / `generate_code` / `reverse_code` | Installed language generators and their options / source code from a model element / a source directory into the model. |
 | `undo` / `redo` / `is_modified` | History and unsaved state. |
 | `batch` | Several calls in one request, by default one undo step that rolls back when an op fails; each op answers its success and id, or more with `result: "ids"` or `"full"`. |
@@ -414,14 +416,15 @@ StarUML is rolled back and reported with the failing op's code; the extension's
 above, and the text adds `Details: {"index": n}` (the results name elements the rollback removed).
 
 `build_diagram` lists a hand-written description and nine parameters (`kind`, `spec`, `mermaid`,
-`name`, `upsert`, `prune`, `dryRun`, `direction`, `layout`, 297 tokens); the manifest's own description of `spec` alone is ~400
+`name`, `upsert`, `prune`, `dryRun`, `direction`, `layout`, 331 tokens); the manifest's own description of `spec` alone is ~400
 tokens, so `spec` lists a one-line grammar per kind and `describe_endpoints({names:
 ["build_diagram"]})` serves the full one. The unlisted `parent` (an id or a path), `text`, `format`, `reuse`, `allowDuplicateNames` and `autoLayout` are accepted, and
 every body is checked against the manifest's whole request schema before it is sent, as for `batch`.
 
-`export_diagram` lists a hand-written description and shorter parameter descriptions (132 tokens
-against the manifest's 208); the colour pattern and the scale bounds are left to the check against the whole request
-schema, as for `build_diagram`. It returns a PNG or JPEG as an image content block followed by the rest of the answer
+`export_diagram` lists a hand-written description and shorter parameter descriptions (154 tokens
+against the manifest's 276); the colour pattern, the scale bounds and the `annotate` modes are left to the check against the whole request
+schema, as for `build_diagram`. With `annotate`, each label comes back as `{text, x, y, width,
+height}` without the extension's `ref`: the text is already the element's id or a path naming it. It returns a PNG or JPEG as an image content block followed by the rest of the answer
 (`width`, `height`, `bytes`) as JSON; as text, the base64 of even a small diagram costs thousands of
 tokens. SVG and exports written to `path` come back as JSON.
 

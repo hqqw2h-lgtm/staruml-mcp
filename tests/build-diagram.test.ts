@@ -70,6 +70,19 @@ describe("build_diagram tool", () => {
     });
   });
 
+  it("names a spec shape for every kind but requirement and c4, which describe_endpoints shows", async () => {
+    const { tools } = await mcp.client.listTools();
+    const spec = (
+      tools.find((t) => t.name === "build_diagram")!.inputSchema.properties as {
+        spec: { description: string };
+      }
+    ).spec.description;
+    const kinds = (entry.request.properties as { kind: { enum: string[] } }).kind.enum;
+
+    expect(kinds.filter((k) => !spec.includes(`${k}{`))).toEqual(["requirement", "c4"]);
+    expect(spec).toContain("component{components[{name,provides,requires,ports}]");
+  });
+
   it("lists the same short schema under --tools all", async () => {
     const all = await connect({ catalog: new CatalogState(undefined, parseToolSelection("all")) });
     try {

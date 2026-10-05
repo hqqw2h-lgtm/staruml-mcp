@@ -1,4 +1,5 @@
 import { createServer as createHttpServer, request as httpRequest, type Server } from "node:http";
+import { CORE_ENDPOINTS } from "../src/tiers.js";
 import type { AddressInfo } from "node:net";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -119,7 +120,7 @@ describe("POST /mcp", () => {
     const { message } = await rpc(server, 2, "tools/list");
 
     const tools = message.result!.tools as { name: string; inputSchema: object }[];
-    expect(tools).toHaveLength(21);
+    expect(tools).toHaveLength(9 + CORE_ENDPOINTS.length);
     expect(tools.map((t) => t.name)).toEqual(
       expect.arrayContaining(["generate_diagram", "find_elements", "call_endpoint"]),
     );

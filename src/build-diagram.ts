@@ -10,9 +10,12 @@ import { jsonResult } from "./tool-result.js";
 
 export const BUILD_DIAGRAM = "build_diagram";
 
-/** One line for tools/list; the extension's description is 470 characters. */
+/**
+ * One line for tools/list; the extension's description is 470 characters. The answer is terse
+ * since extension #35 (counts and the diagram), so the line no longer promises ids.
+ */
 export const BUILD_DIAGRAM_DESCRIPTION =
-  "Build a whole diagram in one undo step from a per-kind spec or Mermaid; answers ids by node name.";
+  "Build a whole diagram in one undo step from a per-kind spec or Mermaid.";
 
 /**
  * The spec shape in brief. The manifest's description of `spec` is ~1,400 characters (about 400
@@ -23,8 +26,10 @@ const SPEC =
   "class{classes[{name,attributes,operations}],relations[{from,to,type}]} " +
   "sequence{participants,messages[{from,to,text}]} usecase{actors,useCases,relations} " +
   "activity{nodes[{id,name,type}],flows} statemachine{states,transitions} " +
-  "erd{entities[{name,columns}],relationships} flowchart{nodes,flows} mindmap{root{name,children}}; " +
-  "details: describe_endpoints";
+  "erd{entities[{name,columns}],relationships} flowchart{nodes,flows} mindmap{root{name,children}} " +
+  "package{packages[{name,parent}],dependencies} " +
+  "component{components[{name,provides,requires,ports}],interfaces,connectors} " +
+  "deployment{nodes[{name,deploys}],artifacts,paths}; details: describe_endpoints";
 
 /** Listed parameters with their shorter descriptions. */
 const LISTED: Record<string, string> = {

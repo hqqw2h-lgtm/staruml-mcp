@@ -863,6 +863,38 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       expect(Buffer.from(image.data, "base64").subarray(0, 8).toString("hex")).toBe(PNG_SIGNATURE);
     });
 
+    it("labels the views of an export and a view by path (#24)", async () => {
+      const exported = await call("export_diagram", { diagram: classDiagramId, annotate: "paths" });
+      ok(exported);
+      expect(exported.content[0]).toMatchObject({ type: "image", mimeType: "image/png" });
+      const { annotations } = JSON.parse(text({ content: exported.content.slice(1) })) as {
+        annotations: { text: string; ref?: string; width: number }[];
+      };
+      expect(annotations.map((a) => a.text)).toEqual(
+        expect.arrayContaining([expect.stringMatching(/Book$/), expect.stringMatching(/Author$/)]),
+      );
+      // Each label's text is a reference: the server drops the id beside it.
+      expect(annotations.every((a) => a.ref === undefined && a.width > 0)).toBe(true);
+      const book = annotations.find((a) => a.text.endsWith("Book"))!;
+      const bookModel = payload<Summary>(await call("get_element_by_id", { ref: book.text }));
+      expect(bookModel.name).toBe("Book");
+
+      const app = await connect({ catalog }, UI_CAPABILITIES);
+      try {
+        const viewed = await app.call("view_diagram", { diagram: classDiagramId, annotate: "ids" });
+        const svg = (viewed.structuredContent as { svg: string }).svg;
+        expect(viewed.isError, text(viewed)).toBeFalsy();
+        expect(svg).toContain(bookModel._id);
+      } finally {
+        await app.close();
+      }
+
+      const labelled = await call("view_diagram", { diagram: classDiagramId, annotate: "paths" });
+      const image = labelled.content[0] as { type: string; data: string };
+      expect(image.type).toBe("image");
+      expect(Buffer.from(image.data, "base64").subarray(0, 8).toString("hex")).toBe(PNG_SIGNATURE);
+    });
+
     it("introspects versions and the debug surface", async () => {
       const info = payload<{
         staruml: { version: string };

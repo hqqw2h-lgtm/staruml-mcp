@@ -25,15 +25,38 @@ const RASTER = new Set(["image/png", "image/jpeg"]);
  * stay JSON.
  */
 export function exportResult(data: unknown, input: Record<string, unknown>): CallToolResult {
-  const { base64, mimeType, ...rest } = (data ?? {}) as { base64?: unknown; mimeType?: unknown };
+  const labelled = withoutLabelRefs(data);
+  const { base64, mimeType, ...rest } = (labelled ?? {}) as {
+    base64?: unknown;
+    mimeType?: unknown;
+  };
   if (typeof base64 !== "string" || typeof mimeType !== "string" || !RASTER.has(mimeType)) {
-    return jsonResult(data, input);
+    return jsonResult(labelled, input);
   }
   return {
     content: [
       { type: "image", data: base64, mimeType },
       { type: "text", text: serialize(rest, input) },
     ],
+  };
+}
+
+/**
+ * `annotate`'s labels without `ref`. A label's text is its element's id (`ids`) or the shortest
+ * path naming it, the id when it has no name (`paths`; extension src/annotate.ts), so the text
+ * is already a reference any tool takes, and the id beside a path is about 12 o200k_base tokens
+ * a label.
+ */
+function withoutLabelRefs(data: unknown): unknown {
+  const annotations = (data as { annotations?: unknown } | null)?.annotations;
+  if (!Array.isArray(annotations)) return data;
+  return {
+    ...(data as object),
+    annotations: annotations.map((label: unknown) => {
+      if (typeof label !== "object" || label === null) return label;
+      const { ref: _ref, ...rest } = label as Record<string, unknown>;
+      return rest;
+    }),
   };
 }
 

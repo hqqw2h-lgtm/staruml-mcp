@@ -28,7 +28,7 @@ import { registerPrompts } from "./prompts.js";
 import { StarUMLClient } from "./staruml-client.js";
 import { parseToolSelection, type ToolSelection } from "./tiers.js";
 import { jsonResult, resourceError, runTool, textResult } from "./tool-result.js";
-import { VIEW_DIAGRAM, VIEW_DIAGRAM_DESCRIPTION, viewDiagram } from "./view-diagram.js";
+import { ANNOTATE, VIEW_DIAGRAM, VIEW_DIAGRAM_DESCRIPTION, viewDiagram } from "./view-diagram.js";
 import {
   declaresUi,
   VIEWER_HTML,
@@ -110,7 +110,17 @@ const diagramRef = unlisted(nonEmpty(), "type")
   .optional()
   .describe("Diagram id or path; default the current one.");
 
-const ViewDiagramInput = unstamped(untrivial(z.looseObject({ diagram: diagramRef })));
+const ViewDiagramInput = unstamped(
+  untrivial(
+    z.looseObject({
+      diagram: diagramRef,
+      // The modes as export_diagram lists them, which is in the same tier.
+      annotate: unlisted(z.enum(ANNOTATE), "enum", "type")
+        .optional()
+        .describe("As export_diagram's."),
+    }),
+  ),
+);
 
 const DiagramAsTextInput = unstamped(
   untrivial(
@@ -237,7 +247,8 @@ export function createServer(config: ServerConfig = {}): McpServer {
       runTool("view diagram", () => {
         const inline = viewerRead || declaresUi(server.server.getClientCapabilities());
         const diagram = diagramArgument(input);
-        return viewDiagram(client, extensionTool(catalog, "export_diagram"), diagram, inline);
+        const exportTool = extensionTool(catalog, "export_diagram");
+        return viewDiagram(client, exportTool, diagram, inline, input.annotate);
       }),
   );
 

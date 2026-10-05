@@ -85,7 +85,7 @@ describe("parseToolSelection", () => {
 });
 
 describe("endpointGroup", () => {
-  it("groups every endpoint of the 69-endpoint manifest", () => {
+  it("groups every endpoint of the 79-endpoint manifest", () => {
     const groups: Record<string, string[]> = {};
     for (const e of BUNDLED_MANIFEST.endpoints) {
       (groups[endpointGroup(toolName(e.path))] ??= []).push(toolName(e.path));
@@ -112,6 +112,16 @@ describe("endpointGroup", () => {
         "get_relationships_of",
         "get_refs_to",
         "batch",
+        "build_model",
+        "sync_operations",
+        "check_messages",
+        "list_patterns",
+        "describe_pattern",
+        "apply_pattern",
+        "detect_patterns",
+        "apply_preset",
+        "describe_type",
+        "apply_theme",
       ],
       diagram: [
         "create_element_with_view",
@@ -196,7 +206,6 @@ describe("core tier (default)", () => {
       "describe_diagram",
       "validate_model",
       "lint_diagram",
-      "introspect",
       "describe_endpoints",
       "call_endpoint",
     ]);
@@ -244,6 +253,21 @@ describe("introspect (summary)", () => {
     staruml: { version: "7.1.1", apiVersion: "7.1.1" },
     extension: { name: "staruml-mcp-extension", version: "0.3.0" },
   };
+  // Listed only when named since 0.6.0.
+  let mcp: ConnectedClient;
+
+  beforeAll(async () => {
+    mcp = await connect({
+      apiHost: HOST,
+      apiPort: builtin.port,
+      extPort: extension.port,
+      catalog: new CatalogState(undefined, parseToolSelection("core,introspect")),
+    });
+  });
+
+  afterAll(async () => {
+    await mcp.close();
+  });
 
   it.each([
     ["versions only by default", {}, { include: [] }],
@@ -264,6 +288,35 @@ describe("introspect (summary)", () => {
 
     expect(extension.requests.map((r) => r.body)).toEqual([body]);
     expect(text(result)).toBe(JSON.stringify(data));
+  });
+
+  it.each([
+    ["versions only by default", {}, { include: [] }],
+    [
+      "the metamodel when types are given",
+      { types: ["T"] },
+      { types: ["T"], include: ["metamodel"] },
+    ],
+    ["the sections asked for", { include: ["toolbox"] }, { include: ["toolbox"] }],
+  ])("gives call_endpoint the same defaults: %s", async (_, body, sent) => {
+    const core = await connect({ apiHost: HOST, apiPort: builtin.port, extPort: extension.port });
+    extension.reply("/introspect", { body: { success: true, data } });
+
+    const result = await core.call("call_endpoint", { name: "introspect", body });
+    await core.close();
+
+    expect(extension.requests.map((r) => r.body)).toEqual([sent]);
+    expect(text(result)).toBe(JSON.stringify(data));
+  });
+
+  it("checks a call_endpoint body against the manifest before applying the defaults", async () => {
+    const result = await mcp.call("call_endpoint", {
+      name: "introspect",
+      body: { include: ["nope"] },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(extension.requests).toEqual([]);
   });
 
   it("does not offer the endpoint manifest section", async () => {
@@ -293,8 +346,11 @@ describe("describe_endpoints", () => {
         .sort(),
     ).toEqual([...EXTENDED].sort());
     expect(index.project!.save_project).toBe(terseDescription(entryOf("save_project").description));
-    // The introspect summary and search_types are listed, so only debug is left in its group.
-    expect(index.meta).toEqual({ debug: terseDescription(entryOf("debug").description) });
+    // search_types is listed; introspect left the core tier in 0.6.0.
+    expect(index.meta).toEqual({
+      introspect: terseDescription(entryOf("introspect").description),
+      debug: terseDescription(entryOf("debug").description),
+    });
   });
 
   it("describes named endpoints in full, listed ones included", async () => {
@@ -333,6 +389,16 @@ describe("describe_endpoints", () => {
       "set_documentation",
       "get_relationships_of",
       "get_refs_to",
+      "build_model",
+      "sync_operations",
+      "check_messages",
+      "list_patterns",
+      "describe_pattern",
+      "apply_pattern",
+      "detect_patterns",
+      "apply_preset",
+      "describe_type",
+      "apply_theme",
     ]);
   });
 
@@ -593,7 +659,7 @@ describe("tierCheck", () => {
     expect(tierCheck(new CatalogState())).toEqual({
       name: "tier",
       status: "ok",
-      detail: `core: 12 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint`,
+      detail: `core: ${CORE_ENDPOINTS.length} extension tools listed, ${EXTENDED.length} endpoints through call_endpoint`,
     });
   });
 
@@ -603,7 +669,7 @@ describe("tierCheck", () => {
     expect(tierCheck(state)).toEqual({
       name: "tier",
       status: "warn",
-      detail: `core,doctor,save_projekt: 12 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint; unknown: save_projekt`,
+      detail: `core,doctor,save_projekt: ${CORE_ENDPOINTS.length} extension tools listed, ${EXTENDED.length} endpoints through call_endpoint; unknown: save_projekt`,
       remedy: "Check the names against describe_endpoints() or staruml://introspect/endpoints.",
     });
   });

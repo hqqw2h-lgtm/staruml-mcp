@@ -427,7 +427,12 @@ what it owns), and lists each problem with its element and rule id.
 
 `view_diagram` shows the current diagram (or `diagram`): an interactive SVG viewer with pan, zoom and
 dark mode in clients that render MCP Apps, a PNG image elsewhere. Use it to check a layout
-after building.
+after building. `annotate: "paths"` labels every view with its element's path on the picture, so
+what you see can be named in the next call:
+
+```json view_diagram
+{ "diagram": "Ordering", "annotate": "paths" }
+```
 
 ```json export_diagram
 { "format": "png", "scale": 2 }
@@ -450,8 +455,9 @@ and returns only its size, which is what to do for anything the user wants on di
   layout itself matters.
 - One `build_diagram` or `batch` call replaces dozens of single calls and their results.
 - Export to a `path` instead of inline base64 when the image is for the user, not for you.
-- `introspect` returns versions only unless asked for `include` sections; narrow the metamodel
-  with `types: ["UMLClass"]`.
+- `doctor` reports the StarUML and extension versions; `call_endpoint({name: "introspect"})`
+  returns them alone unless asked for `include` sections; narrow the metamodel with
+  `types: ["UMLClass"]`.
 
 ## 10. Access token and refusals
 

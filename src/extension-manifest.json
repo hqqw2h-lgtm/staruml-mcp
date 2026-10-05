@@ -755,7 +755,7 @@
           "type": {
             "type": "string",
             "minLength": 1,
-            "description": "A model id of /introspect factory.modelIds, e.g. 'UMLClass'."
+            "description": "A model id of /introspect factory.modelIds, e.g. 'UMLClass', or a model class StarUML otherwise makes only with a view, e.g. 'UMLLifeline', 'UMLPseudostate', 'UMLFinalState', 'UMLCombinedFragment', added without one."
           },
           "parent": {
             "type": "string",
@@ -4932,7 +4932,7 @@
     },
     {
       "path": "/export_diagram",
-      "description": "Render a diagram as PNG, JPEG or SVG, as File > Export Diagram As does, and return it base64-encoded or write it to a file.",
+      "description": "Render a diagram as PNG, JPEG or SVG, as File > Export Diagram As does, and return it base64-encoded or write it to a file. annotate draws each view's element id or path on the image, so what is seen can be named.",
       "readOnly": false,
       "destructive": true,
       "request": {
@@ -4967,6 +4967,15 @@
           "path": {
             "type": "string",
             "description": "Absolute file to write; overwritten, parent directories created. Omit to receive the image in the response."
+          },
+          "annotate": {
+            "type": "string",
+            "enum": [
+              "none",
+              "ids",
+              "paths"
+            ],
+            "description": "Draw a small label on each view of the image, not the model: ids its element's id, paths the shortest path naming it (its id when unnamed). Default none."
           },
           "id": {
             "type": "string",
@@ -5010,6 +5019,43 @@
           "base64": {
             "type": "string",
             "description": "The image, when 'path' was not given."
+          },
+          "annotations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string",
+                  "description": "The labelled element's id."
+                },
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "width": {
+                  "type": "number"
+                },
+                "height": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "text",
+                "ref",
+                "x",
+                "y",
+                "width",
+                "height"
+              ],
+              "additionalProperties": false
+            },
+            "description": "With annotate: each label and its box in image pixels."
           }
         },
         "required": [
@@ -5734,7 +5780,7 @@
           },
           "atomic": {
             "type": "boolean",
-            "description": "Default true. Atomic batches refuse /undo, /redo, /restore_snapshot, /new_project, /open_project, /save_project*, /execute_command, /export_pdf, /export_html, /export_diagrams, /generate_code, /reverse_code and /build_diagram."
+            "description": "Default true. Atomic batches refuse /undo, /redo, /restore_snapshot, /new_project, /open_project, /save_project*, /execute_command, /export_pdf, /export_html, /export_diagrams, /generate_code, /reverse_code, and the endpoints running a batch of their own: /build_diagram, /build_model, /sync_operations, /apply_pattern, /apply_preset, /apply_theme."
           },
           "result": {
             "type": "string",
@@ -6764,7 +6810,7 @@
     },
     {
       "path": "/uml_lint",
-      "description": "Check the model for modelling mistakes StarUML's own validation does not look for: association ends without multiplicity (U001) or navigability (U002), attributes without a type (U003), relationships missing an end (U004), abstract classes without a subclass (U005), interfaces nobody realizes (U006), sequence messages that name no operation of the receiver (U007), use cases without an actor (U008), state machines without an initial (U009) or final state (U010), ERD entities without a primary key (U011) and names off the naming convention (U012). Each finding has a rule id, the element's id and path, and a one-line fix. Read-only.",
+      "description": "Check the model for modelling mistakes StarUML's own validation does not look for: association ends without multiplicity (U001) or navigability (U002), attributes without a type (U003), relationships missing an end (U004), abstract classes without a subclass (U005), interfaces nobody realizes (U006), sequence messages that name no operation of the receiver (U007), use cases without an actor (U008), state machines without an initial (U009) or final state (U010), ERD entities without a primary key (U011), names off the naming convention (U012) and detected design patterns that break a rule of their pattern, e.g. a singleton with a public constructor (U013, see /detect_patterns). Each finding has a rule id, the element's id and path, and a one-line fix. Read-only.",
       "readOnly": true,
       "destructive": false,
       "request": {
@@ -7471,6 +7517,2004 @@
           "snapshot",
           "undone",
           "remaining"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/build_model",
+      "description": "Make or update a model from an object-level spec, without diagrams, as one undo step: packages (contexts), classes with members and responsibilities (documentation), relationships (owns, has, uses, isA, implements, knows, association), actors and use cases, collaborations as interactions with lifelines and messages, lifecycles as state machines. Diagram sections (classViews, erd, ...) are left to /build_diagram and listed in skipped. dryRun lists the changes and the /batch ops; upsert updates the model of the same name.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "spec": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "{system, summary, contexts: [{id, name, responsibility, dependsOn}], classes: [{name, context, kind: class|abstract|interface|enum, responsibility, knows, does, collaboratesWith, attributes: ['+id: UUID'], operations: ['+save(e: T): T'], literals}], relationships: [{from, to, type, name, fromMult, toMult}], actors: [{name, kind, goals}], useCases: [{name, system, actors, includes, extends}], collaborations: [{name, participants, messages: [[from, to, text, kind]], fragments}], lifecycles: [{name, subject, states, transitions: [{from, to, trigger, guard, effect}]}]}. Relationship direction: owns: composition: from is the whole (end1, composite), to the part; has: aggregation: from is the whole (end1, shared), to the part; uses: dependency: from is the client, to the supplier; isA: generalization: from is the specific, to the general; implements: interface realization: from implements the interface to; knows: directed association: from navigates to to; association: association with no navigability or aggregation."
+          },
+          "parent": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Owner of the model; default the project. Id or path."
+          },
+          "upsert": {
+            "type": "boolean",
+            "description": "Update the model of the same name under the parent: elements are matched by owner, type and name, members by name, relationships by type, ends and name; what differs is set, what is missing added, nothing removed."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "Answer the changes and the exact /batch ops, and change nothing."
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "terse",
+              "ids",
+              "full"
+            ],
+            "description": "terse (default): counts by element type. ids: also the id of each package, classifier, collaboration and state machine by path. full: also every created and updated element."
+          }
+        },
+        "required": [
+          "spec"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "object",
+            "properties": {
+              "_id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_id",
+              "name",
+              "path"
+            ],
+            "additionalProperties": false,
+            "description": "The model built or updated; _id is '$m0' on a dry run that makes it."
+          },
+          "upserted": {
+            "type": "boolean",
+            "description": "The model existed and was updated."
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "description": "Elements made, by type."
+              },
+              "updated": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "description": "Elements changed, by type."
+              },
+              "unchanged": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "Elements the spec names that already were as written."
+              }
+            },
+            "required": [
+              "created",
+              "updated",
+              "unchanged"
+            ],
+            "additionalProperties": false
+          },
+          "changes": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "type"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "updated": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "type"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "created",
+              "updated"
+            ],
+            "additionalProperties": false,
+            "description": "With result full or dryRun: each element made or changed, by path; relationships as 'from -> to'."
+          },
+          "ids": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "With result ids or full."
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "section": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "section",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Spec sections that describe diagrams, with what builds them."
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "plan": {
+            "type": "object",
+            "properties": {
+              "ops": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "as": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "body"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "The /batch ops applying the plan runs, in order."
+              },
+              "creates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "updates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "deletes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "ops",
+              "creates",
+              "updates",
+              "deletes"
+            ],
+            "additionalProperties": false,
+            "description": "With dryRun: what applying runs."
+          }
+        },
+        "required": [
+          "model",
+          "upserted",
+          "counts"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/sync_operations",
+      "description": "Add to each receiver of a sequence diagram's call messages the operations the messages name and it lacks, with the parameters written in the message, and set each message's signature to its operation; one undo step. Messages that are prose or go to a lifeline without a class are listed in skipped. dryRun answers the same without changing anything.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Sequence diagram. Id or path."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "Answer what would change."
+          }
+        },
+        "required": [
+          "diagram"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "receiver": {
+                  "type": "string",
+                  "description": "The class or interface, by path."
+                },
+                "operation": {
+                  "type": "string"
+                },
+                "parameters": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "messages": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Messages calling it."
+                }
+              },
+              "required": [
+                "receiver",
+                "operation",
+                "parameters",
+                "messages"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "linked": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Messages given their operation as signature."
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message",
+                "text",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "plan": {
+            "type": "object",
+            "properties": {
+              "ops": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "as": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "body"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "The /batch ops applying the plan runs, in order."
+              },
+              "creates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "updates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "deletes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "ops",
+              "creates",
+              "updates",
+              "deletes"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "added",
+          "linked",
+          "skipped"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/check_messages",
+      "description": "List the call messages of a sequence diagram (or of every interaction in a scope) that name no operation of their receiver: no-operation (the receiver lacks it; /sync_operations adds it), no-receiver (the lifeline has no class or interface) and not-a-call (prose). Replies are not checked. Read-only.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Sequence diagram. Id or path."
+          },
+          "scope": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Instead of diagram: every message owned within this element. Id or path."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "checked": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Call messages looked at."
+          },
+          "ok": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Messages naming an operation of their receiver."
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "from": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "to": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "receiver": {
+                  "description": "The receiver's path.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "problem": {
+                  "type": "string",
+                  "enum": [
+                    "not-a-call",
+                    "no-receiver",
+                    "no-operation"
+                  ]
+                },
+                "hint": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message",
+                "text",
+                "from",
+                "to",
+                "receiver",
+                "problem",
+                "hint"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "checked",
+          "ok",
+          "problems"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/list_patterns",
+      "description": "The design patterns /apply_pattern applies and /detect_patterns finds: the 23 GoF patterns and Repository, Unit of Work, Specification, Value Object, Entity, Service and DTO, each with its intent, roles and variants. Read-only.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "creational",
+              "structural",
+              "behavioral",
+              "domain"
+            ]
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "patterns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "category": {
+                  "type": "string"
+                },
+                "intent": {
+                  "type": "string"
+                },
+                "roles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Role names; '*' marks a role binding several elements, '?' an optional one."
+                },
+                "variants": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "sequence": {
+                  "type": "boolean",
+                  "description": "Has messages for a sequence diagram."
+                }
+              },
+              "required": [
+                "name",
+                "category",
+                "intent",
+                "roles",
+                "variants",
+                "sequence"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "count",
+          "patterns"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/describe_pattern",
+      "description": "A pattern's roles with the element type, properties, stereotype, documentation and members each gets, its relationships with the properties of their ends, its sequence messages and the checks uml_lint holds an instance to: what /apply_pattern sets. Read-only.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Pattern name, e.g. 'Strategy', 'factory-method'."
+          },
+          "variant": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "intent": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {}
+          },
+          "relationships": {
+            "type": "array",
+            "items": {}
+          }
+        },
+        "required": [
+          "name",
+          "category",
+          "intent",
+          "roles",
+          "relationships"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    {
+      "path": "/apply_pattern",
+      "description": "Apply a design pattern: bind each role to existing elements by path or name, or to new ones, and set every property the pattern prescribes on them, their attributes, operations and parameters, and the ends of the relationships between them; optionally show it on a class diagram (laid out) and a sequence diagram of its messages. One undo step. Answers each role's elements by id and path and every property set; dryRun lists the same and the ops without changing anything.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Pattern name, see /list_patterns."
+          },
+          "bindings": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "new": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "new"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "new": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "new"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "description": "By role: a path or name of an existing element, a name for a new one, {new: {name}}, or a list of those for a role marked many. Unbound roles get a new element named after the role; optional roles are left out."
+          },
+          "variant": {
+            "type": "string",
+            "description": "A variant of the pattern, see /describe_pattern."
+          },
+          "parent": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Owner of new elements and diagrams; default the diagram's owner, else the project's first model. Id or path."
+          },
+          "diagram": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A class diagram to show the pattern on: a reference to one, or the name of a new one."
+          },
+          "sequence": {
+            "type": "boolean",
+            "description": "Also make a sequence diagram of the pattern's messages."
+          },
+          "upsert": {
+            "type": "boolean",
+            "description": "Reuse an element of the parent named like a new one instead of refusing it (DUPLICATE_NAME)."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "Answer what would be made and set, and change nothing."
+          }
+        },
+        "required": [
+          "pattern"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "variant": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "_id": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "created": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "_id",
+                  "path",
+                  "created"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "description": "Each role's elements; _id is a '$name' placeholder on a dry run for what is new."
+          },
+          "created": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "updated": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "unchanged": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "changes": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "type"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "updated": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "type"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "created",
+              "updated"
+            ],
+            "additionalProperties": false
+          },
+          "properties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "field": {
+                  "type": "string"
+                },
+                "value": {}
+              },
+              "required": [
+                "path",
+                "field",
+                "value"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Every attribute value set, by element path."
+          },
+          "diagram": {
+            "type": "string",
+            "description": "The class diagram's id."
+          },
+          "sequenceDiagram": {
+            "type": "string",
+            "description": "The sequence diagram's id."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "plan": {
+            "type": "object",
+            "properties": {
+              "ops": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "as": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "body"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "The /batch ops applying the plan runs, in order."
+              },
+              "creates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "updates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "deletes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "ops",
+              "creates",
+              "updates",
+              "deletes"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "pattern",
+          "roles",
+          "created",
+          "updated",
+          "unchanged",
+          "changes",
+          "properties"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/detect_patterns",
+      "description": "Find instances of the library's patterns in the model by structure: roles bound along the relationships the pattern prescribes, scored by the share of its element types, properties, members and relationship ends the model has. Answers candidates with their confidence (1: everything the pattern prescribes), the elements in each role and what is missing. Read-only.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Only classifiers within this element; default the project. Id or path."
+          },
+          "patterns": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Only these patterns."
+          },
+          "minConfidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Default 0.6."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "description": "Default 50."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Candidates found, before limit."
+          },
+          "detections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "type": "number"
+                },
+                "roles": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "_id": {
+                          "type": "string"
+                        },
+                        "path": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "_id",
+                        "path"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "missing": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "pattern",
+                "confidence",
+                "roles",
+                "missing"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "count",
+          "detections"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/apply_preset",
+      "description": "Give an existing class, interface or enumeration and its members the properties of a kind of element, as one undo step: interface, abstract, value-object, entity, enum, static-utility, immutable. Answers every property set; dryRun answers it without changing anything.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Class, interface or enumeration. Id or path."
+          },
+          "preset": {
+            "type": "string",
+            "enum": [
+              "interface",
+              "abstract",
+              "value-object",
+              "entity",
+              "enum",
+              "static-utility",
+              "immutable"
+            ],
+            "description": "The kind; /describe_type lists what each property means."
+          },
+          "dryRun": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ref",
+          "preset"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "element": {
+            "type": "object",
+            "properties": {
+              "_id": {
+                "type": "string"
+              },
+              "path": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "_id",
+              "path"
+            ],
+            "additionalProperties": false
+          },
+          "preset": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "changes": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "type"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "updated": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "type"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "created",
+              "updated"
+            ],
+            "additionalProperties": false
+          },
+          "properties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "field": {
+                  "type": "string"
+                },
+                "value": {}
+              },
+              "required": [
+                "path",
+                "field",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "plan": {
+            "type": "object",
+            "properties": {
+              "ops": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "as": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "body"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "The /batch ops applying the plan runs, in order."
+              },
+              "creates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "updates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "deletes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "ops",
+              "creates",
+              "updates",
+              "deletes"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "element",
+          "preset",
+          "description",
+          "changes",
+          "properties"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/describe_type",
+      "description": "The properties of a metamodel type, inherited ones included: kind, value type, default, the allowed values of an enumeration, the type that declares it and, for the properties that carry UML meaning, what it means. Read-only.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Metamodel class, e.g. 'UMLOperation', 'UMLAssociationEnd'."
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "supers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ancestors, nearest first."
+          },
+          "properties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "default": {},
+                "allowed": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Enumeration literals, or suggested values."
+                },
+                "declaredBy": {
+                  "type": "string"
+                },
+                "meaning": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "kind",
+                "type",
+                "declaredBy"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "type",
+          "supers",
+          "properties"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/apply_theme",
+      "description": "Colour a diagram's views by a theme preset through /set_view_style, as one undo step: monochrome, blueprint, by-stereotype (one colour per stereotype), by-package (one per owning package). Answers the colour sets applied and how many views each took; dryRun answers the ops without changing anything.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram. Id or path."
+          },
+          "theme": {
+            "type": "string",
+            "enum": [
+              "monochrome",
+              "blueprint",
+              "by-stereotype",
+              "by-package"
+            ],
+            "description": "monochrome, blueprint, by-stereotype or by-package."
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "diagram": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
+          }
+        },
+        "required": [
+          "ref",
+          "theme"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "string"
+          },
+          "theme": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "styles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fillColor": {
+                  "type": "string"
+                },
+                "lineColor": {
+                  "type": "string"
+                },
+                "fontColor": {
+                  "type": "string"
+                },
+                "views": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Views given this style."
+                },
+                "group": {
+                  "type": "string",
+                  "description": "The stereotype or package it stands for."
+                }
+              },
+              "required": [
+                "lineColor",
+                "fontColor",
+                "views"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "plan": {
+            "type": "object",
+            "properties": {
+              "ops": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "as": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "body"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "The /batch ops applying the plan runs, in order."
+              },
+              "creates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "updates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "deletes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "as": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "ops",
+              "creates",
+              "updates",
+              "deletes"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "diagram",
+          "theme",
+          "description",
+          "styles"
         ],
         "additionalProperties": false
       }

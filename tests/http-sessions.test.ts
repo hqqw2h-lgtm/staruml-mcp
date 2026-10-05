@@ -1,4 +1,5 @@
 import { createServer as createHttpServer, type Server } from "node:http";
+import { CORE_ENDPOINTS } from "../src/tiers.js";
 import type { AddressInfo } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -18,6 +19,9 @@ import { VIEWER_URI } from "../src/viewer.js";
 import { UpstreamFixture } from "./support/fixture.js";
 import { UI_CAPABILITIES } from "./support/mcp.js";
 import { INITIALIZE_PARAMS, MCP_HEADERS, parseSse } from "./support/sse.js";
+
+/** The hand-written tools, describe_endpoints and call_endpoint, and the core endpoints. */
+const CORE_TOOLS = 9 + CORE_ENDPOINTS.length;
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="2"><text>Book</text></svg>';
 
@@ -199,7 +203,7 @@ describe("sessions", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers["mcp-session-id"]).toBeUndefined();
-    expect((parseSse(res.text).result!.tools as unknown[]).length).toBe(21);
+    expect((parseSse(res.text).result!.tools as unknown[]).length).toBe(CORE_TOOLS);
     expect(handler.sessions.size).toBe(1);
     // The stateless server unsubscribed when its response closed.
     await vi.waitFor(() => expect(catalog.subscribers).toBe(1));

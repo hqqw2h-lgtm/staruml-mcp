@@ -128,6 +128,8 @@ describe("catalogue reads", () => {
     catalog,
   });
   const introspects = () => extension.requests.filter((r) => r.path === "/introspect");
+  /** The core tier left introspect out in 0.6.0; these tests read through its summary tool. */
+  const withIntrospect = () => new CatalogState(undefined, parseToolSelection("core,introspect"));
 
   /** The extension's manifest, so doctor reads the same catalog it started with. */
   function serveManifest(): void {
@@ -136,7 +138,7 @@ describe("catalogue reads", () => {
   }
 
   it("answers repeated introspect calls from the cache until doctor reloads", async () => {
-    const catalog = new CatalogState();
+    const catalog = withIntrospect();
     const mcp = await connect(config(catalog));
     try {
       extension.reply("/introspect", { body: { success: true, data: VERSIONS } });
@@ -158,7 +160,7 @@ describe("catalogue reads", () => {
   });
 
   it("does not keep a failed read", async () => {
-    const catalog = new CatalogState();
+    const catalog = withIntrospect();
     const mcp = await connect(config(catalog));
     try {
       extension.reply(
@@ -178,7 +180,7 @@ describe("catalogue reads", () => {
   });
 
   it("shares the metamodel between the resource and the tool, across servers", async () => {
-    const catalog = new CatalogState();
+    const catalog = withIntrospect();
     const [a, b] = await Promise.all([connect(config(catalog)), connect(config(catalog))]);
     try {
       extension.reply("/introspect", { body: { success: true, data: VERSIONS } });

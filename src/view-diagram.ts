@@ -21,10 +21,67 @@ export async function viewDiagram(
   exportTool: GeneratedTool | undefined,
   diagram: string | undefined,
   inline: boolean,
+  annotate: Annotate = "none",
 ): Promise<CallToolResult> {
-  return inline && exportTool !== undefined
-    ? svgResult(client, exportTool, diagram)
-    : pngResult(client, exportTool !== undefined, diagram);
+  if (exportTool === undefined) {
+    if (annotate !== "none") {
+      throw new ToolInputError("annotate needs staruml-mcp-extension's export_diagram", {
+        code: ErrorCode.ExtensionRequired,
+        hint: "Run doctor; without the extension view_diagram shows the built-in PNG only.",
+      });
+    }
+    return pngResult(client, false, diagram);
+  }
+  if (inline) return svgResult(client, exportTool, diagram, annotate);
+  // StarUML's built-in PNG has no labels, so a labelled picture comes from the extension.
+  return annotate === "none"
+    ? pngResult(client, true, diagram)
+    : labelledPng(client, exportTool, diagram, annotate);
+}
+
+/** Extension #24's label modes; `none` draws nothing. */
+export const ANNOTATE = ["none", "ids", "paths"] as const;
+export type Annotate = (typeof ANNOTATE)[number];
+
+function exportBody(
+  diagram: string | undefined,
+  format: string,
+  annotate: Annotate,
+): Record<string, unknown> {
+  return {
+    ...(diagram === undefined ? {} : { diagram }),
+    format,
+    ...(annotate === "none" ? {} : { annotate }),
+  };
+}
+
+/**
+ * The PNG /export_diagram draws with labels. Each label names its element as a reference the
+ * next call takes, so the picture is the whole answer; the label boxes stay out of the text.
+ */
+async function labelledPng(
+  client: StarUMLClient,
+  exportTool: GeneratedTool,
+  diagram: string | undefined,
+  annotate: Annotate,
+): Promise<CallToolResult> {
+  const data = (await client.callExtension(
+    exportTool.path,
+    exportBody(diagram, "png", annotate),
+  )) as { base64?: unknown };
+  return { content: [{ type: "image", data: exported(data, exportTool), mimeType: "image/png" }] };
+}
+
+/** The export's base64, or the error a missing one is. */
+function exported(data: { base64?: unknown }, exportTool: GeneratedTool): string {
+  if (typeof data.base64 !== "string") {
+    throw new StarUMLApiError("export_diagram answered without the image", {
+      code: ErrorCode.InvalidResponse,
+      slug: exportTool.path,
+      upstream: "extension",
+    });
+  }
+  return data.base64;
 }
 
 interface SvgExport {
@@ -38,16 +95,11 @@ async function svgResult(
   client: StarUMLClient,
   exportTool: GeneratedTool,
   diagram: string | undefined,
+  annotate: Annotate,
 ): Promise<CallToolResult> {
-  const body = diagram === undefined ? { format: "svg" } : { diagram, format: "svg" };
+  const body = exportBody(diagram, "svg", annotate);
   const data = (await client.callExtension(exportTool.path, body)) as SvgExport;
-  if (typeof data.base64 !== "string") {
-    throw new StarUMLApiError("export_diagram answered without the SVG", {
-      code: ErrorCode.InvalidResponse,
-      slug: exportTool.path,
-      upstream: "extension",
-    });
-  }
+  const svg = exported(data, exportTool);
   // The export names the diagram by id only; its summary carries the name.
   const element = (await client.callExtension("/get_element_by_id", { ref: data.diagram })) as {
     name?: string | null;
@@ -58,7 +110,7 @@ async function svgResult(
     width: data.width,
     height: data.height,
   };
-  const structured: ViewerData = { ...shown, svg: Buffer.from(data.base64, "base64").toString() };
+  const structured: ViewerData = { ...shown, svg: Buffer.from(svg, "base64").toString() };
   return {
     content: [{ type: "text", text: serialize({ ...shown, viewer: VIEWER_URI }) }],
     structuredContent: { ...structured },

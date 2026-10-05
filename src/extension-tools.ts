@@ -439,11 +439,19 @@ function registerIntrospectSummary(
     },
     async (input) =>
       runTool(actionOf(tool.name), async () => {
-        const include = input.include ?? (input.types === undefined ? [] : ["metamodel"]);
-        const data = await readIntrospect(client, state, tool.path, { ...input, include });
+        const data = await readIntrospect(client, state, tool.path, summaryBody(input));
         return jsonResult(data, input);
       }),
   );
+}
+
+/**
+ * The summary tool's defaults: versions only, or the metamodel when `types` narrows it. The
+ * extension's own default is every section, 522 KB from 7.1.1 with 79 endpoints, so
+ * call_endpoint applies these too.
+ */
+function summaryBody(body: Record<string, unknown>): Record<string, unknown> {
+  return { ...body, include: body.include ?? (body.types === undefined ? [] : ["metamodel"]) };
 }
 
 /**
@@ -549,6 +557,10 @@ function registerCall(
     async ({ name, body = {} }) =>
       runTool(actionOf(name), async () => {
         const tool = findTool(state, name);
+        if (name === SUMMARIZED) {
+          const sent = validated(state, tool, summaryBody(body));
+          return jsonResult(await readIntrospect(client, state, tool.path, sent), body);
+        }
         const sent = validated(state, tool, body);
         return resultOf(name, await client.callExtension(tool.path, sent), body);
       }),

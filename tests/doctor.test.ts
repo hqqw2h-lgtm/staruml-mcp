@@ -1,4 +1,5 @@
 import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
+import { CORE_ENDPOINTS } from "../src/tiers.js";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { diagnose, formatReport, healthy, type Check } from "../src/doctor.js";
 import { CatalogState } from "../src/extension-tools.js";
@@ -92,7 +93,7 @@ describe("diagnose", () => {
       { name: "staruml api", status: "ok", detail: `${HOST}:${builtin.port}` },
       { name: "extension", status: "ok", detail: `0.3.0 at ${HOST}:${extension.port}` },
       { name: "staruml", status: "ok", detail: "7.1.1" },
-      { name: "manifest", status: "ok", detail: "69 endpoints from the live manifest" },
+      { name: "manifest", status: "ok", detail: "79 endpoints from the live manifest" },
     ]);
     expect(catalog).toMatchObject({ source: "live", enabled: true });
     expect(extension.requests).toContainEqual({
@@ -137,7 +138,7 @@ describe("diagnose", () => {
       detail: `no answer at ${HOST}:${refused}`,
       remedy: "Start StarUML; the extension listens while StarUML runs.",
     });
-    expect(check(checks, "manifest").detail).toBe("69 endpoints from the bundled manifest");
+    expect(check(checks, "manifest").detail).toBe("79 endpoints from the bundled manifest");
     expect(catalog).toMatchObject({ source: "bundled", enabled: true });
     expect(checks.map((c) => c.name)).not.toContain("staruml");
   });
@@ -277,7 +278,7 @@ describe("diagnose", () => {
       name: "manifest",
       status: "warn",
       detail:
-        "69 endpoints from the live manifest; skipped /broken (request schema is not an object schema)",
+        "79 endpoints from the live manifest; skipped /broken (request schema is not an object schema)",
     });
   });
 });
@@ -330,9 +331,9 @@ describe("doctor tool", () => {
 
       expect(result.isError).toBeFalsy();
       expect(text(result)).toMatch(/^node +ok/);
-      expect(text(result)).toContain("manifest     ok    69 endpoints from the live manifest");
+      expect(text(result)).toContain("manifest     ok    79 endpoints from the live manifest");
       expect(text(result)).toContain(
-        "tier         ok    all: 69 extension tools listed, 0 endpoints through call_endpoint",
+        "tier         ok    all: 79 extension tools listed, 0 endpoints through call_endpoint",
       );
       const after = await names(mcp);
       expect(after).toContain("frobnicate");
@@ -408,7 +409,9 @@ describe("doctor tool", () => {
       expect(catalog.selection.label).toBe("core,create_diagram,nope");
       expect(await names(mcp)).toContain("create_diagram");
       expect(text(result)).toMatch(
-        /tier +warn +core,create_diagram,nope: 13 extension tools .*; unknown: nope\n +fix +Check the names/,
+        new RegExp(
+          `tier +warn +core,create_diagram,nope: ${CORE_ENDPOINTS.length + 1} extension tools .*; unknown: nope\n +fix +Check the names`,
+        ),
       );
       await vi.waitFor(() => expect(changed()).toBeGreaterThan(0));
     } finally {

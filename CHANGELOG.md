@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Bundled manifest synced from the extension's phase 1g build with 79 endpoints: `/build_model`, `/sync_operations`, `/check_messages`, `/list_patterns`, `/describe_pattern`, `/apply_pattern`, `/detect_patterns`, `/apply_preset`, `/describe_type`, `/apply_theme`, and `annotate` on `/export_diagram` (#4).
+- `build_diagram`'s listed grammar names the `package`, `component` and `deployment` spec shapes; its description no longer promises ids, which the extension answers with `result: "ids"` only (#4, #8).
+- `export_diagram` lists `annotate` (`paths` or `ids`: each view labelled on the image, never on the model) and answers the labels without the extension's `ref`, since each label's text is already a reference. `view_diagram` takes `annotate` too: in the viewer the SVG carries the labels, and without MCP Apps the labelled PNG comes from `export_diagram`; without the extension it is refused with `EXTENSION_REQUIRED` rather than showing an unlabelled picture (#4, #10).
+
+### Changed
+- `introspect` leaves the core tier to make room under the 2,000-token budget: `doctor` reports both versions and `search_types` and `staruml://introspect/metamodel` answer type questions. `call_endpoint({name: "introspect"})` now applies the summary tool's defaults (versions only, the metamodel with `types`); the extension's own default, every section, is 522 KB. `--tools core,introspect` lists the summary tool as before (#8).
+
 ## [0.5.0] - 2026-10-05
 
 Built against staruml-mcp-extension 0.3.0 with 69 endpoints (extension phases 1e to 1g: path

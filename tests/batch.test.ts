@@ -388,13 +388,50 @@ describe("export_diagram", () => {
     ]);
   });
 
+  it("answers labels by their text, a reference already, without the id beside it", async () => {
+    const label = { text: "Billing/Invoice", x: 4, y: 4, width: 90, height: 12 };
+    const data = {
+      ...meta,
+      mimeType: "image/png",
+      base64: "iVBORw0KGgo=",
+      annotations: [{ ...label, ref: "AAAAAAGh=" }, "odd"],
+    };
+    extension.reply("/export_diagram", { body: { success: true, data } });
+
+    const result = await mcp.call("export_diagram", { annotate: "paths" });
+
+    expect(extension.requests[0]!.body).toEqual({ annotate: "paths" });
+    expect(JSON.parse(text(result).split("\n").at(-1)!)).toMatchObject({
+      annotations: [label, "odd"],
+    });
+  });
+
+  it("drops label ids from an SVG or file answer too", async () => {
+    const data = { ...meta, path: "/tmp/d.svg", annotations: [{ text: "X", ref: "X" }] };
+    extension.reply("/export_diagram", { body: { success: true, data } });
+
+    const result = await mcp.call("export_diagram", { path: "/tmp/d.svg", annotate: "ids" });
+
+    expect(JSON.parse(text(result))).toMatchObject({ annotations: [{ text: "X" }] });
+  });
+
   it("lists a shorter schema of its own with every parameter", async () => {
     const { tools } = await mcp.client.listTools();
     const tool = tools.find((t) => t.name === "export_diagram")!;
     const properties = tool.inputSchema.properties as Record<string, Record<string, unknown>>;
 
     expect(tool.description).toBe(EXPORT_DIAGRAM_DESCRIPTION);
-    expect(Object.keys(properties)).toEqual(["diagram", "format", "scale", "background", "path"]);
+    expect(Object.keys(properties)).toEqual([
+      "diagram",
+      "format",
+      "scale",
+      "background",
+      "path",
+      "annotate",
+    ]);
+    expect(properties.annotate).toEqual({
+      description: "paths|ids: label each view with its element, on the image only.",
+    });
     expect(properties.background).toEqual({
       description: "CSS colour, e.g. #fff; default transparent.",
     });

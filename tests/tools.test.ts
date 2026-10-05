@@ -137,6 +137,10 @@ const UNDESCRIBED = new Set([
   "set_editor_state.snapToGrid",
   "diff_diagram.mermaid",
   "diff_diagram.format",
+  "list_patterns.category",
+  "describe_pattern.variant",
+  "apply_preset.dryRun",
+  "apply_theme.dryRun",
 ]);
 
 const HOST = "http://127.0.0.1";
@@ -182,7 +186,7 @@ describe("tool registry", () => {
         ...BUNDLED_MANIFEST.endpoints.map((e) => toolName(e.path)),
       ].sort(),
     );
-    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(69);
+    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(79);
   });
 
   it("lists no $schema on any input schema", async () => {

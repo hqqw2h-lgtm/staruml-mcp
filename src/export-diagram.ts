@@ -9,6 +9,13 @@ import { shortInput, type ManifestEntry } from "./manifest.js";
 
 export const EXPORT_DIAGRAM = "export_diagram";
 
+/**
+ * Extension #24's labels, drawn on the image and never on the model. A path label is itself a
+ * reference the next call can take, which is why the model is told about paths first.
+ */
+export const ANNOTATE_DESCRIPTION =
+  "paths|ids: label each view with its element, on the image only.";
+
 export const EXPORT_DIAGRAM_DESCRIPTION =
   "Export a diagram as PNG, JPEG or SVG, inline or to a file.";
 
@@ -18,8 +25,9 @@ const LISTED: Record<string, string> = {
   scale: "PNG/JPEG pixels per unit, up to 4; default 1.",
   background: "CSS colour, e.g. #fff; default transparent.",
   path: "Absolute file to write instead of answering the image.",
+  annotate: ANNOTATE_DESCRIPTION,
 };
 
 export function exportDiagramInput(entry: ManifestEntry): z.ZodObject {
-  return shortInput(entry, LISTED, new Set(["background", "scale"]));
+  return shortInput(entry, LISTED, new Set(["background", "scale", "annotate"]));
 }

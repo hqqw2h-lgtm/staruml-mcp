@@ -65,7 +65,10 @@ function expectedRequest(tool: string, args: Record<string, unknown>) {
     case "generate_diagram":
       return { fixture: builtin, path: "/generate_diagram", body: args };
     case "view_diagram":
-      return { fixture: builtin, path: "/get_diagram_image_by_id", body: { diagramId: "D1" } };
+      // A labelled picture comes from the extension; the built-in PNG has no labels.
+      return args.annotate === undefined
+        ? { fixture: builtin, path: "/get_diagram_image_by_id", body: { diagramId: "D1" } }
+        : { fixture: extension, path: "/export_diagram", body: { ...args, format: "png" } };
     case "diagram_as_text":
       return {
         fixture: extension,

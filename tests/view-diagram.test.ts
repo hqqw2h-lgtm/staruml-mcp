@@ -142,7 +142,7 @@ describe("view_diagram for a client that renders MCP Apps", () => {
     expect(result.structuredContent).toEqual({
       error: {
         code: "INVALID_RESPONSE",
-        message: "export_diagram answered without the SVG",
+        message: "export_diagram answered without the image",
         endpoint: "/export_diagram",
         upstream: "extension",
       },
@@ -287,5 +287,83 @@ describe("view_diagram for a client without MCP Apps", () => {
     } finally {
       await mcp.close();
     }
+  });
+});
+
+describe("view_diagram with annotate (extension #24)", () => {
+  const LABELLED = { ...EXPORTED, format: "png", mimeType: "image/png", base64: PNG };
+
+  it("asks the SVG export for labels in the viewer", async () => {
+    serveSvg();
+
+    const result = await ui.call("view_diagram", { diagram: "Main", annotate: "paths" });
+
+    expect(result.isError).toBeFalsy();
+    expect(extension.requests[0]!.body).toEqual({
+      diagram: "Main",
+      format: "svg",
+      annotate: "paths",
+    });
+  });
+
+  it("draws the labelled PNG with the extension, since the built-in PNG has none", async () => {
+    extension.reply("/export_diagram", { body: { success: true, data: LABELLED } });
+
+    const result = await plain.call("view_diagram", { annotate: "ids" });
+
+    expect(result).toEqual({ content: [{ type: "image", data: PNG, mimeType: "image/png" }] });
+    expect(extension.requests).toEqual([
+      { method: "POST", path: "/export_diagram", body: { format: "png", annotate: "ids" } },
+    ]);
+    expect(builtin.requests).toEqual([]);
+  });
+
+  it("keeps the built-in PNG for annotate none", async () => {
+    builtin.reply("/get_diagram_image_by_id", { body: { success: true, data: PNG } });
+    serveSvg();
+
+    const result = await plain.call("view_diagram", { diagram: "D1", annotate: "none" });
+
+    expect(result.content).toEqual([{ type: "image", data: PNG, mimeType: "image/png" }]);
+    expect(extension.requests.map((r) => r.path)).toEqual(["/get_element_by_id"]);
+  });
+
+  it("reports a labelled export answered without the image", async () => {
+    const { base64: _omitted, ...rest } = LABELLED;
+    extension.reply("/export_diagram", { body: { success: true, data: rest } });
+
+    const result = await plain.call("view_diagram", { annotate: "paths" });
+
+    expect(result.structuredContent).toMatchObject({ error: { code: "INVALID_RESPONSE" } });
+  });
+
+  it("refuses labels without the extension's export instead of showing a picture without", async () => {
+    const catalog = new CatalogState({ ...bundledCatalog(), enabled: false });
+    const mcp = await connect({ ...config(), catalog });
+    try {
+      const result = await mcp.call("view_diagram", { annotate: "paths" });
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({ error: { code: "EXTENSION_REQUIRED" } });
+      expect(builtin.requests).toEqual([]);
+    } finally {
+      await mcp.close();
+    }
+  });
+
+  it("rejects an unknown mode before calling StarUML", async () => {
+    const result = await plain.call("view_diagram", { annotate: "names" });
+
+    expect(text(result)).toMatch(/Input validation error/);
+    expect(extension.requests).toEqual([]);
+  });
+
+  it("lists annotate by reference to export_diagram", async () => {
+    const { tools } = await plain.client.listTools();
+    const tool = tools.find((t) => t.name === "view_diagram")!;
+
+    expect(tool.inputSchema.properties).toMatchObject({
+      annotate: { description: "As export_diagram's." },
+    });
   });
 });
