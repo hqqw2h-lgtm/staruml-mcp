@@ -102,8 +102,7 @@ async function startHttp(port: number, serverConfig: ServerConfig): Promise<void
       res.writeHead(404, { "Content-Type": "application/json" }).end(
         JSON.stringify({
           error: "not_found",
-          error_description:
-            "staruml-mcp does not require OAuth. Use the /mcp endpoint directly.",
+          error_description: "staruml-mcp does not require OAuth. Use the /mcp endpoint directly.",
         }),
       );
       return;
