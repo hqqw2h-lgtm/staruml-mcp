@@ -6,7 +6,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { compactOpResults, serialize } from "./compact.js";
 import { ErrorCode, ToolInputError } from "./errors.js";
-import { unstamped, type GeneratedTool } from "./manifest.js";
+import { unstamped, untrivial, type GeneratedTool } from "./manifest.js";
 import { textResult } from "./tool-result.js";
 
 export const BATCH = "batch";
@@ -34,7 +34,9 @@ export const BatchInput = unstamped(
       .array(
         z.object({
           path: z.string().regex(/^\//).describe("Endpoint path, e.g. /create_element."),
-          body: z.record(z.string(), z.unknown()).optional().describe("Its request body."),
+          body: untrivial(z.record(z.string(), z.unknown()))
+            .optional()
+            .describe("Its request body."),
           as: z.string().regex(OP_NAME).optional().describe("Name later ops refer to as $name."),
         }),
       )

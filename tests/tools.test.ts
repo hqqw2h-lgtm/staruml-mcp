@@ -92,9 +92,24 @@ const ARGS: Record<string, Record<string, unknown>> = {
 const INVALID: Record<string, Record<string, unknown>> = {
   "/build_diagram": { upsert: "yes" },
   "/export_diagram": { scale: 9 },
+  "/find_elements": { type: 5 },
+  "/update_element": { id: 5 },
+  "/search_types": { query: 5 },
+  "/describe_diagram": { diagramId: 5 },
+  "/validate_model": { scope: 5 },
 };
 
-const SHORT = new Set(["/batch", "/build_diagram", "/export_diagram"]);
+/** Endpoints listed with a hand-written schema, tested in their own files. */
+const SHORT = new Set([
+  "/batch",
+  "/build_diagram",
+  "/export_diagram",
+  "/find_elements",
+  "/update_element",
+  "/search_types",
+  "/describe_diagram",
+  "/validate_model",
+]);
 
 /** One case per manifest endpoint: required arguments only, an element summary as the answer. */
 const generated: ToolCase[] = ENDPOINTS.map((entry) => {
@@ -155,6 +170,7 @@ describe("tool registry", () => {
         "get_current_diagram_info",
         "get_diagram_image_by_id",
         "view_diagram",
+        "diagram_as_text",
         ...BUNDLED_MANIFEST.endpoints.map((e) => toolName(e.path)),
       ].sort(),
     );
@@ -183,8 +199,8 @@ describe("tool registry", () => {
     }
   });
 
-  // batch, build_diagram and export_diagram list shorter schemas of their own (tests/batch.test.ts,
-  // tests/build-diagram.test.ts).
+  // SHORT endpoints list shorter schemas of their own (tests/batch.test.ts, build-diagram.test.ts,
+  // and reads.test.ts).
   it.each(ENDPOINTS.filter((e) => !SHORT.has(e.path)))(
     "lists $path's request schema as the manifest defines it",
     async (entry) => {
@@ -192,9 +208,8 @@ describe("tool registry", () => {
       const tool = tools.find((t) => t.name === toolName(entry.path))!;
 
       const listed = tool.inputSchema as Record<string, unknown>;
-      const { schema, passthrough } = listedRequestSchema(entry);
-      const expected = withExplicitDefaults(schema) as Record<string, unknown>;
-      expect(listed).toEqual(passthrough ? { ...expected, additionalProperties: {} } : expected);
+      // A loose root lists no additionalProperties (manifest.ts untrivial).
+      expect(listed).toEqual(withExplicitDefaults(listedRequestSchema(entry).schema));
     },
   );
 
@@ -400,7 +415,7 @@ describe("extension 0.3.0 contract", () => {
   });
 
   it("rejects a wrong-typed field before the extension sees it", async () => {
-    const result = await mcp.call("find_elements", { limit: "10" });
+    const result = await mcp.call("get_views_of", { id: 10 });
 
     expect(result.isError).toBe(true);
     expect(text(result)).toMatch(/Input validation error/);

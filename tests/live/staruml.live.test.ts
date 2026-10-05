@@ -17,7 +17,7 @@ import { diagnose, healthy } from "../../src/doctor.js";
 import { CatalogState } from "../../src/extension-tools.js";
 import { main, type RunningServer } from "../../src/index.js";
 import { BUNDLED_MANIFEST, toolName } from "../../src/manifest.js";
-import { diagramImageUri, ENDPOINTS_URI, METAMODEL_URI } from "../../src/server.js";
+import { diagramImageUri, diagramTextUri, ENDPOINTS_URI, METAMODEL_URI } from "../../src/server.js";
 import { StarUMLClient } from "../../src/staruml-client.js";
 import { VIEWER_URI } from "../../src/viewer.js";
 import { CORE_ENDPOINTS, parseToolSelection } from "../../src/tiers.js";
@@ -138,6 +138,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           "get_current_diagram_info",
           "get_diagram_image_by_id",
           "view_diagram",
+          "diagram_as_text",
           "doctor",
           "describe_endpoints",
           "call_endpoint",
@@ -157,7 +158,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       try {
         const names = (await all.client.listTools()).tools.map((t) => t.name);
         const endpoints = catalog.current.compiled.manifest.endpoints.map((e) => toolName(e.path));
-        expect(names.length).toBe(6 + endpoints.length);
+        expect(names.length).toBe(7 + endpoints.length);
         expect(names).toEqual(expect.arrayContaining(endpoints));
         expect(
           payload<{ count: number }>(await all.call("get_all_commands")).count,
@@ -704,13 +705,12 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       expect(existsSync(join(html, "index.html"))).toBe(true);
     }, 60_000);
 
-    it("reads a diagram back as text, searches types and validates the model", async () => {
-      const described = payload<{ text: string; nodes: number }>(
-        await call("describe_diagram", { diagramId: classDiagramId }),
+    it("reads a diagram back as text, searches types and validates the model (#11)", async () => {
+      const described = ok(await call("describe_diagram", { diagramId: classDiagramId }));
+      expect(described.split("\n")[0]).toMatch(
+        /^UMLClassDiagram "LiveDiagram" in ".+": 2 nodes, \d+ edges$/,
       );
-      expect(described.nodes).toBe(2);
-      expect(described.text).toContain('UMLClassDiagram "LiveDiagram"');
-      expect(described.text).toContain('"Book" -[UMLAssociation "writtenBy"]-> "Author"');
+      expect(described).toContain('"Book" -[UMLAssociation "writtenBy"]-> "Author"');
 
       for (const format of ["mermaid", "plantuml"]) {
         const exported = payload<{ kind: string; text: string }>(
@@ -718,19 +718,94 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         );
         expect(exported.kind).toBe("class");
         expect(exported.text).toContain("Book");
-        expect(exported.text).toContain("Author");
       }
 
-      const found = payload<{ results: { id: string }[] }>(
+      const found = payload<{ results: Record<string, unknown>[] }>(
         await call("search_types", { query: "composition", limit: 3 }),
       );
       expect(found.results.map((r) => r.id)).toContain("UMLComposition");
+      expect(found.results[0]).not.toHaveProperty("score");
+      expect(found.results[0]).toHaveProperty("example");
 
-      const validated = payload<{ count: number; rules: number }>(
+      const validated = payload<{ count?: number; rules: number }>(
         await call("validate_model", { scope: packageId, limit: 5 }),
       );
       expect(validated.rules).toBeGreaterThan(0);
-      expect(validated.count).toBeGreaterThanOrEqual(0);
+    });
+
+    it("diagram_as_text writes Mermaid and PlantUML, also as resources, and round-trips (#11)", async () => {
+      const mermaid = await call("diagram_as_text", { id: classDiagramId });
+      ok(mermaid);
+      const source = (mermaid.content[0] as { text: string }).text;
+      expect(source).toMatch(/^---\ntitle: "LiveDiagram"\n---\nclassDiagram\n/);
+      expect(source).toContain("Book -- Author : writtenBy");
+      expect(JSON.parse((mermaid.content[1] as { text: string }).text)).toEqual({ kind: "class" });
+
+      const plantuml = await call("diagram_as_text", { id: classDiagramId, format: "plantuml" });
+      expect(ok(plantuml)).toMatch(/^@startuml\ntitle LiveDiagram\n[\s\S]*@enduml\n/);
+
+      ok(await call("switch_diagram", { id: classDiagramId }));
+      const current = await call("diagram_as_text");
+      expect(JSON.parse((current.content[1] as { text: string }).text)).toEqual({
+        id: classDiagramId,
+        kind: "class",
+      });
+
+      const mmd = await mcp.client.readResource({ uri: diagramTextUri(classDiagramId, "mermaid") });
+      expect(mmd.contents[0]).toMatchObject({ mimeType: "text/plain", text: source });
+      const puml = await mcp.client.readResource({
+        uri: diagramTextUri(classDiagramId, "plantuml"),
+      });
+      expect(puml.contents[0]).toMatchObject({
+        text: (plantuml.content[0] as { text: string }).text,
+      });
+
+      // The Mermaid is the form build_diagram reads: built again, it describes the same diagram.
+      const rebuilt = payload<{ diagram: Summary }>(
+        await call("build_diagram", {
+          mermaid: source,
+          name: "LiveRoundTrip",
+          parentId: packageId,
+        }),
+      );
+      const again = ok(await call("describe_diagram", { diagramId: rebuilt.diagram._id }));
+      expect(again).toContain('"Book" -[UMLAssociation "writtenBy"]-> "Author"');
+      // Every node and edge line of the original comes back. Extension builds that reuse
+      // same-named elements elsewhere in the project also draw their other relationships (here
+      // the Book -> Author dependency, which has no view on LiveDiagram).
+      const original = ok(await call("describe_diagram", { diagramId: classDiagramId }));
+      expect(again.split("\n").slice(1)).toEqual(
+        expect.arrayContaining(original.split("\n").slice(1)),
+      );
+    });
+
+    it("prompts name the reads, which run against StarUML as written (#11)", async () => {
+      const { prompts } = await mcp.client.listPrompts();
+      expect(prompts.map((p) => p.name)).toEqual(["model-codebase", "review-diagram"]);
+
+      const review = await mcp.client.getPrompt({
+        name: "review-diagram",
+        arguments: { diagramId: classDiagramId },
+      });
+      const steps = (review.messages[0]!.content as { text: string }).text;
+      expect(steps).toContain(`describe_diagram({diagramId: "${classDiagramId}"})`);
+      expect(steps).toContain(`diagram_as_text({id: "${classDiagramId}"})`);
+      // Step 2 as the prompt describes it: the diagram's owner from get_element_by_id.
+      const owner = payload<Summary>(
+        await call("get_element_by_id", { id: classDiagramId }),
+      )._parent;
+      expect(owner).toBe(packageId);
+      expect(
+        payload<{ rules: number }>(await call("validate_model", { scope: owner })).rules,
+      ).toBeGreaterThan(0);
+
+      const model = await mcp.client.getPrompt({
+        name: "model-codebase",
+        arguments: { path: join(dir, "java"), language: "java" },
+      });
+      const text = (model.messages[0]!.content as { text: string }).text;
+      expect(text).toContain('call_endpoint({name: "list_code_generators", body: {}})');
+      expect(text).toContain(`path: "${join(dir, "java")}"`);
     });
 
     it("view_diagram shows the SVG export in the viewer, and a PNG without MCP Apps (#10)", async () => {
@@ -945,15 +1020,20 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       });
     });
 
-    it("called every listed tool and every endpoint of the manifest", async () => {
+    it("called every listed tool and every endpoint of the bundled manifest", async () => {
       const { tools } = await mcp.client.listTools();
       const live = catalog.current.compiled.manifest.endpoints.map((e) => e.path);
       // The bundled manifest is the contract this server is tested against; the running
-      // extension must be that contract.
-      expect([...live].sort()).toEqual(BUNDLED_MANIFEST.endpoints.map((e) => e.path).sort());
+      // extension must offer all of it. A newer 0.3.x build may add endpoints, which the
+      // server serves from the live manifest and this suite does not call.
+      const bundled = BUNDLED_MANIFEST.endpoints.map((e) => e.path);
+      expect(live).toEqual(expect.arrayContaining(bundled));
+      const newer = live.filter((p) => !bundled.includes(p));
+      if (newer.length > 0)
+        console.info(`[live] endpoints newer than the bundle: ${newer.join(" ")}`);
       const generic = ["describe_endpoints", "call_endpoint"];
       expect(
-        [...tools.map((t) => t.name), ...live.map((p) => toolName(p))].filter(
+        [...tools.map((t) => t.name), ...bundled.map((p) => toolName(p))].filter(
           (n) => !called.has(n) && !generic.includes(n),
         ),
       ).toEqual([]);

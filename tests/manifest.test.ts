@@ -11,10 +11,12 @@ import {
   listedRequestSchema,
   MAX_DESCRIPTION_LENGTH,
   parseManifest,
+  shortInput,
   strictRequestSchema,
   terseDescription,
   toolName,
   unstamped,
+  untrivial,
   withoutTrivialKeywords,
   type Manifest,
   type ManifestEntry,
@@ -213,6 +215,59 @@ describe("unstamped", () => {
       additionalProperties: false,
     });
     expect(JSON.stringify(z.toJSONSchema(schema))).not.toContain("$schema");
+  });
+});
+
+describe("untrivial", () => {
+  it("lists a loose object and a record without keywords every object meets", () => {
+    const schema = z.looseObject({ body: untrivial(z.record(z.string(), z.unknown())) });
+
+    expect(z.toJSONSchema(untrivial(schema), { io: "input" })).toMatchObject({
+      properties: { body: { type: "object" } },
+    });
+    expect(JSON.stringify(z.toJSONSchema(untrivial(schema), { io: "input" }))).not.toMatch(
+      /additionalProperties|propertyNames/,
+    );
+    expect(untrivial(schema).parse({ body: { a: 1 }, extra: true })).toEqual({
+      body: { a: 1 },
+      extra: true,
+    });
+  });
+});
+
+describe("shortInput", () => {
+  const request = {
+    type: "object",
+    properties: {
+      id: { type: "string", minLength: 1, description: "Long." },
+      limit: { type: "integer", minimum: 1, maximum: 50, description: "Long." },
+      other: { type: "string" },
+    },
+    required: ["id", "other"],
+  };
+
+  it("lists the described properties, drops string lengths and keeps listed requirements", () => {
+    const schema = shortInput(
+      entry({ request }),
+      { id: "Element _id.", limit: "Default 10.", gone: "Not in the entry." },
+      new Set(["limit"]),
+    );
+
+    expect(z.toJSONSchema(schema, { io: "input" })).toEqual({
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Element _id." },
+        limit: { description: "Default 10." },
+      },
+      required: ["id"],
+    });
+    expect(schema.parse({ id: "", other: 1 })).toEqual({ id: "", other: 1 });
+  });
+
+  it("lists no required array when nothing listed is required", () => {
+    const schema = shortInput(entry({ request }), { limit: "Default 10." });
+
+    expect(z.toJSONSchema(schema, { io: "input" })).not.toHaveProperty("required");
   });
 });
 

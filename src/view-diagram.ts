@@ -70,7 +70,7 @@ async function pngResult(client: StarUMLClient, id: string | undefined): Promise
   return { content: [{ type: "image", data: image, mimeType: "image/png" }] };
 }
 
-async function currentDiagramId(client: StarUMLClient): Promise<string> {
+export async function currentDiagramId(client: StarUMLClient): Promise<string> {
   const current = (await client.getCurrentDiagramInfo()) as { id?: string } | null;
   if (current?.id === undefined) {
     throw new ToolInputError("No diagram is open in StarUML.", {

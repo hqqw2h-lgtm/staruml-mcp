@@ -156,7 +156,8 @@ export function withoutTrivialKeywords(schema: unknown): unknown {
 /**
  * A shorter listing for an endpoint whose manifest descriptions cost more than they tell: the
  * properties named in `descriptions`, with those descriptions, and `bare` ones with nothing but
- * the description. The root is loose, so parameters left out still reach the check against the
+ * the description; listed ones the entry requires stay required. The root is loose, so parameters
+ * left out still reach the check against the
  * whole request schema that such tools run before sending. Names the entry lacks are skipped, so
  * an extension that renames one does not break the listing.
  */
@@ -170,9 +171,13 @@ export function shortInput(
   for (const [name, description] of Object.entries(descriptions)) {
     const property = properties[name];
     if (property === undefined) continue;
-    listed[name] = bare.has(name) ? { description } : { ...property, description };
+    // minLength: 1 on every id (6 tokens each) is left to the whole request schema too.
+    const { minLength: _minLength, ...typed } = property;
+    listed[name] = bare.has(name) ? { description } : { ...typed, description };
   }
-  return inputSchema({ schema: { type: "object", properties: listed }, passthrough: true });
+  const required = ((entry.request.required ?? []) as string[]).filter((n) => n in listed);
+  const schema = { type: "object", properties: listed, ...(required.length > 0 && { required }) };
+  return inputSchema({ schema, passthrough: true });
 }
 
 /**
@@ -183,7 +188,17 @@ export function shortInput(
  */
 export function inputSchema({ schema, passthrough }: ListedSchema): z.ZodObject {
   const { shape } = objectSchema(schema);
-  return unstamped(passthrough ? z.looseObject(shape) : z.object(shape));
+  return unstamped(passthrough ? untrivial(z.looseObject(shape)) : z.object(shape));
+}
+
+/**
+ * A loose object or a record listed without `additionalProperties: {}` and `propertyNames: {type:
+ * "string"}`, which hold for every object (JSON Schema 2020-12, 10.3.2.3; JSON object keys are
+ * strings) and which zod 4 writes for each: 5 tools/list tokens on a loose root, 12 on a record.
+ * Validation is unchanged; only the listing loses them.
+ */
+export function untrivial<T extends z.ZodType>(schema: T): T {
+  return schema.meta({ additionalProperties: undefined, propertyNames: undefined });
 }
 
 /**

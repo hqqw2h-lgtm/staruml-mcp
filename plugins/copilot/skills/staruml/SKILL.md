@@ -36,8 +36,14 @@ extension's endpoints, so run it after the user upgrades the extension.
 | Their Mermaid source rendered | `generate_diagram` (routes itself, see section 4) |
 | Small edits to an existing model | `find_elements`, then `update_element` / `delete_element` |
 | Many related creations or edits | one `batch` |
+| To read or explain a diagram | `diagram_as_text` or `describe_diagram` (section 7), not a picture |
+| The `type` or command id to pass | `search_types` |
+| To check a model | `validate_model` |
 | Anything else StarUML can do | `describe_endpoints`, then `call_endpoint` |
 | To see a diagram | `view_diagram`; `export_diagram` for files |
+
+A user may also start the server's prompts `model-codebase` (reverse-engineer a source directory
+or build class diagrams from a description) and `review-diagram`; they spell out the same calls.
 
 ## 3. build_diagram: one spec per kind
 
@@ -45,7 +51,10 @@ extension's endpoints, so run it after the user upgrades the extension.
 `id` where a node has one. `\n` or `<br/>` in a name stores a line break (StarUML 7.1.1 draws it
 on one line). The answer carries the diagram id and the model and view id of every node, keyed
 by name. `upsert: true` updates the diagram of the same name instead of adding a second one;
-it adds what is missing and never deletes. `direction` is `TB` (default), `BT`, `LR` or `RL`.
+it adds what is missing and never deletes. `direction` is `TB` (default), `BT`, `LR` or `RL`;
+`layout` picks a preset (`flow-down`, `flow-right`, `hierarchy-down`, ...: flow puts an edge's
+source first, hierarchy its target, as superclasses above subclasses), by default hierarchy for
+class diagrams and flow for the rest.
 
 **class**: `classes[{name, kind: class|interface|enum|abstract, package, stereotype,
 attributes, operations, literals}]`, `relations[{from, to, type, name, fromMultiplicity,
@@ -282,6 +291,36 @@ tool, and `doctor({tools: "core"})` goes back.
 
 ## 7. Reading, viewing and exporting
 
+Read a diagram as text. For a six-class diagram with members, Mermaid or a `describe_diagram`
+summary is about 270 tokens, a PNG about 1,600 (an estimate, billed as an image) and an element
+dump with `summary: false` about 4,400.
+
+```json diagram_as_text
+{}
+```
+
+`diagram_as_text` writes the current diagram (or `id`) as Mermaid, or as PlantUML with
+`format: "plantuml"`, then a line with its `kind` and any `warnings` about what the text cannot
+carry. The Mermaid is the form `build_diagram` reads back: edit it and pass it as `mermaid`, with
+`kind` for use case and activity diagrams, to rebuild. `describe_diagram({diagramId})` lists the
+nodes with their members and the edges as `"tail" -[Type "name"]-> "head"`, without
+multiplicities or composition; `staruml://diagram/{id}.mmd` and `.puml` serve the text as
+resources.
+
+```json search_types
+{ "query": "composition", "limit": 3 }
+```
+
+`search_types` finds the metamodel type, palette item, relationship kind or command id for a
+word, each with an example request body; use it instead of guessing a `type`.
+
+```json validate_model
+{}
+```
+
+`validate_model` runs StarUML's validation rules over the project, or `scope` (an element id and
+what it owns), and lists each problem with its element and rule id.
+
 ```json find_elements
 { "type": "UMLClass", "name": "Invoice", "fields": ["name", "attributes"], "depth": 1 }
 ```
@@ -308,8 +347,11 @@ and returns only its size, which is what to do for anything the user wants on di
 - `find_elements` pages: pass `limit` and the `nextCursor` it returns.
 - Results omit null and empty fields and the arguments you sent; a bare `ok` means success.
 - Resources cost nothing until read: `staruml://project/tree` (ownership tree),
-  `staruml://diagrams`, `staruml://diagram/{id}.png`, `staruml://introspect/metamodel` (types and
-  attributes), `staruml://introspect/endpoints` (every request schema).
+  `staruml://diagrams`, `staruml://diagram/{id}.png`, `.mmd` and `.puml`,
+  `staruml://introspect/metamodel` (types and attributes), `staruml://introspect/endpoints`
+  (every request schema).
+- To understand a diagram, `diagram_as_text` or `describe_diagram`; `view_diagram` only when the
+  layout itself matters.
 - One `build_diagram` or `batch` call replaces dozens of single calls and their results.
 - Export to a `path` instead of inline base64 when the image is for the user, not for you.
 - `introspect` returns versions only unless asked for `include` sections; narrow the metamodel

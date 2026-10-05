@@ -11,14 +11,36 @@ import {
 } from "./export-diagram.js";
 import type { Check } from "./doctor.js";
 import {
+  FIND_ELEMENTS,
+  FIND_ELEMENTS_DESCRIPTION,
+  findElementsInput,
+  UPDATE_ELEMENT,
+  UPDATE_ELEMENT_DESCRIPTION,
+  updateElementInput,
+} from "./elements.js";
+import {
   BUNDLED_MANIFEST,
   compileManifest,
   listedRequestSchema,
   unstamped,
+  untrivial,
   withoutTrivialKeywords,
   type CompiledManifest,
   type GeneratedTool,
 } from "./manifest.js";
+import {
+  DESCRIBE_DIAGRAM,
+  DESCRIBE_DIAGRAM_DESCRIPTION,
+  describeDiagramInput,
+  describeResult,
+  SEARCH_TYPES,
+  SEARCH_TYPES_DESCRIPTION,
+  searchResult,
+  searchTypesInput,
+  VALIDATE_MODEL,
+  VALIDATE_MODEL_DESCRIPTION,
+  validateModelInput,
+} from "./reads.js";
 import type { StarUMLClient } from "./staruml-client.js";
 import {
   CORE_ENDPOINTS,
@@ -41,6 +63,7 @@ export const HAND_WRITTEN_TOOLS: ReadonlySet<string> = new Set([
   "get_current_diagram_info",
   "get_diagram_image_by_id",
   "view_diagram",
+  "diagram_as_text",
   "doctor",
   "describe_endpoints",
   "call_endpoint",
@@ -153,6 +176,26 @@ const SHORT_LISTED: Record<
     description: EXPORT_DIAGRAM_DESCRIPTION,
     input: (tool) => exportDiagramInput(tool.entry),
   },
+  [FIND_ELEMENTS]: {
+    description: FIND_ELEMENTS_DESCRIPTION,
+    input: (tool) => findElementsInput(tool.entry),
+  },
+  [UPDATE_ELEMENT]: {
+    description: UPDATE_ELEMENT_DESCRIPTION,
+    input: (tool) => updateElementInput(tool.entry),
+  },
+  [SEARCH_TYPES]: {
+    description: SEARCH_TYPES_DESCRIPTION,
+    input: (tool) => searchTypesInput(tool.entry),
+  },
+  [DESCRIBE_DIAGRAM]: {
+    description: DESCRIBE_DIAGRAM_DESCRIPTION,
+    input: (tool) => describeDiagramInput(tool.entry),
+  },
+  [VALIDATE_MODEL]: {
+    description: VALIDATE_MODEL_DESCRIPTION,
+    input: (tool) => validateModelInput(tool.entry),
+  },
 };
 
 function specs(server: McpServer, client: StarUMLClient, state: CatalogState): ToolSpec[] {
@@ -218,6 +261,8 @@ const RESULT_SHAPES: Record<
 > = {
   [BATCH]: batchResult,
   [EXPORT_DIAGRAM]: exportResult,
+  [SEARCH_TYPES]: searchResult,
+  [DESCRIBE_DIAGRAM]: describeResult,
 };
 
 function resultOf(name: string, data: unknown, input: Record<string, unknown>): CallToolResult {
@@ -279,9 +324,9 @@ const IntrospectSummaryInput = unstamped(
     include: z
       .array(z.enum(["factory", "metamodel", "toolbox"]))
       .optional()
-      .describe("Sections besides versions; default none, or metamodel when types is given."),
-    types: z.array(z.string().min(1)).optional().describe("Restrict the metamodel to these types."),
-    inherited: z.boolean().optional().describe("Also list inherited attributes."),
+      .describe("Default none; metamodel when types is given."),
+    types: z.array(z.string().min(1)).optional().describe("Only these metamodel types."),
+    inherited: z.boolean().optional().describe("With inherited attributes."),
   }),
 );
 
@@ -366,7 +411,9 @@ export function describe(
 const CallInput = unstamped(
   z.object({
     name: z.string().min(1).describe("Endpoint name from describe_endpoints."),
-    body: z.record(z.string(), z.unknown()).optional().describe("Request body; default {}."),
+    body: untrivial(z.record(z.string(), z.unknown()))
+      .optional()
+      .describe("Request body; default {}."),
   }),
 );
 

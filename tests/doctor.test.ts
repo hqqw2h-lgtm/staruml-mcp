@@ -376,6 +376,7 @@ describe("doctor tool", () => {
 
       expect(text(result)).toContain("is incompatible; this server needs 0.3.x");
       expect((await names(mcp)).sort()).toEqual([
+        "diagram_as_text",
         "doctor",
         "generate_diagram",
         "get_all_diagrams_info",
@@ -407,7 +408,7 @@ describe("doctor tool", () => {
       expect(catalog.selection.label).toBe("core,create_diagram,nope");
       expect(await names(mcp)).toContain("create_diagram");
       expect(text(result)).toMatch(
-        /tier +warn +core,create_diagram,nope: 9 extension tools .*; unknown: nope\n +fix +Check the names/,
+        /tier +warn +core,create_diagram,nope: 12 extension tools .*; unknown: nope\n +fix +Check the names/,
       );
       await vi.waitFor(() => expect(changed()).toBeGreaterThan(0));
     } finally {

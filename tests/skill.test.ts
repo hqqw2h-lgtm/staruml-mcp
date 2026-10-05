@@ -44,6 +44,12 @@ function serve(): void {
       },
     },
   });
+  extension.reply("/export_text", {
+    body: {
+      success: true,
+      data: { diagram: { _id: "D1" }, kind: "class", text: "classDiagram\n  class Invoice\n" },
+    },
+  });
   builtin.reply("/generate_diagram", { body: { success: true } });
   builtin.reply("/get_current_diagram_info", {
     body: { success: true, data: { id: "D1", type: "UMLClassDiagram", name: "Ordering" } },
@@ -60,6 +66,12 @@ function expectedRequest(tool: string, args: Record<string, unknown>) {
       return { fixture: builtin, path: "/generate_diagram", body: args };
     case "view_diagram":
       return { fixture: builtin, path: "/get_diagram_image_by_id", body: { diagramId: "D1" } };
+    case "diagram_as_text":
+      return {
+        fixture: extension,
+        path: "/export_text",
+        body: { diagramId: "D1", format: args.format ?? "mermaid" },
+      };
     default:
       return { fixture: extension, path: `/${tool}`, body: args };
   }
@@ -104,6 +116,9 @@ describe("SKILL.md", () => {
         "find_elements",
         "view_diagram",
         "export_diagram",
+        "diagram_as_text",
+        "search_types",
+        "validate_model",
       ]),
     );
   });

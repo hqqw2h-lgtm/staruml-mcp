@@ -111,7 +111,7 @@ describe("resources/list", () => {
     }
   });
 
-  it("publishes the diagram image template", async () => {
+  it("publishes the diagram image and text templates", async () => {
     const { resourceTemplates } = await mcp.client.listResourceTemplates();
 
     expect(resourceTemplates).toEqual([
@@ -119,6 +119,16 @@ describe("resources/list", () => {
         uriTemplate: "staruml://diagram/{id}.png",
         name: "diagram-image",
         mimeType: "image/png",
+      }),
+      expect.objectContaining({
+        uriTemplate: "staruml://diagram/{id}.mmd",
+        name: "diagram-mmd",
+        mimeType: "text/plain",
+      }),
+      expect.objectContaining({
+        uriTemplate: "staruml://diagram/{id}.puml",
+        name: "diagram-puml",
+        mimeType: "text/plain",
       }),
     ]);
   });

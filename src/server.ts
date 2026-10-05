@@ -11,9 +11,19 @@ import {
   type RegisteredExtensionTools,
 } from "./extension-tools.js";
 import { BUILD_DIAGRAM } from "./build-diagram.js";
+import {
+  DIAGRAM_AS_TEXT,
+  DIAGRAM_AS_TEXT_DESCRIPTION,
+  diagramAsText,
+  exportText,
+  TEXT_EXTENSIONS,
+  TEXT_FORMATS,
+  type TextFormat,
+} from "./diagram-text.js";
 import { generateDiagram } from "./generate-diagram.js";
 import { PROJECTION_INSTRUCTIONS, unstamped } from "./manifest.js";
 import { readProjectTree } from "./project-tree.js";
+import { registerPrompts } from "./prompts.js";
 import { StarUMLClient } from "./staruml-client.js";
 import { parseToolSelection, type ToolSelection } from "./tiers.js";
 import { jsonResult, resourceError, runTool, textResult } from "./tool-result.js";
@@ -42,17 +52,25 @@ export const PROJECT_TREE_URI = "staruml://project/tree";
 export const METAMODEL_URI = "staruml://introspect/metamodel";
 export const ENDPOINTS_URI = "staruml://introspect/endpoints";
 export const DIAGRAM_IMAGE_TEMPLATE = "staruml://diagram/{id}.png";
+export const DIAGRAM_TEXT_TEMPLATES: Record<TextFormat, string> = {
+  mermaid: `staruml://diagram/{id}.${TEXT_EXTENSIONS.mermaid}`,
+  plantuml: `staruml://diagram/{id}.${TEXT_EXTENSIONS.plantuml}`,
+};
 
 /** Diagram ids are base64-like and may contain `/`, `+` and `=`, so they are percent-encoded. */
 export function diagramImageUri(id: string): string {
   return `staruml://diagram/${encodeURIComponent(id)}.png`;
 }
 
+export function diagramTextUri(id: string, format: TextFormat): string {
+  return `staruml://diagram/${encodeURIComponent(id)}.${TEXT_EXTENSIONS[format]}`;
+}
+
 const INSTRUCTIONS =
   "Results are JSON without null or empty fields or echoed arguments. " +
   `${PROJECTION_INSTRUCTIONS} ` +
   "Endpoints without a tool: describe_endpoints, then call_endpoint. " +
-  "Resources: diagram PNGs, project tree, metamodel, endpoint manifest.";
+  "Resources: diagram PNG, Mermaid and PlantUML, project tree, metamodel, endpoint manifest.";
 
 export interface ServerConfig {
   apiPort?: number;
@@ -87,12 +105,19 @@ const ViewDiagramInput = unstamped(
   z.object({ id: id("Diagram").optional().describe("Diagram _id; default the current one.") }),
 );
 
+const DiagramAsTextInput = unstamped(
+  z.object({
+    id: id("Diagram").optional().describe("Diagram _id; default the current one."),
+    format: z.enum(TEXT_FORMATS).optional().describe("Default mermaid."),
+  }),
+);
+
 const DoctorInput = unstamped(
   z.object({
     tools: z
       .string()
       .optional()
-      .describe("List other extension tools: core, all or comma-separated endpoint names."),
+      .describe("Tier to list: core, all or comma-separated endpoint names."),
   }),
 );
 
@@ -154,7 +179,7 @@ export function createServer(config: ServerConfig = {}): McpServer {
   server.registerTool(
     "get_all_diagrams_info",
     {
-      description: `List diagrams (id, type, name) of the open project. Resource: ${DIAGRAMS_URI}.`,
+      description: "List diagrams (id, type, name) of the open project.",
       annotations: READ_ONLY,
     },
     async () =>
@@ -175,7 +200,7 @@ export function createServer(config: ServerConfig = {}): McpServer {
   server.registerTool(
     "get_diagram_image_by_id",
     {
-      description: `Diagram as PNG. Resource: ${DIAGRAM_IMAGE_TEMPLATE}.`,
+      description: "Diagram as PNG.",
       inputSchema: DiagramImageInput,
       annotations: READ_ONLY,
     },
@@ -202,6 +227,19 @@ export function createServer(config: ServerConfig = {}): McpServer {
   );
 
   server.registerTool(
+    DIAGRAM_AS_TEXT,
+    {
+      description: DIAGRAM_AS_TEXT_DESCRIPTION,
+      inputSchema: DiagramAsTextInput,
+      annotations: READ_ONLY,
+    },
+    async ({ id, format = "mermaid" }) =>
+      runTool("write diagram as text", () =>
+        diagramAsText(client, extensionTool(catalog, "export_text"), id, format),
+      ),
+  );
+
+  server.registerTool(
     "doctor",
     {
       description: "Check StarUML, extension and Node setup; reloads the extension's tools.",
@@ -222,6 +260,7 @@ export function createServer(config: ServerConfig = {}): McpServer {
   // startup, or the bundled snapshot when the extension was not reachable.
   const extensionTools: RegisteredExtensionTools = new Map();
   syncExtensionTools(server, client, catalog, extensionTools);
+  registerPrompts(server, catalog);
 
   return server;
 }
@@ -359,4 +398,34 @@ function registerResources(server: McpServer, client: StarUMLClient, catalog: Ca
       }
     },
   );
+
+  // Not enumerated by resources/list, which already names every diagram once as a PNG;
+  // resources/templates/list shows them. Neither format has a registered media type (IANA lists
+  // no text/vnd.mermaid or PlantUML type), so they are text/plain, which every client can show.
+  for (const format of TEXT_FORMATS) {
+    server.registerResource(
+      `diagram-${TEXT_EXTENSIONS[format]}`,
+      new ResourceTemplate(DIAGRAM_TEXT_TEMPLATES[format], { list: undefined }),
+      {
+        description: `Diagram written as ${format === "mermaid" ? "Mermaid" : "PlantUML"} text.`,
+        mimeType: "text/plain",
+      },
+      async (uri, variables) => {
+        try {
+          const diagramId = decodeURIComponent(String(variables.id));
+          const tool = extensionTool(catalog, "export_text");
+          const out = await exportText(client, tool, diagramId, format);
+          const about = {
+            kind: out.kind,
+            ...(out.warnings?.length ? { warnings: out.warnings } : {}),
+          };
+          return {
+            contents: [{ uri: uri.href, mimeType: "text/plain", text: out.text, _meta: about }],
+          };
+        } catch (error) {
+          throw resourceError(`read diagram ${format}`, error);
+        }
+      },
+    );
+  }
 }

@@ -155,7 +155,7 @@ staruml api  ok    http://localhost:58321
 extension    ok    0.3.0 at http://localhost:58322
 staruml      ok    7.1.1
 manifest     ok    61 endpoints from the live manifest
-tier         ok    core: 8 extension tools listed, 53 endpoints through call_endpoint
+tier         ok    core: 11 extension tools listed, 50 endpoints through call_endpoint
 ```
 
 A failing check is followed by a `fix` line: start StarUML, enable `apiServer` in StarUML's
@@ -190,6 +190,7 @@ extension    fail  http://localhost:58322 refused the request: Missing or wrong 
 | `get_current_diagram_info` | Get metadata of the currently focused diagram. |
 | `get_diagram_image_by_id` | Export a diagram as PNG by its ID. |
 | `view_diagram` | Show a diagram (default the current one): an interactive SVG viewer in clients that render MCP Apps, the `get_diagram_image_by_id` PNG otherwise ([below](#inline-viewer-mcp-apps)). The SVG comes from the extension. |
+| `diagram_as_text` | A diagram (default the current one) as Mermaid, or PlantUML with `format: "plantuml"`, through the extension's `export_text`: the text in a block of its own, then `{id?, kind, warnings?}`. The Mermaid is the form `build_diagram` reads back. |
 | `doctor` | Check Node, both StarUML ports, the extension and StarUML versions; reloads the extension's tools and, given `tools`, switches the tier. |
 
 ### generate_diagram routing
@@ -224,9 +225,9 @@ default and reaches every other extension endpoint through two generic tools:
 
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
-| `core` (default) | the 6 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`; `describe_endpoints`, `call_endpoint` | 1,884 |
-| `all` | the 6 above and one tool per manifest endpoint | 9,509 |
-| `core,create_diagram,…` | the 6 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
+| `core` (default) | the 7 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`, `search_types`, `describe_diagram`, `validate_model`; `describe_endpoints`, `call_endpoint` | 1,992 |
+| `all` | the 7 above and one tool per manifest endpoint | 9,136 |
+| `core,create_diagram,…` | the 7 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
 Token counts include the server instructions (o200k_base, extension 0.3.0, `npm run
 benchmark:tokens`). Pick the tier with `--tools`, or `STARUML_MCP_TOOLS` for clients that pass
@@ -328,16 +329,25 @@ StarUML is rolled back and reported with the failing op's code; the extension's
 above, and the text adds `Details: {"index": n}` (the results name elements the rollback removed).
 
 `build_diagram` lists a hand-written description and seven parameters (`kind`, `spec`, `mermaid`,
-`name`, `upsert`, `direction`, `layout`, 278 tokens); the manifest's own description of `spec` alone is ~400
+`name`, `upsert`, `direction`, `layout`, 267 tokens); the manifest's own description of `spec` alone is ~400
 tokens, so `spec` lists a one-line grammar per kind and `describe_endpoints({names:
 ["build_diagram"]})` serves the full one. The unlisted `parentId` and `autoLayout` are accepted, and
 every body is checked against the manifest's whole request schema before it is sent, as for `batch`.
 
-`export_diagram` lists a hand-written description and shorter parameter descriptions (147 tokens
+`export_diagram` lists a hand-written description and shorter parameter descriptions (139 tokens
 against the manifest's 208); the colour pattern is left to the check against the whole request
 schema, as for `build_diagram`. It returns a PNG or JPEG as an image content block followed by the rest of the answer
 (`width`, `height`, `bytes`) as JSON; as text, the base64 of even a small diagram costs thousands of
 tokens. SVG and exports written to `path` come back as JSON.
+
+`find_elements`, `update_element`, `search_types`, `describe_diagram` and `validate_model` list
+hand-written descriptions too, in 95, 202, 86, 68 and 58 tokens; `update_element` keeps the
+meaning of each `op` in one line. These short listings, like `build_diagram`'s and
+`export_diagram`'s, leave string lengths and integer bounds to the check against the whole
+request schema, keep the manifest's `required`, and, like every listing, leave out
+`additionalProperties: {}` and `propertyNames: {type: "string"}`, which hold for every object.
+`search_types` answers its hits without the ranking `score`; `describe_diagram` answers its
+summary text alone, whose first line already names the diagram and counts its nodes and edges.
 
 ### Resources
 
@@ -353,14 +363,28 @@ diagram PNGs out of tool results:
 | `staruml://introspect/endpoints` | `application/json` the endpoint manifest this server uses (live or bundled), with request and response JSON Schemas | `describe_endpoints` |
 | `ui://staruml/viewer.html` | `text/html;profile=mcp-app` the diagram viewer `view_diagram` names in its `_meta` | |
 | `staruml://diagram/{id}.png` | `image/png` blob; `{id}` is percent-encoded, since ids can contain `/`, `+` and `=` | `get_diagram_image_by_id` |
+| `staruml://diagram/{id}.mmd`, `staruml://diagram/{id}.puml` | `text/plain` Mermaid or PlantUML (no media type is registered for either), `_meta: {kind, warnings?}` (needs the extension) | `diagram_as_text` |
 
-`resources/list` enumerates one `staruml://diagram/{id}.png` per diagram; when StarUML is not
+`resources/list` enumerates one `staruml://diagram/{id}.png` per diagram, and
+`resources/templates/list` the three templates; the text forms are not listed per diagram. When StarUML is not
 reachable it lists only the six static resources. A failed read is a JSON-RPC error whose `data`
 holds the same `error` object a failed tool call returns.
 
 StarUML 7.1.1's `/get_diagram_image_by_id` ignores every field except `diagramId` (`scale`,
 `maxWidth`, `width` and `format` return identical bytes; the live suite checks this), so the
 image tool and resource offer no size options.
+
+### Prompts
+
+Clients that surface MCP prompts (as slash commands in Claude Code, for instance) offer two:
+
+| Prompt | Arguments | Workflow |
+|---|---|---|
+| `model-codebase` | `path`, `language`, `description`, `name` (all optional) | `doctor`; with a source directory, `list_code_generators` and `reverse_code` (StarUML's Java reverse adds type hierarchy and package overview diagrams by default); otherwise one `build_diagram` of the central classes from the code or the description; then `describe_diagram` and `validate_model` on the result. |
+| `review-diagram` | `diagramId` (default the current diagram) | `describe_diagram`, `validate_model` scoped to the diagram's owner, `diagram_as_text`; then a review with a concrete fix per finding, changing nothing until asked. |
+
+The text names each endpoint as a tool when the current tier lists it and as `call_endpoint`
+otherwise, so it is right under `--tools` selections too.
 
 ### Inline viewer (MCP Apps)
 
@@ -432,8 +456,9 @@ npm test               # vitest: unit, tool-level and HTTP transport tests
 npm run test:coverage  # same, failing below 100% lines/branches/functions/statements
 npm run test:live      # STARUML_LIVE=1: every tool and endpoint against a running StarUML + extension
 npm run load-test      # HTTP transport load test (needs npm run build)
-npm run benchmark:tokens # token cost of four scenarios under two accountings, current vs. 56864ca, 0cfc06b and 45bedd4
+npm run benchmark:tokens # four scenarios under two accountings vs. 56864ca, 0cfc06b, 45bedd4; reading a diagram five ways
 npm run sync:manifest  # refresh src/extension-manifest.json from a running extension
+node scripts/capture-read-diagram.mjs # re-record the read-a-diagram benchmark data from StarUML
 npm run typecheck      # tsc --noEmit for src and tests
 ```
 
@@ -494,7 +519,7 @@ offline. Upstream responses are shaped like StarUML 7.1.1 + extension 0.3.0 outp
 summaries; the command list is the 322 ids captured from 7.1.1 in `scripts/benchmark-data/`). Four
 servers see the same data: `56864ca` (before issue #5), `0cfc06b` (issue #5, the last hand-written
 tool set, 21 tools), `45bedd4` (phase 2a, one tool per manifest endpoint, 34 tools) and the current
-one with the default core tier (16 tools). The first three are loaded with `git show` and run on
+one with the default core tier (20 tools). The first three are loaded with `git show` and run on
 the current dependencies (zod 4 lists schemas about 100 tokens shorter than zod 3 did, so #5's
 definitions measure 1831 here, 1930 when it was committed). When a step's tool is not listed, the
 scenario calls it through `call_endpoint` and first asks `describe_endpoints` for every such
@@ -519,7 +544,7 @@ Two accountings, side by side:
 
 | | pre-#5 | #5 | phase 2a | now batch | now (core) |
 |---|---|---|---|---|---|
-| Tools listed | 21 | 21 | 34 | 16 | 16 |
+| Tools listed | 21 | 21 | 34 | 20 | 20 |
 | Definitions + instructions | 3011 | 1831 | 6154 | 1992 | 1992 |
 
 (a) Definitions once per scenario, plus results:
@@ -559,9 +584,37 @@ four endpoint schemas. Under (a) that saving is hidden by the definitions, count
 (7968 of 11397 tokens); under (b) the session is 14.2% below #5 and 37.8% below pre-#5. What keeps
 (b) above the 60% target is the fixed definitions (1992, a third of the session) and the refactor
 scenario, whose `get_all_commands` result alone is 1947 tokens of the 322 command ids; neither is
-touched by diagram building. `--tools all` lists 62 tools for 9322 tokens (all scenarios (a)
-40382, (b) 12861). Generated descriptions stay one line of at most 100 characters (a test enforces
+touched by diagram building. `--tools all` lists 68 tools for 9136 tokens (all scenarios (a)
+39638, (b) 12675). Generated descriptions stay one line of at most 100 characters (a test enforces
 it on every listed tool), and a test keeps the core listing within 2,000 tokens.
+
+### Reading a diagram back
+
+A fifth scenario, "read and explain a diagram", runs on the current server only and compares the
+ways to read one diagram: five classes and an enumeration with 13 attributes, 5 operations and 4
+literals, and five relationships (two associations with multiplicities, one of them named, a
+composition, a directed association and a dependency). The upstream answers are what StarUML 7.1.1 and the extension
+returned for it, recorded by `scripts/capture-read-diagram.mjs` into
+`scripts/benchmark-data/read-diagram-7.1.1.json`. Each read is one call; the table counts the call,
+its result text and, for the PNG, an estimate of its image tokens (width × height / 750 after
+Anthropic's downscaling to 1568 px on the long edge and about 1,600 tokens; the 1382×1342 PNG is
+scaled down, so its member text arrives smaller than StarUML drew it).
+
+| Read | Call | Result text | Image (est.) | Total | vs PNG |
+|---|---|---|---|---|---|
+| PNG (`get_diagram_image_by_id`) | 29 | 0 | 1600 | 1629 | |
+| Element dump (`find_elements`, `summary: false`, `depth: 2`) | 27 | 4425 | 0 | 4452 | +173.3% |
+| `describe_diagram` | 26 | 260 | 0 | 286 | −82.4% |
+| `diagram_as_text` (Mermaid) | 25 | 242 | 0 | 267 | −83.6% |
+| `diagram_as_text` (PlantUML) | 30 | 253 | 0 | 283 | −82.6% |
+
+What each carries for an explanation: the PNG has the layout and nothing machine-readable; the
+element dump has every saved attribute and the ids, but relationships are association ends that
+reference classes by id; `describe_diagram` has the members and every edge with its type and
+name, but not multiplicities, aggregation or navigability; Mermaid and PlantUML have all of that
+in a notation the model already reads, and the Mermaid can be edited and rebuilt with
+`build_diagram`. Reading the diagram as Mermaid instead of a PNG saves about 1,360 tokens per read,
+and about 4,190 against the dump.
 
 ## Architecture
 

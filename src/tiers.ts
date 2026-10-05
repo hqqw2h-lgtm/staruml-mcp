@@ -1,14 +1,16 @@
 /**
  * Which extension endpoints get a tool of their own. Every tool definition is resent with each
  * model turn: with one tool per endpoint of extension 0.3.0 (61), tools/list and the instructions
- * cost 9,509 tokens, the core tier 1,884 (o200k_base, scripts/token-benchmark.mjs). The endpoints most
- * modelling sessions need are listed and the rest are reached through describe_endpoints and
+ * cost 9,136 tokens, the core tier 1,992 (o200k_base, scripts/token-benchmark.mjs). The endpoints
+ * most modelling sessions need are listed and the rest are reached through describe_endpoints and
  * call_endpoint.
  */
 
 /**
- * The core tier: the element CRUD every session uses, and the composite endpoints that replace
- * dozens of calls once an extension ships them (`/batch`, `/build_diagram`, `/export_diagram`).
+ * The core tier: the element CRUD every session uses, the composite endpoints that replace
+ * dozens of calls once an extension ships them (`/batch`, `/build_diagram`, `/export_diagram`),
+ * and the reads that answer in a few hundred tokens what a PNG or an element dump answers in
+ * thousands (`/search_types`, `/describe_diagram`, `/validate_model`).
  * Names missing from the running manifest are ignored. `introspect` is the summary tool.
  */
 export const CORE_ENDPOINTS: readonly string[] = [
@@ -20,6 +22,9 @@ export const CORE_ENDPOINTS: readonly string[] = [
   "batch",
   "build_diagram",
   "export_diagram",
+  "search_types",
+  "describe_diagram",
+  "validate_model",
 ];
 
 /** `all` lists every endpoint; otherwise `names` are listed, `core` expanded to {@link CORE_ENDPOINTS}. */

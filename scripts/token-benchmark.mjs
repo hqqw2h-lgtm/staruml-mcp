@@ -29,6 +29,15 @@
 // describe_endpoints, since each op body follows its endpoint's schema; build_diagram's listing
 // carries its spec grammar, so it needs none. The current server is also replayed with the batch
 // plan, for comparison.
+// A fifth scenario, "read and explain a diagram", runs on the current server only and compares
+// the ways it offers to read one six-class diagram back: the built-in PNG, an element dump with
+// find_elements, describe_diagram, and diagram_as_text as Mermaid and as PlantUML. Its upstream
+// answers are what StarUML 7.1.1 and the extension answered for that diagram, recorded by
+// scripts/capture-read-diagram.mjs in benchmark-data/read-diagram-7.1.1.json. The PNG's tokens
+// are estimated, since image bytes are not text: width x height / 750 after scaling to at most
+// 1568 px on the long edge and about 1,600 tokens (Anthropic's vision guide, "Evaluate image
+// size"); other vendors price images differently.
+//
 // Tokens are o200k_base counts from gpt-tokenizer; other tokenizers differ by a few percent
 // but the ratios are what matters.
 //
@@ -590,3 +599,107 @@ for (const [name, of] of [
 ]) {
   console.log(`  #8 all scenarios below #5 ${name}: ${verdict(of(now), of(issue5) - 1)}`);
 }
+
+// --- Read and explain a diagram ------------------------------------------------------------------
+
+const read = JSON.parse(
+  readFileSync(new URL("benchmark-data/read-diagram-7.1.1.json", import.meta.url), "utf8"),
+);
+
+/** The estimate described above; the PNG is downscaled first when it is larger. */
+function imageTokens({ width, height }) {
+  const edge = Math.min(1, 1568 / Math.max(width, height));
+  const area = Math.min(width * edge * height * edge, 1600 * 750);
+  return Math.ceil(area / 750);
+}
+
+const readPlans = [
+  {
+    name: "PNG (get_diagram_image_by_id)",
+    tool: "get_diagram_image_by_id",
+    args: { diagramId: read.diagramId },
+    upstream: "builtin",
+    slug: "/get_diagram_image_by_id",
+    data: "iVBORw0KGgo=",
+    image: imageTokens(read.png),
+  },
+  {
+    name: "Element dump (find_elements)",
+    tool: "find_elements",
+    args: read.dumpArgs,
+    upstream: "extension",
+    slug: "/find_elements",
+    data: read.dump,
+  },
+  {
+    name: "describe_diagram",
+    tool: "describe_diagram",
+    args: { diagramId: read.diagramId },
+    upstream: "extension",
+    slug: "/describe_diagram",
+    data: read.describe,
+  },
+  {
+    name: "diagram_as_text (Mermaid)",
+    tool: "diagram_as_text",
+    args: { id: read.diagramId },
+    upstream: "extension",
+    slug: "/export_text",
+    data: read.mermaid,
+  },
+  {
+    name: "diagram_as_text (PlantUML)",
+    tool: "diagram_as_text",
+    args: { id: read.diagramId, format: "plantuml" },
+    upstream: "extension",
+    slug: "/export_text",
+    data: read.plantuml,
+  },
+];
+
+async function measureReads() {
+  const builtin = await new UpstreamFixture().start();
+  const extension = await new UpstreamFixture().start();
+  const server = withTools("core")({
+    apiHost: "http://127.0.0.1",
+    apiPort: builtin.port,
+    extPort: extension.port,
+  });
+  const client = new Client({ name: "token-benchmark", version: "0.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    const rows = [];
+    for (const plan of readPlans) {
+      (plan.upstream === "builtin" ? builtin : extension).reply(plan.slug, { body: ok(plan.data) });
+      const result = await client.callTool({ name: plan.tool, arguments: plan.args });
+      if (result.isError) throw new Error(`${plan.name}: ${JSON.stringify(result.content)}`);
+      const call = callTokens(plan.tool, plan.args);
+      const text = textTokens(result);
+      const image = plan.image ?? 0;
+      rows.push({
+        read: plan.name,
+        call,
+        "result text": text,
+        "image (est.)": image,
+        total: call + text + image,
+      });
+    }
+    const png = rows[0].total;
+    for (const row of rows) row["vs PNG"] = row === rows[0] ? "" : pct(png, row.total);
+    return rows;
+  } finally {
+    await client.close();
+    await server.close();
+    await builtin.stop();
+    await extension.stop();
+  }
+}
+
+console.log(
+  `\nRead and explain a diagram: "${read.describe.diagram.name}", ${read.dump.count} classifiers and ` +
+    `${read.describe.edges} edges, PNG ${read.png.width}x${read.png.height} (StarUML ` +
+    `${read.versions.staruml.version}, extension ${read.versions.extension.version}); one call each, ` +
+    "results and calls counted, definitions left out:",
+);
+console.table(await measureReads());

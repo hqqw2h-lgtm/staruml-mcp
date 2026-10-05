@@ -185,6 +185,7 @@ describe("core tier (default)", () => {
       "get_current_diagram_info",
       "get_diagram_image_by_id",
       "view_diagram",
+      "diagram_as_text",
       "doctor",
       "get_element_by_id",
       "find_elements",
@@ -193,6 +194,9 @@ describe("core tier (default)", () => {
       "export_diagram",
       "batch",
       "build_diagram",
+      "search_types",
+      "describe_diagram",
+      "validate_model",
       "introspect",
       "describe_endpoints",
       "call_endpoint",
@@ -290,11 +294,8 @@ describe("describe_endpoints", () => {
         .sort(),
     ).toEqual([...EXTENDED].sort());
     expect(index.project!.save_project).toBe(terseDescription(entryOf("save_project").description));
-    // The introspect summary is listed, so introspect is not in its group.
-    expect(index.meta).toEqual({
-      search_types: terseDescription(entryOf("search_types").description),
-      debug: terseDescription(entryOf("debug").description),
-    });
+    // The introspect summary and search_types are listed, so only debug is left in its group.
+    expect(index.meta).toEqual({ debug: terseDescription(entryOf("debug").description) });
   });
 
   it("describes named endpoints in full, listed ones included", async () => {
@@ -518,6 +519,7 @@ describe("selections", () => {
       "get_current_diagram_info",
       "get_diagram_image_by_id",
       "view_diagram",
+      "diagram_as_text",
       "doctor",
       "create_diagram",
       "describe_endpoints",
@@ -532,7 +534,7 @@ describe("selections", () => {
   it("drops the generic tools when every endpoint has a tool", async () => {
     const names = await namesFor("all");
 
-    expect(names).toHaveLength(6 + BUNDLED_MANIFEST.endpoints.length);
+    expect(names).toHaveLength(7 + BUNDLED_MANIFEST.endpoints.length);
     expect(names).not.toContain("call_endpoint");
   });
 
@@ -551,6 +553,7 @@ describe("selections", () => {
       "get_current_diagram_info",
       "get_diagram_image_by_id",
       "view_diagram",
+      "diagram_as_text",
       "doctor",
       "find_elements",
       "describe_endpoints",
@@ -573,7 +576,7 @@ describe("tierCheck", () => {
     expect(tierCheck(new CatalogState())).toEqual({
       name: "tier",
       status: "ok",
-      detail: `core: 8 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint`,
+      detail: `core: 11 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint`,
     });
   });
 
@@ -583,7 +586,7 @@ describe("tierCheck", () => {
     expect(tierCheck(state)).toEqual({
       name: "tier",
       status: "warn",
-      detail: `core,doctor,save_projekt: 8 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint; unknown: save_projekt`,
+      detail: `core,doctor,save_projekt: 11 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint; unknown: save_projekt`,
       remedy: "Check the names against describe_endpoints() or staruml://introspect/endpoints.",
     });
   });
