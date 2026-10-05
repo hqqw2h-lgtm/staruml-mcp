@@ -174,8 +174,11 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       const state = new CatalogState(catalog.current);
       const other = await connect({ catalog: state });
       try {
+        // The core endpoints the running extension has, introspect included, and create_diagram.
+        const live = catalog.current.compiled.manifest.endpoints.map((e) => toolName(e.path));
+        const listed = live.filter((e) => CORE_ENDPOINTS.includes(e)).length + 1;
         expect(ok(await other.call("doctor", { tools: "core,create_diagram" }))).toMatch(
-          /tier +ok +core,create_diagram: 8 extension tools listed/,
+          new RegExp(`tier +ok +core,create_diagram: ${listed} extension tools listed`),
         );
         const names = (await other.client.listTools()).tools.map((t) => t.name);
         expect(names).toContain("create_diagram");
@@ -747,9 +750,10 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       if (newer.length > 0)
         console.info(`[live] endpoints newer than the bundle: ${newer.join(" ")}`);
       const generic = ["describe_endpoints", "call_endpoint"];
+      const newerTools = newer.map((p) => toolName(p));
       expect(
         [...tools.map((t) => t.name), ...endpoints].filter(
-          (n) => !called.has(n) && !generic.includes(n),
+          (n) => !called.has(n) && !generic.includes(n) && !newerTools.includes(n),
         ),
       ).toEqual([]);
     });
