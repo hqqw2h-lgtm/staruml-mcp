@@ -1,14 +1,19 @@
 #!/usr/bin/env node
-// Token benchmark: replays three modelling scenarios against the current server and against two
-// earlier servers loaded with `git show`: 56864ca (before issue #5) and 0cfc06b (issue #5, the last
-// hand-written tool set). All three talk to the HTTP stand-ins the tests use, so the benchmark runs
-// offline and every server sees identical upstream data, shaped like StarUML 7.1.1 + extension
-// 0.3.0 responses (element summaries, paged find_elements).
+// Token benchmark: replays three modelling scenarios against the current server and against three
+// earlier servers loaded with `git show`: 56864ca (before issue #5), 0cfc06b (issue #5, the last
+// hand-written tool set) and 45bedd4 (phase 2a: one tool per manifest endpoint). All talk to the
+// HTTP stand-ins the tests use, so the benchmark runs offline and every server sees identical
+// upstream data, shaped like StarUML 7.1.1 + extension 0.3.0 responses (element summaries, paged
+// find_elements).
 //
 // Counted per scenario: the tools/list definitions (name, description, inputSchema) once, the
 // server instructions once, and the text of every tool result. Clients resend the definitions
 // with each model turn, so a single copy is the most conservative figure. Image bytes are
 // excluded: they are identical on all sides and billed as vision input, not text.
+//
+// A step whose tool a server does not list goes through call_endpoint, and the scenario first
+// asks describe_endpoints for every such endpoint it uses, in one call whose result is counted:
+// a model has to read a schema before it can fill a body.
 // Tokens are o200k_base counts from gpt-tokenizer; other tokenizers differ by a few percent
 // but the ratios are what matters.
 //
@@ -25,24 +30,25 @@ import { UpstreamFixture } from "../tests/support/fixture.ts";
 const BASELINES = [
   { label: "pre-#5", commit: "56864caa5900cba41ed87c8754ffbcc5ab44a7f9" },
   { label: "#5", commit: "0cfc06b38df701066d49e3d79f89149f073e9efa" },
+  { label: "phase2a", commit: "45bedd4" },
 ];
 const root = fileURLToPath(new URL("..", import.meta.url));
 
-/** Writes a commit's sources inside node_modules so their SDK and zod imports resolve. */
+/**
+ * Writes a commit's sources inside node_modules so their SDK and zod imports resolve. The bundled
+ * manifest (phase 2a) and package.json come along, since sources import both.
+ */
 function loadSources(commit) {
-  const dir = `${root}node_modules/.cache/token-benchmark/${commit}/src`;
-  mkdirSync(dir, { recursive: true });
+  const base = `${root}node_modules/.cache/token-benchmark/${commit}`;
+  mkdirSync(`${base}/src`, { recursive: true });
   const files = execFileSync("git", ["ls-tree", "--name-only", commit, "src/"], { cwd: root })
     .toString()
     .split("\n")
-    .filter((f) => f.endsWith(".ts"));
-  for (const file of files) {
-    writeFileSync(
-      `${root}node_modules/.cache/token-benchmark/${commit}/${file}`,
-      gitShow(commit, file),
-    );
+    .filter((f) => f.endsWith(".ts") || f.endsWith(".json"));
+  for (const file of [...files, "package.json"]) {
+    writeFileSync(`${base}/${file}`, gitShow(commit, file));
   }
-  return pathToFileURL(`${dir}/server.ts`).href;
+  return pathToFileURL(`${base}/src/server.ts`).href;
 }
 
 function gitShow(commit, file) {
@@ -260,17 +266,27 @@ async function measure(createServer) {
     }));
     const definitions =
       countTokens(JSON.stringify(forwarded)) + countTokens(client.getInstructions() ?? "");
+    const listed = new Set(tools.map((t) => t.name));
     const perScenario = [];
     for (const scenario of scenarios) {
       let results = 0;
+      const call = async (name, args) => {
+        const result = await client.callTool({ name, arguments: args });
+        if (result.isError) {
+          throw new Error(`${scenario.name}: ${name} failed: ${JSON.stringify(result.content)}`);
+        }
+        results += textTokens(result);
+      };
+      const unlisted = [...new Set(scenario.steps.map((s) => s.tool))].filter(
+        (t) => !listed.has(t),
+      );
+      if (unlisted.length > 0) await call("describe_endpoints", { names: unlisted });
       for (const s of scenario.steps) {
         const fixture = s.upstream === "builtin" ? builtin : extension;
         fixture.reply(s.slug, { body: ok(s.data) });
-        const result = await client.callTool({ name: s.tool, arguments: s.args });
-        if (result.isError) {
-          throw new Error(`${scenario.name}: ${s.tool} failed: ${JSON.stringify(result.content)}`);
-        }
-        results += textTokens(result);
+        await (listed.has(s.tool)
+          ? call(s.tool, s.args)
+          : call("call_endpoint", { name: s.tool, body: s.args }));
       }
       perScenario.push({ definitions, results, total: definitions + results });
     }
@@ -287,7 +303,17 @@ const servers = [];
 for (const { label, commit } of BASELINES) {
   servers.push({ label, ...(await measure((await import(loadSources(commit))).createServer)) });
 }
-servers.push({ label: "now", ...(await measure((await import("../src/server.ts")).createServer)) });
+const current = await import("../src/server.ts");
+const { CatalogState } = await import("../src/extension-tools.ts");
+const { parseToolSelection } = await import("../src/tiers.ts");
+/** The current server with `--tools <value>`. */
+const withTools = (value) => (config) =>
+  current.createServer({
+    ...config,
+    catalog: new CatalogState(undefined, parseToolSelection(value)),
+  });
+const all = await measure(withTools("all"));
+servers.push({ label: "now", ...(await measure(withTools("core"))) });
 
 const pct = (b, a) => `${(((a - b) / b) * 100).toFixed(1)}%`;
 const sum = (list, key) => list.reduce((n, x) => n + x[key], 0);
@@ -323,3 +349,6 @@ console.log(
   `Tool definitions + instructions (tools): ${servers.map((m) => `${m.label} ${m.definitions} (${m.tools})`).join(", ")}; counted once per scenario.`,
 );
 console.table(rows);
+console.log(
+  `--tools all: ${all.definitions} definition tokens (${all.tools} tools), all scenarios ${sum(all.perScenario, "total")}.`,
+);

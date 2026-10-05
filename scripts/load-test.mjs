@@ -2,17 +2,18 @@
 // Load test for the Streamable HTTP transport (stateless: one McpServer per request).
 //
 // Starts the built server (dist/index.js) as a child process and drives tools/call
-// get_all_diagrams_info at each concurrency level. By default StarUML is replaced by an
-// in-process stub so the numbers measure this server, not StarUML; --live targets the real
-// StarUML on 58321 instead.
+// get_all_diagrams_info at each concurrency level, or with --call-endpoint call_endpoint
+// find_elements, which adds the manifest schema check and the extension port. By default StarUML
+// is replaced by an in-process stub so the numbers measure this server, not StarUML; --live
+// targets the real StarUML on 58321 and the extension on 58322 instead.
 //
 // Usage: npm run build && node scripts/load-test.mjs
 //          [--concurrency 50,200] [--requests 5000] [--warmup 500]
-//          [--max-p99-ms N] [--min-rps N] [--live]
+//          [--max-p99-ms N] [--min-rps N] [--live] [--call-endpoint]
 // Exits non-zero on any failed request or a breached budget.
 
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -25,8 +26,17 @@ const { values: args } = parseArgs({
     "max-p99-ms": { type: "string" },
     "min-rps": { type: "string" },
     live: { type: "boolean", default: false },
+    "call-endpoint": { type: "boolean", default: false },
   },
 });
+
+const callEndpoint = args["call-endpoint"];
+const params = callEndpoint
+  ? {
+      name: "call_endpoint",
+      arguments: { name: "find_elements", body: { type: "UMLClass", limit: 10 } },
+    }
+  : { name: "get_all_diagrams_info", arguments: {} };
 
 const levels = args.concurrency.split(",").map(Number);
 const requestsPerLevel = Number(args.requests);
@@ -48,7 +58,7 @@ let failed = false;
 try {
   await runLevel(Math.min(50, levels[0]), warmup);
   console.log(
-    `target: ${args.live ? "live StarUML :58321" : "stub upstream"}, node ${process.version}, ${requestsPerLevel} requests per level`,
+    `target: ${args.live ? "live StarUML" : "stub upstream"}, tool: ${callEndpoint ? "call_endpoint find_elements" : params.name}, node ${process.version}, ${requestsPerLevel} requests per level`,
   );
   console.log("concurrency  requests   req/s    p50 ms   p90 ms   p99 ms   max ms  errors");
   for (const concurrency of levels) {
@@ -128,7 +138,7 @@ async function callTool(id) {
       jsonrpc: "2.0",
       id,
       method: "tools/call",
-      params: { name: "get_all_diagrams_info", arguments: {} },
+      params,
     }),
   });
   const body = await res.text();
@@ -140,14 +150,37 @@ async function callTool(id) {
   if (message.error || message.result.isError) throw new Error(data);
 }
 
+/**
+ * Answers both StarUML ports. For the extension it serves the bundled manifest, so the server
+ * starts with the same catalog it would get from extension 0.3.0, and one page of find_elements.
+ */
 async function startStub() {
+  const manifest = JSON.parse(
+    readFileSync(new URL("../src/extension-manifest.json", import.meta.url), "utf8"),
+  );
+  const replies = {
+    "GET /": JSON.stringify(manifest.extension),
+    "POST /introspect": JSON.stringify({ success: true, data: manifest }),
+    "POST /find_elements": JSON.stringify({
+      success: true,
+      data: {
+        count: 1,
+        elements: [{ _id: "AAAAAAFF+qBtyKM79qY=", _type: "UMLClass", name: "Order", _parent: "M" }],
+        nextCursor: null,
+      },
+    }),
+  };
   const diagrams = JSON.stringify({
     success: true,
     data: [{ id: "AAAAAAFF+qBtyKM79qY=", type: "UMLClassDiagram", name: "Main" }],
   });
   const server = createServer((req, res) => {
     req.resume();
-    req.on("end", () => res.writeHead(200, { "Content-Type": "application/json" }).end(diagrams));
+    req.on("end", () =>
+      res
+        .writeHead(200, { "Content-Type": "application/json" })
+        .end(replies[`${req.method} ${req.url}`] ?? diagrams),
+    );
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return { server, port: server.address().port };
@@ -166,9 +199,9 @@ function startMcp(port) {
       "http://127.0.0.1",
       "--api-port",
       String(port),
-      // Stub runs take the bundled manifest (nothing listens on port 1), so a StarUML running on
-      // the same machine does not change what is measured; --live reads the real one.
-      ...(args.live ? [] : ["--ext-port", "1"]),
+      // Stub runs point the extension port at the stub too, so a StarUML running on the same
+      // machine does not change what is measured; --live reads the real extension.
+      ...(args.live ? [] : ["--ext-port", String(port)]),
     ],
     { stdio: ["ignore", "ignore", "pipe"] },
   );

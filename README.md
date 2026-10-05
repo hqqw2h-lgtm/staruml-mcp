@@ -309,57 +309,69 @@ path it prints.
 ## Performance
 
 `scripts/load-test.mjs` starts `dist/index.js` with `--transport http` and sends
-`tools/call get_all_diagrams_info` at each concurrency level, with StarUML replaced by an
-in-process stub so the numbers measure this server. Every request builds a fresh `McpServer`
-(stateless mode), which dominates the cost. Any failed request makes the script exit non-zero;
-`--max-p99-ms` and `--min-rps` add budgets, and CI runs it with
+`tools/call get_all_diagrams_info` at each concurrency level, or with `--call-endpoint` a
+`call_endpoint` of `find_elements`, which adds the manifest schema check and the extension port.
+StarUML and the extension are replaced by an in-process stub, which serves the bundled 0.3.0
+manifest, so the numbers measure this server and a local StarUML does not change them. Every request
+builds a fresh `McpServer` (stateless mode), which dominates the cost. Any failed request makes the
+script exit non-zero; `--max-p99-ms` and `--min-rps` add budgets, and CI runs it with
 `--requests 2000 --max-p99-ms 2000 --min-rps 100`.
 
 Measured on an Intel i9-9980HK (8 cores / 16 threads), macOS, Node 22.23.3, 5000 requests per
-level after 500 warm-up requests, load generator on the same machine, with the 34 tools of the
-bundled 0.3.0 manifest registered per request (stub runs pass `--ext-port 1` so a local StarUML does
-not change what is measured). Ranges span three runs on a machine shared with other work:
+level after 500 warm-up requests, load generator on the same machine, core tier (12 tools
+registered per request). Ranges span three runs on a machine shared with other work:
 
-| Concurrency | req/s | p50 | p99 | Errors |
-|---|---|---|---|---|
-| 50 | 940–1024 | 44–49 ms | 84–93 ms | 0 |
-| 200 | 957–1169 | 160–178 ms | 283–482 ms | 0 |
+| Tool | Concurrency | req/s | p50 | p99 | Errors |
+|---|---|---|---|---|---|
+| `get_all_diagrams_info` | 50 | 943–1109 | 42–48 ms | 75–134 ms | 0 |
+| `get_all_diagrams_info` | 200 | 1005–1303 | 143–155 ms | 248–479 ms | 0 |
+| `call_endpoint` | 50 | 730–1066 | 43–61 ms | 76–216 ms | 0 |
+| `call_endpoint` | 200 | 1039–1282 | 121–156 ms | 274–1526 ms | 0 |
 
-Against the real StarUML 7.1.1 API with extension 0.3.0 (`--live --requests 1000 --concurrency 50`,
-two runs): 813–817 req/s, p50 60–61 ms, p99 74–76 ms, 0 errors. The generated tools' zod schemas
-are built once per manifest and shared by every per-request server.
+Against the real StarUML 7.1.1 with extension 0.3.0 (`--live --requests 1000 --concurrency 50`,
+two runs each, 0 errors): `get_all_diagrams_info` 784–875 req/s, p50 56–63 ms, p99 78–80 ms;
+`call_endpoint` `find_elements` 827–874 req/s, p50 56–57 ms, p99 77–89 ms. The generated tools' zod
+schemas are built once per manifest and shared by every per-request server.
 
 ## Token efficiency
 
 `scripts/token-benchmark.mjs` (`npm run benchmark:tokens`) replays three modelling scenarios
 through the MCP in-memory transport against the test stand-ins for ports 58321/58322, so it runs
 offline. Upstream responses are shaped like StarUML 7.1.1 + extension 0.3.0 output (element
-summaries; the command list is the 322 ids captured from 7.1.1 in `scripts/benchmark-data/`). Three
+summaries; the command list is the 322 ids captured from 7.1.1 in `scripts/benchmark-data/`). Four
 servers see the same data: `56864ca` (before issue #5), `0cfc06b` (issue #5, the last hand-written
-tool set, 21 tools) and the current one (34 tools, 29 generated from the manifest), the first two
-loaded with `git show` and run on the current dependencies (zod 4 lists schemas about 100 tokens
-shorter than zod 3 did, so #5's definitions measure 1831 here, 1930 when it was committed). Each scenario counts the tool definitions a client forwards to the model
-(name, description, input schema) plus server instructions once, and the text of every result;
-image bytes are excluded because they are the same on every side and billed as vision input.
-Tokenizer: `o200k_base` from `gpt-tokenizer`.
+tool set, 21 tools), `45bedd4` (phase 2a, one tool per manifest endpoint, 34 tools) and the current
+one with the default core tier (12 tools). The first three are loaded with `git show` and run on
+the current dependencies (zod 4 lists schemas about 100 tokens shorter than zod 3 did, so #5's
+definitions measure 1831 here, 1930 when it was committed). Each scenario counts the tool
+definitions a client forwards to the model (name, description, input schema) plus server
+instructions once, and the text of every result; image bytes are excluded because they are the
+same on every side and billed as vision input. When a step's tool is not listed, the scenario calls
+it through `call_endpoint` and first asks `describe_endpoints` for every such endpoint it uses, in
+one call whose result is counted. Tokenizer: `o200k_base` from `gpt-tokenizer`.
 
-| Scenario | Calls | Results pre-#5 / #5 / now | Total pre-#5 / #5 / now |
+| | pre-#5 | #5 | phase 2a | now (core) |
+|---|---|---|---|---|
+| Tools listed | 21 | 21 | 34 | 12 |
+| Definitions + instructions | 3011 | 1831 | 6154 | 1331 |
+
+| Scenario | Calls | Results pre-#5 / #5 / phase 2a / now | Total pre-#5 / #5 / phase 2a / now |
 |---|---|---|---|
-| Mermaid class diagram + preview | 4 | 186 / 120 / 120 | 3197 / 1951 / 6274 |
-| Native use-case diagram | 11 | 971 / 666 / 666 | 3982 / 2497 / 6820 |
-| Inspect and refactor a class model | 8 | 3216 / 2403 / 2403 | 6227 / 4234 / 8557 |
-| All scenarios | 23 | 4373 / 3189 / 3189 | 13406 / 8682 / 21651 |
+| Mermaid class diagram + preview | 4 | 186 / 120 / 120 / 120 | 3197 / 1951 / 6274 / 1451 |
+| Native use-case diagram | 11 | 971 / 666 / 666 / 1793 | 3982 / 2497 / 6820 / 3124 |
+| Inspect and refactor a class model | 8 | 3216 / 2403 / 2403 / 2582 | 6227 / 4234 / 8557 / 3913 |
+| All scenarios | 23 | 4373 / 3189 / 3189 / 4495 | 13406 / 8682 / 21651 / 8488 |
 
-Results cost the same as with the hand-written tools: the extension's summaries are what #5
-trimmed responses down to. Tool definitions and instructions grew from 1831 tokens (21 tools) to
-6154 (34 tools): every generated tool carries the extension's full request schema, and the 13 new
-ones (`create_relationship`, the `add_*` family, `set_*`, `introspect`, `debug`) are among the
-largest. Generated descriptions stay one line of at most 100 characters (a test enforces it on every
-listed tool); the remaining cost is in parameter schemas and their descriptions. Measured on
-tools/list: leaving the projection parameters out of the writing tools' listing saved 1,153 tokens and
-shortening the shared `properties` description 287; the MCP SDK's `$schema` URL costs 442, and
-cutting every parameter description to 100 characters would save about 600 more at the price of
-the semantics they carry.
+The core listing costs 1331 tokens, 78% less than phase 2a and below the 2,000 a test enforces;
+the all-scenario total is 8488, 2.2% below #5, 36.7% below pre-#5 and 60.8% below phase 2a. Results
+grew by the `describe_endpoints` answers: 1127 tokens for the five endpoints the use-case scenario
+calls through `call_endpoint`, 179 for the three of the refactoring scenario. That is the price of
+loading a schema once per session instead of resending it every turn, so the saving grows with the
+number of turns. `--tools all` lists 34 tools for 5687 tokens (all scenarios 20250); most of the 467
+below phase 2a is the MCP SDK's `$schema` URL (13 tokens per tool), no longer listed. Generated descriptions stay one line
+of at most 100 characters (a test enforces it on every listed tool). The pre-#5 target of 60% less
+(5362) needs `batch`/`build_diagram`, which extension 0.3.0 does not have yet; once it does, the
+scenarios can replace their per-element calls with one.
 
 ## Architecture
 
