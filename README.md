@@ -17,7 +17,7 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 ```
   AI Agent  ──MCP──►  staruml-mcp (this package)  ──HTTP──►  StarUML
                                                   :58321 (built-in, 4 tools)
-                                                  :58322 (extension 0.3.x, 79 endpoints
+                                                  :58322 (extension 0.3.x, 88 endpoints
                                                           from its manifest: core ones as
                                                           tools, the rest via call_endpoint)
 ```
@@ -25,10 +25,10 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 | Package | What it is | Where it runs |
 |---|---|---|
 | **`staruml-mcp`** (this repo) | MCP server for AI agents | your machine via `npx -y staruml-mcp` |
-| **[`staruml-mcp-extension`](https://github.com/hqqw2h-lgtm/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 79 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
+| **[`staruml-mcp-extension`](https://github.com/hqqw2h-lgtm/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 88 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
 
 - Using only Mermaid-based diagram tools? Install `staruml-mcp` only. The 4 built-in tools, `doctor` and `view_diagram` (as a PNG) work.
-- Want the extension's 79 endpoints (whole diagrams from a spec or Mermaid in one call, elements addressed by path instead of id, diagram and UML lint with fixes, diffs and snapshots, diagrams read back as Mermaid, PlantUML or a text summary, type search, model validation, project save/open, element CRUD, relationships, attributes and operations, layout presets and edge routing, styling, export, undo, batches, code generation, any StarUML command)? Install **both**.
+- Want the extension's 88 endpoints (whole diagrams from a spec or Mermaid in one call, models from an object spec with every diagram derived from them, a project style profile and a quality loop that scores and re-lays out diagrams, elements addressed by path instead of id, diagram and UML lint with fixes, diffs and snapshots, diagrams read back as Mermaid, PlantUML or a text summary, type search, model validation, project save/open, element CRUD, relationships, attributes and operations, layout presets and edge routing, styling, export, undo, batches, code generation, any StarUML command)? Install **both**.
 
 ## Prerequisites
 
@@ -221,7 +221,7 @@ node         ok    22.23.3
 staruml api  ok    http://localhost:58321
 extension    ok    0.3.0 at http://localhost:58322
 staruml      ok    7.1.1
-manifest     ok    79 endpoints from the live manifest
+manifest     ok    88 endpoints from the live manifest
 tier         ok    core: 11 extension tools listed, 50 endpoints through call_endpoint
 ```
 
@@ -362,7 +362,7 @@ project down, or only the trailing steps when they name one element), `Order.tot
 with `AMBIGUOUS_REF` and the candidates' ids and paths. Element summaries carry the `path` each
 element resolves by.
 
-A copy of the 0.3.0 manifest (79 endpoints) is bundled (`src/extension-manifest.json`), so `tools/list` is
+A copy of the 0.3.0 manifest (88 endpoints) is bundled (`src/extension-manifest.json`), so `tools/list` is
 complete while StarUML is closed; calls then fail with `EXTENSION_UNREACHABLE` and an install hint.
 `npm run sync:manifest` refreshes the copy from a running extension (`-- --url <base>`) or from a
 recorded `/introspect` response (`-- --from <file>`). When the running extension's version is
@@ -376,6 +376,9 @@ the core tier):
 |---|---|
 | `build_model` | A model without diagrams from an object-level spec, in one undo step: packages (`contexts`), classes with members and a `responsibility` that becomes their documentation, relationships named by verb (`owns` composition, `has` aggregation, `uses` dependency, `isA` generalization, `implements` realization, `knows` directed association), actors and use cases, collaborations as interactions, lifecycles as state machines; `upsert` extends the model of the same name, `dryRun` names every change by path. |
 | `apply_pattern` / `list_patterns` / `describe_pattern` / `detect_patterns` / `apply_preset` | A design pattern (the 23 GoF and seven domain patterns, kept as data) applied to existing classes bound by path or to new ones, with every property it prescribes on elements, members and relationship ends / the library / one pattern's roles and properties / instances found in the model by structure, with a confidence and what is missing / a kind's properties (value object, entity, immutable, ...) on one class. |
+| `derive_diagrams` / `explain_model` / `model_lint` | Every diagram a model implies, by rule, in one undo step: a package overview, class diagrams per class view or package, a sequence diagram per collaboration, use case diagrams, a state machine per lifecycle, and the activities, ERD, C4 containers, deployments and feature mind map `build_model` stored with the model; each laid out by the style profile and run through the quality loop; again after a model change, it updates them in place / the model as compact text to reason about / design review: god classes, feature envy, cyclic packages, anaemic entities, single-implementation interfaces, unused classes, uncalled operations, each with a fix line. |
+| `get_style_profile` / `set_style_profile` / `apply_style_profile` / `explain_style_violation` | The project's style profile (naming rules, visuals, layout presets, quality thresholds, `strict`, `blockSaveOnErrors`; built-ins `uml-standard`, `minimal`, `presentation`, `print`) / store one, a built-in or a patch / bring existing names and views in line with it / which rule an element breaks, or whether a name would pass, with a fix. |
+| `diagram_quality` / `improve_diagram` | A diagram's score 0–100 from its geometry (overlap, edges through nodes, crossings, length variation, bends, alignment, whitespace, aspect, page size) against the profile's target / the quality loop on an existing diagram in one undo step: the profile's layout preset, post-processing, lint autofixes, each step kept only when it raises the score. |
 | `sync_operations` / `check_messages` / `describe_type` / `apply_theme` | Add the operations a sequence diagram's messages name to their receivers / list the messages that name none / a metamodel type's properties and their UML meaning / colour a diagram by a theme preset. |
 | `build_diagram` | A whole diagram in one call and one undo step, from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap, requirement, c4, package, component, deployment) or from Mermaid, PlantUML, SQL DDL or JSON Schema text; laid out with a `layout` preset (default by kind), optionally upserted into the diagram of the same name (`prune` deletes what the spec lacks); elements named like existing ones are shown again, not copied (`reuse`); `dryRun` answers the plan and changes nothing; answers the diagram and counts, with `result: "ids"` the model and view ids by node name. |
 | `lint_diagram` / `uml_lint` | How a diagram reads (stacked, overlapping or off-canvas views, edges through nodes, names wider than their box, unconnected nodes, crowding), each finding with an `autofix` request / modelling mistakes StarUML's validation skips (association ends without multiplicity or navigability, untyped attributes, abstract classes without subclasses, unrealized interfaces, messages naming no operation, use cases without actors, state machines without initial or final state, entities without a key, naming conventions), each with a fix line. |
@@ -473,6 +476,13 @@ created and updated elements as `{path: type}` and `{path: fields}`, every prope
 as `{path: {field: value}}`, and a dry run's `/batch` ops counted with the "$name" placeholder ids
 left out (its `changes` name every step).
 
+Since extension #31 and #32 authoring answers carry two reports, compacted wherever they appear
+(`build_diagram`, `build_model`, `apply_pattern`, `layout_diagram`, the single-view creates):
+`style`, what the style profile changed, with each rename as `{from: to}`, and `quality`, the
+quality loop's outcome as `{score, target, iterations, findings}` with the lint findings it left
+counted by rule name; the `rating` (the score in fifths), `passes` (score ≥ target), `before` and
+the post-processing `steps` are left out. A report with one finding left is 25 o200k_base tokens instead of 62, a clean one 21 instead of 38.
+
 ### Resources
 
 Clients that support MCP resources can read these instead of calling the matching tool, which keeps
@@ -561,6 +571,7 @@ A failed tool call returns `isError: true` with a one-line cause, a hint where o
 | `INVALID_ARGUMENT`, `UNKNOWN_ENDPOINT` | Also raised by `call_endpoint` itself, before any request, for a body the manifest schema rejects or a name it does not have; `endpoint` and `hint` say which and how to look it up. |
 | extension 0.3.0 codes | Passed through with their HTTP status: `INVALID_ARGUMENT` (400), `UNKNOWN_TYPE` (400), `NOT_FOUND` (404), `UNKNOWN_ENDPOINT` (404, with the upgrade hint), `NO_PROJECT` (409), `STARUML_ERROR` (422, StarUML refused the operation), `DIALOG_REQUIRED` (422, the command or generator would have opened a dialog; the hint points to `describe_commands` for `execute_command` and to `list_code_generators` for code generation, and `details` names the missing arguments), `INTERNAL` (500). An error body's `details` is passed through as `error.details` and, except for a rolled-back batch's results, as a `Details:` line. |
 | extension reference codes | Passed through with a hint: `AMBIGUOUS_REF` (409: a path fits several elements; the hint names up to five of `details.candidates` by path, or by id where their paths collide), `DUPLICATE_NAME` (409: a sibling of that kind has the name; refer to `details.existing` by its path, keep `build_diagram`'s `reuse` on, rename, or pass `allowDuplicateNames: true`), `SNAPSHOT_STALE` (409: the undo history no longer reaches the snapshot; take a new one), `UNSUPPORTED_SYNTAX` (422: diagram text with a construct StarUML cannot draw; the message names it and its line). |
+| extension style codes | Passed through with a hint: `STYLE_LOCKED` (403: the project's style profile is `strict`, so the endpoints that place, size or colour views by hand refuse; the hint names `improve_diagram`, `apply_style_profile`, a rebuild, `override: true` for a change the user asked for, and `set_style_profile({patch: {strict: false}})`), `SAVE_BLOCKED` (409: the profile's `blockSaveOnErrors` refuses saving and exporting while `uml_lint` or `model_lint` report errors; the hint names the first ones from `details.findings` and `override: true`). |
 | extension request checks | Passed through with a hint naming the setting: `UNAUTHORIZED` (401: no or wrong access token; how to set or clear it), `FORBIDDEN_ORIGIN` (403: an `Origin` header not in Allowed Origins), `PAYLOAD_TOO_LARGE` (413: Max Request Body (KiB) or Max Batch Ops), `UNSUPPORTED_MEDIA_TYPE` (415: not `application/json`), `RATE_LIMITED` (429: Commands per Minute, with the `Retry-After` seconds), `TIMEOUT` (504: Request Timeout (s); the work may still complete). A 401/403/413/415/429/504 without these codes, as from a proxy, gets the same hint. |
 
 Arguments are checked against the tool's schema before any request, so a wrong-typed field fails

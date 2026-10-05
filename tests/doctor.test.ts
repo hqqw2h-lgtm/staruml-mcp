@@ -93,7 +93,7 @@ describe("diagnose", () => {
       { name: "staruml api", status: "ok", detail: `${HOST}:${builtin.port}` },
       { name: "extension", status: "ok", detail: `0.3.0 at ${HOST}:${extension.port}` },
       { name: "staruml", status: "ok", detail: "7.1.1" },
-      { name: "manifest", status: "ok", detail: "79 endpoints from the live manifest" },
+      { name: "manifest", status: "ok", detail: "88 endpoints from the live manifest" },
     ]);
     expect(catalog).toMatchObject({ source: "live", enabled: true });
     expect(extension.requests).toContainEqual({
@@ -138,7 +138,7 @@ describe("diagnose", () => {
       detail: `no answer at ${HOST}:${refused}`,
       remedy: "Start StarUML; the extension listens while StarUML runs.",
     });
-    expect(check(checks, "manifest").detail).toBe("79 endpoints from the bundled manifest");
+    expect(check(checks, "manifest").detail).toBe("88 endpoints from the bundled manifest");
     expect(catalog).toMatchObject({ source: "bundled", enabled: true });
     expect(checks.map((c) => c.name)).not.toContain("staruml");
   });
@@ -278,7 +278,7 @@ describe("diagnose", () => {
       name: "manifest",
       status: "warn",
       detail:
-        "79 endpoints from the live manifest; skipped /broken (request schema is not an object schema)",
+        "88 endpoints from the live manifest; skipped /broken (request schema is not an object schema)",
     });
   });
 });
@@ -331,9 +331,9 @@ describe("doctor tool", () => {
 
       expect(result.isError).toBeFalsy();
       expect(text(result)).toMatch(/^node +ok/);
-      expect(text(result)).toContain("manifest     ok    79 endpoints from the live manifest");
+      expect(text(result)).toContain("manifest     ok    88 endpoints from the live manifest");
       expect(text(result)).toContain(
-        "tier         ok    all: 79 extension tools listed, 0 endpoints through call_endpoint",
+        "tier         ok    all: 88 extension tools listed, 0 endpoints through call_endpoint",
       );
       const after = await names(mcp);
       expect(after).toContain("frobnicate");

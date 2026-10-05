@@ -316,6 +316,10 @@
             "type": "string",
             "minLength": 1,
             "description": "Absolute .mdj path; overwrites the file."
+          },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile blocks saving on lint errors; the call is still made as asked."
           }
         }
       },
@@ -349,6 +353,10 @@
             "type": "string",
             "minLength": 1,
             "description": "Absolute .mdj path; overwrites the file."
+          },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile blocks saving on lint errors; the call is still made as asked."
           }
         },
         "required": [
@@ -913,6 +921,10 @@
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
           },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile is strict; the call is still made as asked."
+          },
           "id": {
             "type": "string",
             "minLength": 1,
@@ -1209,6 +1221,57 @@
               }
             ],
             "description": "Null for view-only ids such as Note or NoteLink."
+          },
+          "style": {
+            "type": "object",
+            "properties": {
+              "profile": {
+                "type": "string",
+                "description": "The style profile applied."
+              },
+              "renamed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Names the profile's naming rules rewrote (first 50)."
+              },
+              "unfixed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Names off the rules that the profile only reports (fix none, or no fix matches a custom pattern)."
+              },
+              "styled": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "Views given the profile's look."
+              }
+            },
+            "required": [
+              "profile"
+            ],
+            "additionalProperties": false,
+            "description": "What the style profile changed in this call."
           }
         },
         "required": [
@@ -1439,6 +1502,57 @@
               }
             ],
             "description": "Null for view-only ids such as Note or NoteLink."
+          },
+          "style": {
+            "type": "object",
+            "properties": {
+              "profile": {
+                "type": "string",
+                "description": "The style profile applied."
+              },
+              "renamed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Names the profile's naming rules rewrote (first 50)."
+              },
+              "unfixed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Names off the rules that the profile only reports (fix none, or no fix matches a custom pattern)."
+              },
+              "styled": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "Views given the profile's look."
+              }
+            },
+            "required": [
+              "profile"
+            ],
+            "additionalProperties": false,
+            "description": "What the style profile changed in this call."
           }
         },
         "required": [
@@ -3690,6 +3804,97 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991,
             "description": "Node views resized by fit."
+          },
+          "quality": {
+            "type": "object",
+            "properties": {
+              "score": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "0–100 from view geometry, see /diagram_quality."
+              },
+              "rating": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "1–5; 4 needs a score of 80."
+              },
+              "before": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "The score before the loop."
+              },
+              "target": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "passes": {
+                "type": "boolean",
+                "description": "score reached target."
+              },
+              "iterations": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Post-processing steps kept, in order."
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "rule": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": [
+                        "error",
+                        "warning",
+                        "info"
+                      ]
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "rule",
+                    "name",
+                    "severity",
+                    "count"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "/lint_diagram findings left, by rule."
+              }
+            },
+            "required": [
+              "score",
+              "rating",
+              "before",
+              "target",
+              "passes",
+              "iterations",
+              "steps",
+              "findings"
+            ],
+            "additionalProperties": false,
+            "description": "The quality loop's result: layout preset, post-processing, lint, autofix, re-lint (issue #32)."
           }
         },
         "required": [
@@ -3722,6 +3927,10 @@
               "curve"
             ],
             "description": "Line style for every edge."
+          },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile is strict; the call is still made as asked."
           },
           "diagramId": {
             "type": "string",
@@ -3808,6 +4017,10 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile is strict; the call is still made as asked."
           },
           "ids": {
             "minItems": 1,
@@ -3937,6 +4150,10 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile is strict; the call is still made as asked."
           },
           "id": {
             "type": "string",
@@ -4074,6 +4291,10 @@
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
           },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile is strict; the call is still made as asked."
+          },
           "ids": {
             "minItems": 1,
             "type": "array",
@@ -4170,6 +4391,10 @@
             ],
             "description": "Where to move the views."
           },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile is strict; the call is still made as asked."
+          },
           "ids": {
             "minItems": 1,
             "type": "array",
@@ -4248,6 +4473,10 @@
             "minimum": 0,
             "maximum": 8,
             "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile is strict; the call is still made as asked."
           },
           "id": {
             "type": "string",
@@ -4977,6 +5206,10 @@
             ],
             "description": "Draw a small label on each view of the image, not the model: ids its element's id, paths the shortest path naming it (its id when unnamed). Default none."
           },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile blocks saving on lint errors; the call is still made as asked."
+          },
           "id": {
             "type": "string",
             "minLength": 1,
@@ -5111,6 +5344,10 @@
             "pattern": "^(#[0-9a-f]{3,8}|[a-z]+)$",
             "description": "As for /export_diagram."
           },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile blocks saving on lint errors; the call is still made as asked."
+          },
           "ids": {
             "minItems": 1,
             "type": "array",
@@ -5225,6 +5462,10 @@
             "type": "boolean",
             "description": "Print each diagram's path name; default true."
           },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile blocks saving on lint errors; the call is still made as asked."
+          },
           "ids": {
             "minItems": 1,
             "type": "array",
@@ -5279,6 +5520,10 @@
           "path": {
             "type": "string",
             "description": "Absolute directory to write into; created if missing. index.html is its entry page."
+          },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile blocks saving on lint errors; the call is still made as asked."
           }
         },
         "required": [
@@ -5324,6 +5569,10 @@
               "plantuml"
             ],
             "description": "Text format."
+          },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile blocks saving on lint errors; the call is still made as asked."
           },
           "diagramId": {
             "type": "string",
@@ -6290,6 +6539,148 @@
             ],
             "additionalProperties": false,
             "description": "With dryRun: what applying runs."
+          },
+          "style": {
+            "type": "object",
+            "properties": {
+              "profile": {
+                "type": "string",
+                "description": "The style profile applied."
+              },
+              "renamed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Names the profile's naming rules rewrote (first 50)."
+              },
+              "unfixed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Names off the rules that the profile only reports (fix none, or no fix matches a custom pattern)."
+              },
+              "styled": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "Views given the profile's look."
+              }
+            },
+            "required": [
+              "profile"
+            ],
+            "additionalProperties": false,
+            "description": "What the style profile changed in this call."
+          },
+          "quality": {
+            "type": "object",
+            "properties": {
+              "score": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "0–100 from view geometry, see /diagram_quality."
+              },
+              "rating": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "1–5; 4 needs a score of 80."
+              },
+              "before": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "The score before the loop."
+              },
+              "target": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "passes": {
+                "type": "boolean",
+                "description": "score reached target."
+              },
+              "iterations": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Post-processing steps kept, in order."
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "rule": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": [
+                        "error",
+                        "warning",
+                        "info"
+                      ]
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "rule",
+                    "name",
+                    "severity",
+                    "count"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "/lint_diagram findings left, by rule."
+              }
+            },
+            "required": [
+              "score",
+              "rating",
+              "before",
+              "target",
+              "passes",
+              "iterations",
+              "steps",
+              "findings"
+            ],
+            "additionalProperties": false,
+            "description": "The quality loop's result: layout preset, post-processing, lint, autofix, re-lint (issue #32)."
           }
         },
         "required": [
@@ -6598,7 +6989,7 @@
     },
     {
       "path": "/lint_diagram",
-      "description": "Check how a diagram reads: node views stacked at one point (L001) or overlapping (L002), outside the canvas (L003), edges running through unrelated nodes (L004), names wider than their box (L005), nodes with no edge (L006) and crowded areas (L007). Each finding names the views by id and path, with a severity, a one-line fix and an autofix request to send as is.",
+      "description": "Check how a diagram reads: node views stacked at one point (L001) or overlapping (L002), outside the canvas (L003), edges running through unrelated nodes (L004), names wider than their box (L005), nodes with no edge (L006), crowded areas (L007), more nodes than the style profile allows (L008) and views drawn off the style profile (L009, an error when it is strict). Each finding names the views by id and path, with a severity, a one-line fix and an autofix request to send as is.",
       "readOnly": true,
       "destructive": false,
       "request": {
@@ -6874,7 +7265,29 @@
                   }
                 ]
               },
+              "constant": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean",
+                    "const": false
+                  }
+                ]
+              },
               "literal": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean",
+                    "const": false
+                  }
+                ]
+              },
+              "usecase": {
                 "anyOf": [
                   {
                     "type": "string"
@@ -6897,7 +7310,7 @@
                 ]
               }
             },
-            "description": "Naming convention per kind: PascalCase, camelCase, UPPER_CASE, snake_case, lowercase, a regular expression, or false to skip. Defaults: classifier PascalCase, attribute and operation camelCase, literal UPPER_CASE, package skipped."
+            "description": "Naming convention per kind: PascalCase, camelCase, UPPER_CASE, snake_case, lowercase, 'Verb noun', a regular expression, or false to skip. Defaults: the project's style profile when it stores one; else classifier PascalCase, attribute and operation camelCase, literal UPPER_CASE, constant (static read-only attribute), use case and package skipped."
           },
           "limit": {
             "type": "integer",
@@ -7523,7 +7936,7 @@
     },
     {
       "path": "/build_model",
-      "description": "Make or update a model from an object-level spec, without diagrams, as one undo step: packages (contexts), classes with members and responsibilities (documentation), relationships (owns, has, uses, isA, implements, knows, association), actors and use cases, collaborations as interactions with lifelines and messages, lifecycles as state machines. Diagram sections (classViews, erd, ...) are left to /build_diagram and listed in skipped. dryRun lists the changes and the /batch ops; upsert updates the model of the same name.",
+      "description": "Make or update a model from an object-level spec, without diagrams, as one undo step: packages (contexts), classes with members and responsibilities (documentation), relationships (owns, has, uses, isA, implements, knows, association), actors and use cases, collaborations as interactions with lifelines and messages, lifecycles as state machines. The spec is strict (additionalProperties false, no geometry or colour fields); its view sections (classViews, useCaseViews, activities, erd, components, deployments, features) are stored with the model as a hidden tag for /derive_diagrams. dryRun lists the changes and the /batch ops; upsert updates the model of the same name.",
       "readOnly": false,
       "destructive": false,
       "request": {
@@ -7532,11 +7945,1104 @@
         "properties": {
           "spec": {
             "type": "object",
-            "propertyNames": {
-              "type": "string"
+            "properties": {
+              "system": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Name of the model; default 'Model'."
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Synonym of system."
+              },
+              "summary": {
+                "type": "string",
+                "description": "The model's documentation."
+              },
+              "contexts": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Key classes use in context; default the name."
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "parent": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Package this one is nested in, by id or name."
+                        },
+                        "responsibility": {
+                          "type": "string"
+                        },
+                        "documentation": {
+                          "type": "string"
+                        },
+                        "stereotype": {
+                          "type": "string"
+                        },
+                        "dependsOn": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "description": "Packages it depends on, by id or name."
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "description": "Packages (bounded contexts)."
+              },
+              "packages": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Key classes use in context; default the name."
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "parent": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Package this one is nested in, by id or name."
+                        },
+                        "responsibility": {
+                          "type": "string"
+                        },
+                        "documentation": {
+                          "type": "string"
+                        },
+                        "stereotype": {
+                          "type": "string"
+                        },
+                        "dependsOn": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "description": "Packages it depends on, by id or name."
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "description": "Synonym of contexts."
+              },
+              "classes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "context": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Owning package by id or name; package is a synonym."
+                    },
+                    "package": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "class",
+                        "abstract",
+                        "interface",
+                        "enum"
+                      ]
+                    },
+                    "stereotype": {
+                      "type": "string"
+                    },
+                    "responsibility": {
+                      "type": "string"
+                    },
+                    "documentation": {
+                      "type": "string"
+                    },
+                    "knows": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "does": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "collaboratesWith": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "attributes": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "operations": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "literals": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "isLeaf": {
+                      "type": "boolean"
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Classes, interfaces, enumerations; members as '+name: Type' and '+op(p: T): R'. responsibility, knows, does and collaboratesWith become the documentation."
+              },
+              "relationships": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "to": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "owns",
+                        "has",
+                        "uses",
+                        "isA",
+                        "implements",
+                        "knows",
+                        "association",
+                        "composition",
+                        "aggregation",
+                        "dependency",
+                        "generalization",
+                        "realization",
+                        "directed"
+                      ],
+                      "description": "owns: composition: from is the whole (end1, composite), to the part; has: aggregation: from is the whole (end1, shared), to the part; uses: dependency: from is the client, to the supplier; isA: generalization: from is the specific, to the general; implements: interface realization: from implements the interface to; knows: directed association: from navigates to to; association: association with no navigability or aggregation"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "fromMult": {
+                      "type": "string"
+                    },
+                    "toMult": {
+                      "type": "string"
+                    },
+                    "fromMultiplicity": {
+                      "type": "string"
+                    },
+                    "toMultiplicity": {
+                      "type": "string"
+                    },
+                    "fromRole": {
+                      "type": "string"
+                    },
+                    "toRole": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to",
+                    "type"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "actors": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "kind": {
+                          "type": "string"
+                        },
+                        "goals": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "documentation": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "useCases": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "system": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "The subject it belongs to."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "actors": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "includes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "extends": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "documentation": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "collaborations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "context": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "package": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "participants": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Classifier the lifeline is; default the class or actor of its name."
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "minItems": 2,
+                            "maxItems": 4,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "from": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "to": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "text": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "sync",
+                                  "async",
+                                  "reply",
+                                  "create",
+                                  "delete"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "from",
+                              "to"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "description": "[from, to, text, kind] or {from, to, text, kind}; kind sync (default), async, reply, create, delete."
+                    },
+                    "fragments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "operator": {
+                            "type": "string",
+                            "enum": [
+                              "alt",
+                              "opt",
+                              "loop",
+                              "par",
+                              "break",
+                              "critical",
+                              "neg",
+                              "strict",
+                              "seq",
+                              "ignore",
+                              "consider",
+                              "assert"
+                            ]
+                          },
+                          "guard": {
+                            "type": "string"
+                          },
+                          "operands": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "from": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "to": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "operator"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Interactions: lifelines for the participants and their messages, in a collaboration."
+              },
+              "lifecycles": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "subject": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Classifier whose behavior it is."
+                    },
+                    "states": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "state",
+                                  "initial",
+                                  "final",
+                                  "choice",
+                                  "fork",
+                                  "join"
+                                ]
+                              },
+                              "parent": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "transitions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "from": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "to": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "trigger": {
+                            "type": "string"
+                          },
+                          "guard": {
+                            "type": "string"
+                          },
+                          "effect": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "to"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "State machines, owned by their subject."
+              },
+              "classViews": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "contexts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "description": "Packages whose classes it shows, by id or name."
+                    },
+                    "classes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "description": "Classes it shows besides."
+                    },
+                    "exclude": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "also": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "description": "Classes from elsewhere it shows too."
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Class diagrams by what they show; /derive_diagrams draws one each when the policy says views."
+              },
+              "useCaseViews": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "actor": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "actors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "cases": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "extraActors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Use case diagrams by actor; default one per system (subject)."
+              },
+              "activities": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "lanes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "nodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "action",
+                              "initial",
+                              "final",
+                              "flowFinal",
+                              "decision",
+                              "merge",
+                              "fork",
+                              "join",
+                              "object"
+                            ]
+                          },
+                          "lane": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "flows": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "minItems": 2,
+                            "maxItems": 5,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "from": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "to": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "guard": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "from",
+                              "to"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "nodes",
+                    "flows"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "erd": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "entities": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "columns": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "relationships": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "minItems": 2,
+                          "maxItems": 5,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "from": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "to": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "fromCardinality": {
+                              "type": "string"
+                            },
+                            "toCardinality": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "identifying": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "from",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "entities"
+                ],
+                "additionalProperties": false,
+                "description": "Tables: columns as 'id uuid PK'; relationships as [from, to, fromCardinality, toCardinality]."
+              },
+              "components": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "elements": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "person",
+                            "system",
+                            "container",
+                            "component"
+                          ]
+                        },
+                        "kind": {
+                          "type": "string"
+                        },
+                        "technology": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "external": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "relations": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "minItems": 2,
+                          "maxItems": 5,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "from": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "to": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "technology": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "from",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "elements"
+                ],
+                "additionalProperties": false,
+                "description": "C4 people, systems, containers and components; relations as [from, to, label, technology]."
+              },
+              "deployments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "nodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "kind": {
+                            "type": "string",
+                            "description": "device, node, executionEnvironment."
+                          },
+                          "parent": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "contains": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "description": "Artifacts deployed on it."
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "links": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "minItems": 2,
+                            "maxItems": 5,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "from": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "to": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "from",
+                              "to"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "nodes"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "features": {
+                "$ref": "#/$defs/__schema0"
+              }
             },
-            "additionalProperties": {},
-            "description": "{system, summary, contexts: [{id, name, responsibility, dependsOn}], classes: [{name, context, kind: class|abstract|interface|enum, responsibility, knows, does, collaboratesWith, attributes: ['+id: UUID'], operations: ['+save(e: T): T'], literals}], relationships: [{from, to, type, name, fromMult, toMult}], actors: [{name, kind, goals}], useCases: [{name, system, actors, includes, extends}], collaborations: [{name, participants, messages: [[from, to, text, kind]], fragments}], lifecycles: [{name, subject, states, transitions: [{from, to, trigger, guard, effect}]}]}. Relationship direction: owns: composition: from is the whole (end1, composite), to the part; has: aggregation: from is the whole (end1, shared), to the part; uses: dependency: from is the client, to the supplier; isA: generalization: from is the specific, to the general; implements: interface realization: from implements the interface to; knows: directed association: from navigates to to; association: association with no navigability or aggregation."
+            "additionalProperties": false,
+            "description": "The object model, no diagrams and no geometry: an unknown field (a position, a size, a colour) is refused. Relationship direction: owns: composition: from is the whole (end1, composite), to the part; has: aggregation: from is the whole (end1, shared), to the part; uses: dependency: from is the client, to the supplier; isA: generalization: from is the specific, to the general; implements: interface realization: from implements the interface to; knows: directed association: from navigates to to; association: association with no navigability or aggregation. classViews, useCaseViews, activities, erd, components, deployments and features are stored with the model for /derive_diagrams."
           },
           "parent": {
             "type": "string",
@@ -7563,7 +9069,29 @@
         },
         "required": [
           "spec"
-        ]
+        ],
+        "$defs": {
+          "__schema0": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false,
+            "description": "A feature tree, drawn as a mind map."
+          }
+        }
       },
       "response": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -7724,7 +9252,7 @@
               ],
               "additionalProperties": false
             },
-            "description": "Spec sections that describe diagrams, with what builds them."
+            "description": "Not answered since the spec became strict (issue #33): every section is the model's; kept for older clients."
           },
           "dryRun": {
             "type": "boolean"
@@ -7870,6 +9398,57 @@
             ],
             "additionalProperties": false,
             "description": "With dryRun: what applying runs."
+          },
+          "style": {
+            "type": "object",
+            "properties": {
+              "profile": {
+                "type": "string",
+                "description": "The style profile applied."
+              },
+              "renamed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Names the profile's naming rules rewrote (first 50)."
+              },
+              "unfixed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Names off the rules that the profile only reports (fix none, or no fix matches a custom pattern)."
+              },
+              "styled": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "Views given the profile's look."
+              }
+            },
+            "required": [
+              "profile"
+            ],
+            "additionalProperties": false,
+            "description": "What the style profile changed in this call."
           }
         },
         "required": [
@@ -8219,6 +9798,421 @@
           "checked",
           "ok",
           "problems"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/derive_diagrams",
+      "description": "Draw the diagrams a model implies, by rule, as one undo step: an overview of its packages and their dependencies, a class diagram per class view (or per package, with its direct collaborators), a sequence diagram per collaboration, a use case diagram per use case view (or per system), a state machine per lifecycle, and the activities, ERD, C4 containers, deployments and feature mind map /build_model stored with the model. Each diagram shows the model's own elements (never copies), is laid out by the style profile and goes through the quality loop. Running it again after a model change updates the diagrams in place: what is new is shown, what is gone loses its view, the rest is left as it is. kinds limits which; policy overrides the profile's policy for this call; dryRun answers what each diagram would change.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The model (or a package of it) to derive from; its model's stored views apply. Id or path."
+          },
+          "kinds": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "package",
+                "class",
+                "sequence",
+                "usecase",
+                "statemachine",
+                "activity",
+                "erd",
+                "c4",
+                "deployment",
+                "mindmap"
+              ]
+            },
+            "description": "Only these diagram kinds; default all."
+          },
+          "policy": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "Fields of the style profile's policy for this call: classDiagrams (views|perPackage), hideGetters, neighbours, packageOverview."
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of scope.",
+            "x-alias-of": "scope",
+            "deprecated": true
+          }
+        },
+        "required": [
+          "scope"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "diagrams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "diagram": {
+                  "type": "string",
+                  "description": "Its id; '$diagram' on a dry run that makes it."
+                },
+                "created": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "updated": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "unchanged": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "deleted": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "ops": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "With dryRun: the ops applying it runs."
+                },
+                "quality": {
+                  "type": "object",
+                  "properties": {
+                    "score": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "rating": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "passes": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "score",
+                    "rating",
+                    "passes"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind",
+                "name",
+                "diagram",
+                "created",
+                "updated",
+                "unchanged"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "diagrams": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "created": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "updated": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "unchanged": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "deleted": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "diagrams",
+              "created",
+              "updated",
+              "unchanged",
+              "deleted"
+            ],
+            "additionalProperties": false
+          },
+          "quality": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "mean": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "passing": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "failing": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "min",
+              "mean",
+              "passing",
+              "failing"
+            ],
+            "additionalProperties": false,
+            "description": "Over the diagrams built: lowest and mean score, how many reach their threshold, which do not."
+          },
+          "dryRun": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "model",
+          "diagrams",
+          "counts"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/explain_model",
+      "description": "The model as compact text to reason about: per package each class with its responsibilities (documentation), what it owns, has, knows, is, implements and uses, and its operations; each collaboration's messages; each lifecycle's transitions; each actor's use cases. Read-only.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A model or package; default the project. Id or path."
+          },
+          "maxChars": {
+            "type": "integer",
+            "minimum": 200,
+            "maximum": 9007199254740991,
+            "description": "Default 20000; longer text is cut."
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of scope.",
+            "x-alias-of": "scope",
+            "deprecated": true
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "text",
+          "truncated"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/model_lint",
+      "description": "Review the object design: god classes (M001, more than 20 members), feature envy (M002, an operation working only on another class's data), cyclic package dependencies (M003), anaemic entities (M004, data without behaviour), interfaces with one implementation (M005), unused classes (M006), operations no collaboration calls (M007, when the scope has collaborations). Each finding has a rule id, the element's id and path and a one-line fix. Read-only.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A model or package; default the project. Id or path."
+          },
+          "rules": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "info"
+              ]
+            },
+            "description": "Per rule id or name: off, or the severity to report it with."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Most findings to list, most severe first; default 100. count is always the full number."
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of scope.",
+            "x-alias-of": "scope",
+            "deprecated": true
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "warning": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "info": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "error",
+              "warning",
+              "info"
+            ],
+            "additionalProperties": false
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rule": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "error",
+                    "warning",
+                    "info"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "fix": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "rule",
+                "name",
+                "severity",
+                "message",
+                "id",
+                "path",
+                "fix"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "count",
+          "counts",
+          "truncated",
+          "findings"
         ],
         "additionalProperties": false
       }
@@ -8766,6 +10760,148 @@
               "deletes"
             ],
             "additionalProperties": false
+          },
+          "style": {
+            "type": "object",
+            "properties": {
+              "profile": {
+                "type": "string",
+                "description": "The style profile applied."
+              },
+              "renamed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Names the profile's naming rules rewrote (first 50)."
+              },
+              "unfixed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Names off the rules that the profile only reports (fix none, or no fix matches a custom pattern)."
+              },
+              "styled": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "Views given the profile's look."
+              }
+            },
+            "required": [
+              "profile"
+            ],
+            "additionalProperties": false,
+            "description": "What the style profile changed in this call."
+          },
+          "quality": {
+            "type": "object",
+            "properties": {
+              "score": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "0–100 from view geometry, see /diagram_quality."
+              },
+              "rating": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "1–5; 4 needs a score of 80."
+              },
+              "before": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "The score before the loop."
+              },
+              "target": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "passes": {
+                "type": "boolean",
+                "description": "score reached target."
+              },
+              "iterations": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Post-processing steps kept, in order."
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "rule": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": [
+                        "error",
+                        "warning",
+                        "info"
+                      ]
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "rule",
+                    "name",
+                    "severity",
+                    "count"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "/lint_diagram findings left, by rule."
+              }
+            },
+            "required": [
+              "score",
+              "rating",
+              "before",
+              "target",
+              "passes",
+              "iterations",
+              "steps",
+              "findings"
+            ],
+            "additionalProperties": false,
+            "description": "The quality loop's result: layout preset, post-processing, lint, autofix, re-lint (issue #32)."
           }
         },
         "required": [
@@ -9306,6 +11442,10 @@
           "dryRun": {
             "type": "boolean"
           },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile is strict; the call is still made as asked."
+          },
           "diagram": {
             "type": "string",
             "minLength": 1,
@@ -9520,6 +11660,710 @@
       }
     },
     {
+      "path": "/get_style_profile",
+      "description": "The style profile authoring applies: the project's (stored in the .mdj), else the built-in the preference mcp-ext.style.profile names (default uml-standard). name returns a built-in instead: uml-standard, minimal, presentation, print.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "uml-standard",
+              "minimal",
+              "presentation",
+              "print"
+            ],
+            "description": "A built-in profile."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "profile": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "The profile: name, description, strict, blockSaveOnErrors, naming, visuals, layout, rules, quality, policy."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "project",
+              "preferences",
+              "built-in"
+            ],
+            "description": "Where it comes from."
+          },
+          "builtIns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "problem": {
+            "type": "string",
+            "description": "Why the project's stored profile was not used."
+          }
+        },
+        "required": [
+          "profile",
+          "source",
+          "builtIns"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/set_style_profile",
+      "description": "Store a style profile in the project, as one undo step: a built-in by name, a whole profile, or a patch merged into the current one (objects field by field; null turns a naming rule off). reset removes the project's profile, so the preference's built-in applies again. The profile is checked whole; an unknown field or a bad pattern is INVALID_ARGUMENT.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "uml-standard",
+                  "minimal",
+                  "presentation",
+                  "print"
+                ]
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            ],
+            "description": "A built-in name, or a whole profile (see /get_style_profile)."
+          },
+          "patch": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "Fields to change, merged into profile (or the current one), e.g. {strict: true} or {naming: {package: null}}."
+          },
+          "reset": {
+            "type": "boolean",
+            "description": "Remove the project's profile; nothing else may be given."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "profile": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "The profile: name, description, strict, blockSaveOnErrors, naming, visuals, layout, rules, quality, policy."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "project",
+              "preferences"
+            ]
+          },
+          "changed": {
+            "type": "boolean",
+            "description": "The project's stored profile changed."
+          }
+        },
+        "required": [
+          "profile",
+          "source",
+          "changed"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/apply_style_profile",
+      "description": "Normalise what a scope already has to the style profile, as one undo step: names off the naming rules are rewritten (siblings stay distinct), every view on the scope's diagrams takes the profile's colours, fonts, edge style and show/hide switches. Answers what changed; a second call changes nothing. dryRun answers the renames without changing anything.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A diagram, a package or model; default the project. Id or path."
+          },
+          "names": {
+            "type": "boolean",
+            "description": "Default true: apply the naming rules."
+          },
+          "visuals": {
+            "type": "boolean",
+            "description": "Default true: apply the visuals to the diagrams."
+          },
+          "dryRun": {
+            "type": "boolean"
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "profile": {
+            "type": "string"
+          },
+          "diagrams": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Diagrams looked at."
+          },
+          "styled": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Views given the profile's look."
+          },
+          "renamed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "kind",
+                "from",
+                "to"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "unfixed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Names off the rules the profile only reports."
+          },
+          "dryRun": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "profile",
+          "diagrams",
+          "styled",
+          "renamed",
+          "unfixed"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/explain_style_violation",
+      "description": "Say which rules of the style profile an element breaks and why: its naming rule (pattern, the fixed name), documentation required, duplicate names, and views off the profile's colours, each with a one-line fix and an autofix request. Or, with kind and name, check a name before creating it.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The element. Id or path."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "classifier",
+              "attribute",
+              "operation",
+              "constant",
+              "literal",
+              "usecase",
+              "package"
+            ],
+            "description": "Instead of ref: the naming rule to check name against."
+          },
+          "name": {
+            "type": "string",
+            "description": "With kind: the name to check."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "profile": {
+            "type": "string"
+          },
+          "element": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "Nothing is off the profile."
+          },
+          "violations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rule": {
+                  "type": "string",
+                  "description": "naming.<kind>, visuals, documentation, duplicates."
+                },
+                "setting": {
+                  "type": "string",
+                  "description": "What the profile says."
+                },
+                "actual": {
+                  "type": "string"
+                },
+                "expected": {
+                  "type": "string"
+                },
+                "fix": {
+                  "type": "string",
+                  "description": "One line on how to fix it."
+                },
+                "autofix": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "body": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "body"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "rule",
+                "setting",
+                "actual",
+                "fix",
+                "autofix"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "profile",
+          "ok",
+          "violations"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/diagram_quality",
+      "description": "Score a diagram 0–100 from its view geometry, no rendering: overlap of boxes, edges through nodes, crossing edges, edge length variation, bends, alignment, whitespace balance, aspect ratio and size against the style profile's page. rating is 1–5 (4 needs 80); target is the profile's threshold for the kind. Read-only.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram; default the current one. Id or path."
+          },
+          "diagram": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "object",
+            "properties": {
+              "_id": {
+                "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "_type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_id",
+              "name",
+              "_type"
+            ],
+            "additionalProperties": false
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "score": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "rating": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "target": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "passes": {
+            "type": "boolean"
+          },
+          "metrics": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "overlapArea, overlapPairs, overlapRatio, nodeEdgeCrossings, edgeCrossings, lengthVariation, bends, alignment, whitespace, aspect, width, height, nodes, edges."
+          },
+          "penalties": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "Points lost per measure, at most: overlap 30, nodeEdge 20, edgeEdge 15, length 5, bends 5, alignment 10, whitespace 5, aspect 5, page 5."
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rule": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "error",
+                    "warning",
+                    "info"
+                  ]
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "rule",
+                "name",
+                "severity",
+                "count"
+              ],
+              "additionalProperties": false
+            },
+            "description": "/lint_diagram findings left, by rule."
+          }
+        },
+        "required": [
+          "diagram",
+          "kind",
+          "score",
+          "rating",
+          "target",
+          "passes",
+          "metrics",
+          "penalties",
+          "findings"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/improve_diagram",
+      "description": "Run the quality loop on an existing diagram as one undo step: the profile's layout preset (unless the kind's placement is the build's own: sequence, use case with a boundary, lanes), post-processing for the kind (rank ordering, lifeline order and spacing, boundary around use cases, straight flow chains, label room, overlap removal, grid, margin), then /lint_diagram's autofixes, measured after each step and undone if a step lowers the score, until target, no gain, or maxIterations. Allowed under a strict profile: it is how a strict diagram is rearranged. dryRun answers the score it would reach and leaves the diagram as it was.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram; default the current one. Id or path."
+          },
+          "target": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Score to stop at; default the profile's threshold for the kind."
+          },
+          "maxIterations": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "description": "Default the profile's (3)."
+          },
+          "relayout": {
+            "type": "boolean",
+            "description": "Default true: run the layout preset first."
+          },
+          "preset": {
+            "type": "string",
+            "enum": [
+              "flow-down",
+              "flow-up",
+              "flow-right",
+              "flow-left",
+              "hierarchy-down",
+              "hierarchy-up",
+              "hierarchy-right",
+              "hierarchy-left"
+            ],
+            "description": "Preset for that layout."
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "diagram": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Alias of ref.",
+            "x-alias-of": "ref",
+            "deprecated": true
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "object",
+            "properties": {
+              "_id": {
+                "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "_type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_id",
+              "name",
+              "_type"
+            ],
+            "additionalProperties": false
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quality": {
+            "type": "object",
+            "properties": {
+              "score": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "0–100 from view geometry, see /diagram_quality."
+              },
+              "rating": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "1–5; 4 needs a score of 80."
+              },
+              "before": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "The score before the loop."
+              },
+              "target": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "passes": {
+                "type": "boolean",
+                "description": "score reached target."
+              },
+              "iterations": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Post-processing steps kept, in order."
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "rule": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": [
+                        "error",
+                        "warning",
+                        "info"
+                      ]
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "rule",
+                    "name",
+                    "severity",
+                    "count"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "/lint_diagram findings left, by rule."
+              }
+            },
+            "required": [
+              "score",
+              "rating",
+              "before",
+              "target",
+              "passes",
+              "iterations",
+              "steps",
+              "findings"
+            ],
+            "additionalProperties": false,
+            "description": "The quality loop's result: layout preset, post-processing, lint, autofix, re-lint (issue #32)."
+          },
+          "dryRun": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "diagram",
+          "kind",
+          "quality"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
       "path": "/introspect",
       "description": "StarUML and extension versions, factory ids, the metamodel catalogue, the diagram editor's toolbox, and this endpoint manifest with JSON Schemas.",
       "readOnly": true,
@@ -9552,6 +12396,14 @@
           "inherited": {
             "type": "boolean",
             "description": "List inherited attributes with each type; default false (own attributes and supers)."
+          },
+          "capabilities": {
+            "type": "string",
+            "enum": [
+              "all",
+              "oo"
+            ],
+            "description": "Endpoints to list: all (default), or oo, the model-first set; under a strict style profile oo leaves out every endpoint that draws (styles, positions, sizes, free-form diagrams), so an agent given that set cannot draw."
           }
         }
       },
@@ -9958,6 +12810,35 @@
               ],
               "additionalProperties": false
             }
+          },
+          "capabilities": {
+            "type": "object",
+            "properties": {
+              "set": {
+                "type": "string",
+                "enum": [
+                  "all",
+                  "oo"
+                ]
+              },
+              "strict": {
+                "type": "boolean"
+              },
+              "hidden": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Endpoints the set leaves out."
+              }
+            },
+            "required": [
+              "set",
+              "strict",
+              "hidden"
+            ],
+            "additionalProperties": false,
+            "description": "With capabilities: the set listed and what it hides."
           },
           "errors": {
             "type": "object",

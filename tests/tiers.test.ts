@@ -85,7 +85,7 @@ describe("parseToolSelection", () => {
 });
 
 describe("endpointGroup", () => {
-  it("groups every endpoint of the 79-endpoint manifest", () => {
+  it("groups every endpoint of the 88-endpoint manifest", () => {
     const groups: Record<string, string[]> = {};
     for (const e of BUNDLED_MANIFEST.endpoints) {
       (groups[endpointGroup(toolName(e.path))] ??= []).push(toolName(e.path));
@@ -146,13 +146,34 @@ describe("endpointGroup", () => {
         "add_slot",
         "add_tag",
       ],
-      style: ["set_view_style", "apply_theme"],
+      style: [
+        "set_view_style",
+        "apply_theme",
+        "get_style_profile",
+        "set_style_profile",
+        "apply_style_profile",
+        "explain_style_violation",
+      ],
       editor: ["get_selection", "set_selection", "get_editor_state", "set_editor_state"],
       code: ["list_code_generators", "generate_code", "reverse_code"],
       history: ["undo", "redo", "snapshot", "diff_since", "restore_snapshot"],
       meta: ["search_types", "describe_type", "introspect", "debug"],
-      quality: ["validate_model", "lint_diagram", "uml_lint", "diff_diagram"],
-      model: ["build_model", "sync_operations", "check_messages"],
+      quality: [
+        "validate_model",
+        "lint_diagram",
+        "uml_lint",
+        "diff_diagram",
+        "model_lint",
+        "diagram_quality",
+        "improve_diagram",
+      ],
+      model: [
+        "build_model",
+        "sync_operations",
+        "check_messages",
+        "derive_diagrams",
+        "explain_model",
+      ],
       patterns: [
         "list_patterns",
         "describe_pattern",
@@ -169,6 +190,7 @@ describe("endpointGroup", () => {
     expect(endpointGroup("explain_pattern")).toBe("patterns");
     expect(endpointGroup("set_font")).toBe("style");
     expect(endpointGroup("derive_operations")).toBe("model");
+    expect(endpointGroup("reset_style_profile")).toBe("style");
     expect(ENDPOINT_GROUPS).toEqual([
       "quality",
       "history",
@@ -362,8 +384,20 @@ describe("describe_endpoints", () => {
       "detect_patterns",
       "apply_preset",
     ]);
-    expect(Object.keys(index.model!)).toEqual(["sync_operations", "check_messages"]);
-    expect(Object.keys(index.style!)).toEqual(["set_view_style", "apply_theme"]);
+    expect(Object.keys(index.model!)).toEqual([
+      "sync_operations",
+      "check_messages",
+      "derive_diagrams",
+      "explain_model",
+    ]);
+    expect(Object.keys(index.style!)).toEqual([
+      "set_view_style",
+      "apply_theme",
+      "get_style_profile",
+      "set_style_profile",
+      "apply_style_profile",
+      "explain_style_violation",
+    ]);
   });
 
   it("describes named endpoints in full, listed ones included", async () => {
@@ -412,7 +446,14 @@ describe("describe_endpoints", () => {
       );
 
     // lint_diagram is a core tool, so the group lists the rest.
-    expect(await group("quality")).toEqual(["validate_model", "uml_lint", "diff_diagram"]);
+    expect(await group("quality")).toEqual([
+      "validate_model",
+      "uml_lint",
+      "diff_diagram",
+      "model_lint",
+      "diagram_quality",
+      "improve_diagram",
+    ]);
     expect(await group("history")).toEqual([
       "undo",
       "redo",

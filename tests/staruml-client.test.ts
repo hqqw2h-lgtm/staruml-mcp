@@ -577,6 +577,52 @@ describe("StarUMLClient", () => {
       expect(syntax.hint).toContain('describe_endpoints({names: ["build_diagram"]})');
     });
 
+    it("explains STYLE_LOCKED with the strict profile's remedies, override last", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: false,
+            code: "STYLE_LOCKED",
+            error: "/move_views: the style profile 'uml-standard' is strict",
+            details: { profile: "uml-standard", endpoint: "/move_views" },
+          }),
+          { status: 403 },
+        ),
+      );
+      const error = await caught(new StarUMLClient().callExtension("/move_views", {}));
+
+      // 403 is also FORBIDDEN_ORIGIN's status; the envelope's code decides.
+      expect(error).toMatchObject({ code: "STYLE_LOCKED", status: 403 });
+      expect(error.hint).toBe(
+        "The style profile 'uml-standard' is strict: views are placed and styled by the profile and the quality loop, not by hand. " +
+          "Rearrange with improve_diagram, restyle with apply_style_profile, or rebuild with build_diagram or derive_diagrams; " +
+          "pass override: true only when the user asked for this exact change, or turn strict mode off with set_style_profile({patch: {strict: false}}).",
+      );
+      expect((await reference("/set_view_style", "STYLE_LOCKED")).hint).toMatch(
+        /^The style profile is strict: /,
+      );
+    });
+
+    it("explains SAVE_BLOCKED with the first lint errors and the override", async () => {
+      const findings = [
+        { rule: "M003", message: "cycle", path: "Shop/billing" },
+        { rule: "U001", message: "no type", path: null },
+        { rule: "U002", message: "x", path: "Shop/Order" },
+        { rule: "U003", message: "y", path: "Shop/Item" },
+      ];
+      expect((await reference("/save_project", "SAVE_BLOCKED", { count: 4, findings })).hint).toBe(
+        "4 lint errors (M003 Shop/billing, U001, U002 Shop/Order, ...) block saving and exporting under the style profile's blockSaveOnErrors. " +
+          "Run uml_lint and model_lint, fix what they report, then retry; pass override: true to save or export anyway.",
+      );
+      expect(
+        (await reference("/export_pdf", "SAVE_BLOCKED", { count: 1, findings: [findings[0]] }))
+          .hint,
+      ).toMatch(/^1 lint error \(M003 Shop\/billing\) blocks saving/);
+      expect((await reference("/save_project", "SAVE_BLOCKED")).hint).toMatch(
+        /^Lint errors block saving and exporting/,
+      );
+    });
+
     it("keeps the details of a success:false answer on HTTP 200", async () => {
       fetchSpy.mockResolvedValueOnce(
         new Response(

@@ -464,13 +464,43 @@ describe("pattern bindings, model specs and their answers", () => {
     );
   });
 
-  it("accepts any object as a build_model spec and nothing else", () => {
+  // Since extension #33 the spec is strict (additionalProperties: false, issue #17's third
+  // enforcement layer): a spec that tries to draw fails here, before anything is sent.
+  const SPEC_KEYS = new Set(
+    Object.keys(
+      (
+        BUNDLED_MANIFEST.endpoints.find((e) => e.path === "/build_model")!.request.properties as {
+          spec: { properties: object };
+        }
+      ).spec.properties,
+    ),
+  );
+  const GEOMETRY = ["x", "y", "left", "top", "width", "height", "fillColor", "lineColor", "font"];
+
+  it("refuses a build_model spec with any key outside the object vocabulary", () => {
+    const stray = fc
+      .string({ minLength: 1, maxLength: 10 })
+      .filter((k) => !SPEC_KEYS.has(k) && k !== "__proto__");
     fc.assert(
-      fc.property(fc.jsonValue({ maxDepth: 3 }), (spec) => {
-        const object = typeof spec === "object" && spec !== null && !Array.isArray(spec);
-        expect(schema("build_model").safeParse({ spec }).success).toBe(object);
+      fc.property(stray, fc.jsonValue({ maxDepth: 2 }), (key, value) => {
+        expect(schema("build_model").safeParse({ spec: { [key]: value } }).success).toBe(false);
       }),
     );
+  });
+
+  it("refuses geometry and colour on a spec and on its classes, and takes the plain spec", () => {
+    fc.assert(
+      fc.property(fc.constantFrom(...GEOMETRY), fc.jsonValue({ maxDepth: 1 }), (key, value) => {
+        const check = (spec: unknown) => schema("build_model").safeParse({ spec }).success;
+        expect(check({ classes: [{ name: "Order", [key]: value }] })).toBe(false);
+        expect(check({ system: "Shop", [key]: value })).toBe(false);
+      }),
+    );
+    expect(
+      schema("build_model").safeParse({ spec: { system: "Shop", classes: [{ name: "Order" }] } })
+        .success,
+    ).toBe(true);
+    expect(schema("build_model").safeParse({ spec: [] }).success).toBe(false);
   });
 
   it("counts a dry run's ops and leaves no placeholder id, keeping every other value", () => {

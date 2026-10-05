@@ -145,6 +145,9 @@ const UNDESCRIBED = new Set([
   "describe_pattern.variant",
   "apply_preset.dryRun",
   "apply_theme.dryRun",
+  "derive_diagrams.dryRun",
+  "apply_style_profile.dryRun",
+  "improve_diagram.dryRun",
 ]);
 
 const HOST = "http://127.0.0.1";
@@ -190,7 +193,7 @@ describe("tool registry", () => {
         ...BUNDLED_MANIFEST.endpoints.map((e) => toolName(e.path)),
       ].sort(),
     );
-    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(79);
+    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(88);
   });
 
   it("lists no $schema on any input schema", async () => {

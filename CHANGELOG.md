@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Bundled manifest synced from the extension's phase 1h build with 88 endpoints: `/derive_diagrams`, `/explain_model`, `/model_lint` (model first, extension #33), `/get_style_profile`, `/set_style_profile`, `/apply_style_profile`, `/explain_style_violation` (the style profile, #31), `/diagram_quality` and `/improve_diagram` (the quality loop, #32); `override` on the endpoints a strict profile locks and on saving and exporting; `capabilities` on `/introspect`. `/build_model`'s spec is strict: a key outside the object vocabulary, geometry or colour included, is `INVALID_ARGUMENT` before the extension sees it (#4).
+- `describe_endpoints` groups the style profile endpoints under `style`, `diagram_quality`, `improve_diagram` and `model_lint` under `quality`, and `derive_diagrams` and `explain_model` under `model` (#8).
+- Authoring answers carry the extension's `style` and `quality` reports compacted wherever they appear: renames as `{from: to}`, the loop's outcome as `{score, target, iterations, findings}` with the findings left counted by rule name; 25 tokens instead of 62 for a report with one finding (#16).
+- `STYLE_LOCKED` (403) and `SAVE_BLOCKED` (409) come with hints: a strict profile's remedies (`improve_diagram`, `apply_style_profile`, a rebuild, `override: true` only for a change the user asked for, turning strict off), and the first lint errors that block saving with `uml_lint`, `model_lint` and `override` (#16, #17).
+
 ## [0.6.0] - 2026-10-06
 
 Built against staruml-mcp-extension 0.3.0 with 79 endpoints (extension phase 1g: model first,

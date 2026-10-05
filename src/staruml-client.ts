@@ -331,6 +331,10 @@ export class StarUMLClient {
       }
       case "DIALOG_REQUIRED":
         return dialogHint(slug);
+      case "STYLE_LOCKED":
+        return styleLockedHint(details);
+      case "SAVE_BLOCKED":
+        return saveBlockedHint(details);
       case "TIMEOUT":
         return `The extension stopped waiting after ${PREFERENCES} > Request Timeout (s), but StarUML may still finish the work; check its effect before retrying, or raise the limit.`;
       default:
@@ -399,6 +403,49 @@ function dialogHint(slug: string): string {
     default:
       return `${lead} Pass the arguments that avoid it, or use a dedicated endpoint.`;
   }
+}
+
+/**
+ * STYLE_LOCKED (403, extension src/style/guard.ts): the project's style profile is strict, so
+ * the endpoints that place, size or colour views by hand refuse unless told `override: true`.
+ * `details.profile` names the profile. The remedies are the ones strict mode leaves open; the
+ * override is last because it is what strict mode exists to stop.
+ */
+function styleLockedHint(details: unknown): string {
+  const profile = (details as { profile?: unknown } | null)?.profile;
+  const which =
+    typeof profile === "string" ? `The style profile '${profile}'` : "The style profile";
+  return (
+    `${which} is strict: views are placed and styled by the profile and the quality loop, not by hand. ` +
+    "Rearrange with improve_diagram, restyle with apply_style_profile, or rebuild with build_diagram or derive_diagrams; " +
+    "pass override: true only when the user asked for this exact change, or turn strict mode off with set_style_profile({patch: {strict: false}})."
+  );
+}
+
+/** Lint errors a SAVE_BLOCKED hint names; details carries up to 20 `{rule, message, path}`. */
+const MAX_HINTED_ERRORS = 3;
+
+/**
+ * SAVE_BLOCKED (409): the profile's `blockSaveOnErrors` refuses /save_project and /export_*
+ * while /uml_lint or /model_lint report errors (`details.count`, `details.findings`).
+ */
+function saveBlockedHint(details: unknown): string {
+  const { count, findings } = (details ?? {}) as { count?: unknown; findings?: unknown };
+  const listed = Array.isArray(findings)
+    ? (findings as { rule?: unknown; path?: unknown }[])
+        .slice(0, MAX_HINTED_ERRORS)
+        .map((f) => `${String(f.rule)}${typeof f.path === "string" ? ` ${f.path}` : ""}`)
+    : [];
+  const errors =
+    typeof count === "number" ? `${count} lint error${count === 1 ? "" : "s"}` : "Lint errors";
+  const first =
+    listed.length > 0
+      ? ` (${listed.join(", ")}${Number(count) > listed.length ? ", ..." : ""})`
+      : "";
+  return (
+    `${errors}${first} ${count === 1 ? "blocks" : "block"} saving and exporting under the style profile's blockSaveOnErrors. ` +
+    "Run uml_lint and model_lint, fix what they report, then retry; pass override: true to save or export anyway."
+  );
 }
 
 function parseEnvelope(text: string): StarUMLResponse | undefined {

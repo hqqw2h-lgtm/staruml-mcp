@@ -1,6 +1,6 @@
 /**
  * Which extension endpoints get a tool of their own. Every tool definition is resent with each
- * model turn: with one tool per endpoint of extension 0.3.0 (79), tools/list and the instructions
+ * model turn: with one tool per endpoint of extension 0.3.0 (88), tools/list and the instructions
  * cost about 12,000 tokens, the core tier under 2,000 (o200k_base, scripts/token-benchmark.mjs). The endpoints
  * most modelling sessions need are listed and the rest are reached through describe_endpoints and
  * call_endpoint.
@@ -80,8 +80,9 @@ export function selects(selection: ToolSelection, name: string): boolean {
  * reachable through a group without a release of this server.
  */
 const GROUP_RULES: readonly (readonly [string, RegExp])[] = [
-  // Checks that change nothing: StarUML's validation, the extension's lints, a spec diff.
-  ["quality", /lint|^validate_model$|^diff_diagram$/],
+  // Checks that change nothing: StarUML's validation, the extension's lints, a spec diff, and
+  // since extension #32 the quality score and the loop that raises it.
+  ["quality", /lint|^validate_model$|^diff_diagram$|^diagram_quality$|^improve_diagram$/],
   // Model checkpoints and the undo history they restore through.
   ["history", /snapshot|^diff_since$|^(undo|redo)$/],
   ["project", /project|modified/],
@@ -91,9 +92,10 @@ const GROUP_RULES: readonly (readonly [string, RegExp])[] = [
   // Patterns as data (extension #30): the library, applying, detecting, and the presets that
   // give one element the properties of a kind (value object, entity, ...).
   ["patterns", /pattern|preset/],
-  // Model first (extension #23): a model from an object spec, and the sequence diagrams'
-  // messages checked against and synced into its operations.
-  ["model", /^build_model$|_operations$|_messages$/],
+  // Model first (extension #23, #33): a model from an object spec, the diagrams derived from
+  // it, its text explanation, and the sequence diagrams' messages checked against and synced
+  // into its operations. model_lint is a check and sits in quality.
+  ["model", /^build_model$|^derive_diagrams$|^explain_model$|_operations$|_messages$/],
   // How views look: themes and per-view colours and fonts.
   ["style", /theme|style|color|font/],
   ["feature", /^add_/],

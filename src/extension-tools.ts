@@ -81,6 +81,7 @@ import {
   detectResult,
   patternResult,
 } from "./patterns.js";
+import { withReports } from "./reports.js";
 import type { StarUMLClient } from "./staruml-client.js";
 import {
   CORE_ENDPOINTS,
@@ -379,8 +380,12 @@ const RESULT_SHAPES: Record<
   [DETECT_PATTERNS]: detectResult,
 };
 
+/**
+ * The answer shaped for the model: the style and quality reports any authoring endpoint attaches
+ * compacted first (reports.ts), then the endpoint's own shape.
+ */
 function resultOf(name: string, data: unknown, input: Record<string, unknown>): CallToolResult {
-  return (RESULT_SHAPES[name] ?? jsonResult)(data, input);
+  return (RESULT_SHAPES[name] ?? jsonResult)(withReports(data), input);
 }
 
 /**
