@@ -69,6 +69,9 @@ jobs:
       - name: Load test
         run: npm run load-test -- --requests 2000 --max-p99-ms 4000 --min-rps 100
 
+      - name: Load test (one session)
+        run: npm run load-test -- --session --requests 2000 --max-p99-ms 4000 --min-rps 100
+
       - name: Load test (batch)
         run: npm run load-test -- --batch --requests 2000 --max-p99-ms 4000 --min-rps 100
 

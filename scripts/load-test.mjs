@@ -1,5 +1,9 @@
 #!/usr/bin/env node
-// Load test for the Streamable HTTP transport (stateless: one McpServer per request).
+// Load test for the Streamable HTTP transport.
+//
+// By default every request carries no session id, so the server builds a McpServer for it alone
+// (stateless fallback); with --session the script initializes once and sends every request in that
+// session, so one McpServer serves them all, as for an MCP client.
 //
 // Starts the built server (dist/index.js) as a child process and drives tools/call
 // get_all_diagrams_info at each concurrency level, or with --call-endpoint call_endpoint
@@ -13,7 +17,8 @@
 //
 // Usage: npm run build && node scripts/load-test.mjs
 //          [--concurrency 50,200] [--requests 5000] [--warmup 500]
-//          [--max-p99-ms N] [--min-rps N] [--live] [--call-endpoint | --batch | --build]
+//          [--max-p99-ms N] [--min-rps N] [--live] [--session]
+//          [--call-endpoint | --batch | --build]
 // STARUML_EXT_TOKEN reaches the server, so --live works with an extension that requires a token.
 // Exits non-zero on any failed request or a breached budget.
 
@@ -34,10 +39,16 @@ const { values: args } = parseArgs({
     "call-endpoint": { type: "boolean", default: false },
     batch: { type: "boolean", default: false },
     build: { type: "boolean", default: false },
+    session: { type: "boolean", default: false },
   },
 });
 
 const callEndpoint = args["call-endpoint"];
+const HEADERS = {
+  "Content-Type": "application/json",
+  Accept: "application/json, text/event-stream",
+};
+
 /** Read-only, so a --live run leaves the open project as it was. */
 const BATCH_OPS = [
   { path: "/get_project_info", as: "p" },
@@ -83,12 +94,13 @@ if (!existsSync(entry)) {
 const stub = args.live ? undefined : await startStub();
 const apiPort = stub?.port ?? 58321;
 const mcp = await startMcp(apiPort);
+const session = args.session ? await openSession() : undefined;
 
 let failed = false;
 try {
   await runLevel(Math.min(50, levels[0]), warmup);
   console.log(
-    `target: ${args.live ? "live StarUML" : "stub upstream"}, tool: ${label}, node ${process.version}, ${requestsPerLevel} requests per level`,
+    `target: ${args.live ? "live StarUML" : "stub upstream"}, tool: ${label}, ${session === undefined ? "stateless" : "one session"}, node ${process.version}, ${requestsPerLevel} requests per level`,
   );
   console.log("concurrency  requests   req/s    p50 ms   p90 ms   p99 ms   max ms  errors");
   for (const concurrency of levels) {
@@ -160,10 +172,39 @@ async function runLevel(concurrency, total) {
   };
 }
 
+/** `initialize` and `notifications/initialized`; the headers later requests carry. */
+async function openSession() {
+  const res = await fetch(mcp.url, {
+    method: "POST",
+    headers: HEADERS,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "init",
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "load-test", version: "0" },
+      },
+    }),
+  });
+  await res.text();
+  const id = res.headers.get("mcp-session-id");
+  if (id === null) throw new Error(`initialize answered HTTP ${res.status} without a session id`);
+  const headers = { ...HEADERS, "Mcp-Session-Id": id, "MCP-Protocol-Version": "2025-06-18" };
+  const ack = await fetch(mcp.url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
+  });
+  await ack.text();
+  return headers;
+}
+
 async function callTool(id) {
   const res = await fetch(mcp.url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+    headers: session ?? HEADERS,
     body: JSON.stringify({
       jsonrpc: "2.0",
       id,

@@ -113,13 +113,22 @@ prints a warning on start, since the endpoint has no authentication and its tool
 change projects and run StarUML commands. Put it behind a firewall or an authenticating proxy
 in that case.
 
-Limitations of the HTTP transport, which is stateless (a fresh MCP server per request):
+The HTTP transport keeps sessions (MCP 2025-06-18, Transports, "Session Management"): the
+answer to `initialize` carries an `Mcp-Session-Id`, and every request with that header reaches the
+same server, which remembers the client's capabilities and resource reads and holds its GET
+stream. So over HTTP, as over stdio, `view_diagram` shows the [inline viewer](#inline-viewer-mcp-apps)
+to clients that render MCP Apps, and `notifications/tools/list_changed` reaches every session when
+`doctor` reloads the manifest or switches the tier. Limits:
 
-- `view_diagram` always answers the PNG: the server never sees the client's `initialize` or its
-  read of the viewer resource, so it cannot tell that the client renders MCP Apps. Use stdio for
-  the inline viewer ([below](#inline-viewer-mcp-apps)).
-- `notifications/tools/list_changed` after `doctor` reloads the manifest or switches the tier
-  is not delivered; the client sees the new tool list on its next `tools/list`.
+- A session with no request in flight for `--session-timeout` (default 30 minutes) is closed; an
+  open GET stream counts as a request in flight. Its id then gets `404`, on which the spec has the
+  client initialize again.
+- At most `--max-sessions` (default 64) live sessions; one more closes the least recently used.
+  A core-tier session holds about 160 KB of heap.
+- A request without a session id (`curl`, scripts, clients that never initialize) is served
+  statelessly by a server built for it alone, as every request was in 0.4.0: it works, but has
+  no viewer and receives no notifications. `--max-sessions 0` serves every request that way.
+- Sessions live in memory: restarting the server ends them all.
 
 Restart Claude Code. Ask:
 > "What StarUML tools do you have?"
@@ -192,6 +201,8 @@ staruml-mcp [options]
       --api-host <url>     StarUML API host prefix   (default: http://localhost)
       --doctor             Check the setup, print a report and exit (1 on failure)
       --tools <tiers>      core | all | comma list   (default: core; env STARUML_MCP_TOOLS)
+      --session-timeout <duration>  close an idle HTTP session (default: 30m; ms, s, m or h)
+      --max-sessions <number>       live HTTP sessions, LRU beyond (default: 64; 0 = stateless)
   -V, --version            Print version
   -h, --help               Show help
 ```
@@ -459,10 +470,8 @@ is one self-contained HTML file with no external requests; it speaks the protoco
 - **Any other client**, or no compatible extension: the PNG image block `get_diagram_image_by_id`
   returns, from StarUML's built-in API, for `id` or the current diagram.
 
-The stateless HTTP transport builds a fresh server per request, which never sees the client's
-`initialize` or its resource reads, so over `--transport http` `view_diagram` always answers the
-PNG; the viewer needs stdio (Claude Desktop, Claude Code with a command) until the HTTP transport
-keeps sessions.
+Over `--transport http` this works within a session; a request sent without a session id gets
+a server of its own, which sees neither sign, and answers the PNG.
 
 ### Errors
 
@@ -531,10 +540,12 @@ path it prints.
 the per-op schema checks, and `--build` a `build_diagram` of a three-class Mermaid diagram with
 `upsert`, which adds the check against the whole request schema. StarUML and the extension are
 replaced by an in-process stub, which serves the bundled 0.3.0 manifest, so the numbers measure
-this server and a local StarUML does not change them. Every request builds a fresh `McpServer`
-(stateless mode), which dominates the cost. Any failed request makes the script exit non-zero;
-`--max-p99-ms` and `--min-rps` add budgets, and CI runs the default, `--batch` and `--build` paths
-with `--requests 2000 --max-p99-ms 2000 --min-rps 100`.
+this server and a local StarUML does not change them. By default no request carries a session
+id, so each builds a fresh `McpServer` (the stateless fallback), which dominates the cost;
+`--session` initializes once and sends every request in that session, as an MCP client does. Any
+failed request makes the script exit non-zero; `--max-p99-ms` and `--min-rps` add budgets, and CI
+runs the default, `--session`, `--batch` and `--build` paths with `--requests 2000 --max-p99-ms
+4000 --min-rps 100`.
 
 Measured on an Intel i9-9980HK (8 cores / 16 threads), macOS, Node 22.23.3, 5000 requests per
 level after 500 warm-up requests, load generator on the same machine, core tier (15 tools
@@ -570,6 +581,30 @@ requests per level, 0 errors on every path: `get_all_diagrams_info` 341–480 re
 `call_endpoint` 463 req/s, p99 184 ms; `batch` 482 req/s, p99 139 ms. These runs shared the CPU,
 so they show the paths still finish without errors under load rather than a regression against
 the table above.
+
+### HTTP sessions (#14)
+
+Stateless against one session, same build, runs interleaved (stateless, session, stateless,
+session) so both modes share the machine's state. 5000 requests per level after 500 warm-up
+requests, stub upstream, Node 22.23.3 on the i9-9980HK above; the machine ran other agents' test
+suites at a load average of 16–35, so absolute numbers are low and the ratio is what carries
+over. Ranges span the two runs of each mode, 0 errors throughout:
+
+| Tool | Concurrency | Stateless req/s | Session req/s | Stateless p99 | Session p99 |
+|---|---|---|---|---|---|
+| `get_all_diagrams_info` | 50 | 187–299 | 781–1148 | 624–817 ms | 78–120 ms |
+| `get_all_diagrams_info` | 200 | 371–376 | 719–1033 | 1848–2741 ms | 403–698 ms |
+| `call_endpoint` | 50 | 300–481 | 481–1403 | 225–784 ms | 64–257 ms |
+| `call_endpoint` | 200 | 470–488 | 1078–1770 | 956–3235 ms | 173–1045 ms |
+| `batch` (4 ops) | 50 | 326–596 | 1241–1341 | 142–538 ms | 61–68 ms |
+| `batch` (4 ops) | 200 | 543–659 | 1508–1601 | 553–1647 ms | 194–785 ms |
+| `build_diagram` | 50 | 387–577 | 512–1473 | 149–441 ms | 61–298 ms |
+| `build_diagram` | 200 | 549–651 | 1695–1791 | 548–655 ms | 175–390 ms |
+
+In a session a request no longer builds a server, registers 20 tools and connects a transport, so
+throughput rises 2–4x and p99 falls by a similar factor. Against StarUML 7.1.1 with the extension
+(`--live --requests 1000 --concurrency 50`, `get_all_diagrams_info`, two interleaved runs each, 0
+errors): stateless 270–428 req/s, p99 152–351 ms; one session 769–898 req/s, p99 73–94 ms.
 
 ## Token efficiency
 

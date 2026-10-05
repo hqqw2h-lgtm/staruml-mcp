@@ -138,8 +138,8 @@ export function createServer(config: ServerConfig = {}): McpServer {
   registerResources(server, client, catalog);
 
   // A host may render MCP Apps without declaring the capability; fetching the view is the other
-  // sign that it does (the approach of jgraph/drawio-mcp's app server). Over the stateless HTTP
-  // transport each request gets a new server that sees neither, so the PNG is returned there.
+  // sign that it does (the approach of jgraph/drawio-mcp's app server). An HTTP request without a
+  // session gets a new server that sees neither, so the PNG is returned there.
   let viewerRead = false;
   server.registerResource(
     "viewer",
@@ -248,10 +248,10 @@ export function createServer(config: ServerConfig = {}): McpServer {
     },
     async ({ tools }) =>
       runTool("run doctor", async () => {
-        if (tools !== undefined) catalog.selection = selectionArgument(tools);
+        const selection = tools === undefined ? undefined : selectionArgument(tools);
         const { checks, catalog: next } = await diagnose(client);
-        catalog.current = next;
-        syncExtensionTools(server, client, catalog, extensionTools);
+        // Re-syncs this server's tools and those of every other live session.
+        catalog.update(next, selection);
         return textResult(formatReport([...checks, tierCheck(catalog)]));
       }),
   );
@@ -259,7 +259,10 @@ export function createServer(config: ServerConfig = {}): McpServer {
   // Everything else comes from the manifest of staruml-mcp-extension: the live one read at
   // startup, or the bundled snapshot when the extension was not reachable.
   const extensionTools: RegisteredExtensionTools = new Map();
-  syncExtensionTools(server, client, catalog, extensionTools);
+  const sync = () => syncExtensionTools(server, client, catalog, extensionTools);
+  sync();
+  // The catalog outlives this server, so the subscription must end with it.
+  server.server.onclose = catalog.subscribe(sync);
   registerPrompts(server, catalog);
 
   return server;

@@ -17,6 +17,7 @@ import {
   run,
   TOOLS_ENV,
 } from "../src/index.js";
+import { DEFAULT_SESSION_LIMITS } from "../src/http-sessions.js";
 import { CORE_ENDPOINTS, parseToolSelection } from "../src/tiers.js";
 import packageJson from "../package.json" with { type: "json" };
 import { BUNDLED_MANIFEST } from "../src/manifest.js";
@@ -53,6 +54,7 @@ describe("parseArgs", () => {
       doctor: false,
       tools: { all: false, names: new Set(CORE_ENDPOINTS), label: "core" },
       extToken: undefined,
+      sessions: DEFAULT_SESSION_LIMITS,
     });
   });
 
@@ -117,6 +119,10 @@ describe("parseArgs", () => {
         "all",
         "--ext-token",
         "s3cret",
+        "--session-timeout",
+        "90s",
+        "--max-sessions",
+        "0",
       ]),
     ).toEqual({
       transport: "http",
@@ -128,7 +134,29 @@ describe("parseArgs", () => {
       doctor: true,
       tools: parseToolSelection("all"),
       extToken: "s3cret",
+      sessions: { idleTimeoutMs: 90_000, maxSessions: 0 },
     });
+  });
+
+  it.each([
+    ["250ms", 250],
+    ["2h", 7_200_000],
+    ["30m", 1_800_000],
+  ])("reads --session-timeout %s", (value, ms) => {
+    const { sessions } = parseArgs([...ARGV0, "--session-timeout", value], {});
+    expect(sessions.idleTimeoutMs).toBe(ms);
+  });
+
+  it.each(["30", "0m", "1.5h", "m", "-1s"])("rejects --session-timeout %s", (value) => {
+    expect(() => parseArgs([...ARGV0, "--session-timeout", value], {})).toThrow(
+      `Invalid --session-timeout: "${value}". Use a positive number with ms, s, m or h, e.g. 30m.`,
+    );
+  });
+
+  it.each(["-1", "two", "1.5"])("rejects --max-sessions %s", (value) => {
+    expect(() => parseArgs([...ARGV0, "--max-sessions", value], {})).toThrow(
+      `Invalid --max-sessions: "${value}". Must be a non-negative integer.`,
+    );
   });
 
   it("rejects an unknown transport", () => {

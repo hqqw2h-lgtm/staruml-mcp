@@ -11,8 +11,14 @@
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import {
+  ToolListChangedNotificationSchema,
+  type CallToolResult,
+  type ClientCapabilities,
+} from "@modelcontextprotocol/sdk/types.js";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { diagnose, healthy } from "../../src/doctor.js";
 import { CatalogState } from "../../src/extension-tools.js";
 import { main, type RunningServer } from "../../src/index.js";
@@ -1408,6 +1414,68 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
       const prompt = await rpc(base, 3, "prompts/get", { name: "review-diagram" });
       expect(JSON.stringify(prompt.message.result)).toContain("describe_diagram(");
+    });
+
+    /** An SDK client in its own HTTP session, as Claude Code connects with --transport http. */
+    const session = async (capabilities: ClientCapabilities = {}) => {
+      const transport = new StreamableHTTPClientTransport(
+        new URL(`http://127.0.0.1:${server.port}/mcp`),
+      );
+      const client = new Client({ name: "staruml-mcp-live", version: "0" }, { capabilities });
+      await client.connect(transport);
+      const call = async (name: string, args: Record<string, unknown> = {}) =>
+        (await client.callTool({ name, arguments: args })) as CallToolResult;
+      return { client, transport, call };
+    };
+
+    it("shows the SVG viewer in an HTTP session, from capabilities or a viewer read (#14)", async () => {
+      const app = await session(UI_CAPABILITIES);
+      const plain = await session();
+      try {
+        expect(app.transport.sessionId).toBeDefined();
+        const list = async () =>
+          JSON.parse(ok(await app.call("get_all_diagrams_info"))) as { id: string }[];
+        const before = await list();
+        ok(
+          await app.call("generate_diagram", {
+            code: "classDiagram\n  class HttpSessionA\n  class HttpSessionB\n  HttpSessionA --> HttpSessionB",
+          }),
+        );
+        const id = (await list()).find((d) => !before.some((b) => b.id === d.id))!.id;
+
+        const shown = (await app.call("view_diagram", { id })).structuredContent as { svg: string };
+        expect(shown.svg).toMatch(/^<svg [\s\S]*<\/svg>$/);
+        expect(shown.svg).toContain(">HttpSessionA<");
+
+        expect((await plain.call("view_diagram", { id })).content[0]!.type).toBe("image");
+        await plain.client.readResource({ uri: VIEWER_URI });
+        const read = (await plain.call("view_diagram", { id })).structuredContent as {
+          svg: string;
+        };
+        expect(read.svg).toContain(">HttpSessionB<");
+      } finally {
+        await Promise.all([app.client.close(), plain.client.close()]);
+      }
+    });
+
+    it("notifies every HTTP session when doctor switches the tier (#14)", async () => {
+      const a = await session();
+      const b = await session();
+      const changed = { a: 0, b: 0 };
+      a.client.setNotificationHandler(ToolListChangedNotificationSchema, () => void changed.a++);
+      b.client.setNotificationHandler(ToolListChangedNotificationSchema, () => void changed.b++);
+      try {
+        ok(await a.call("doctor", { tools: "core,create_diagram" }));
+        await vi.waitFor(() => {
+          expect(changed.a).toBeGreaterThan(0);
+          expect(changed.b).toBeGreaterThan(0);
+        });
+        const names = (await b.client.listTools()).tools.map((t) => t.name);
+        expect(names).toContain("create_diagram");
+      } finally {
+        await a.call("doctor", { tools: "core" });
+        await Promise.all([a.client.close(), b.client.close()]);
+      }
     });
 
     it("listens on loopback only", async () => {

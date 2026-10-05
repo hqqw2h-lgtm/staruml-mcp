@@ -86,14 +86,43 @@ export function bundledCatalog(): ExtensionCatalog {
 }
 
 /**
- * Shared by every McpServer of a process: the HTTP transport builds one per request, and the
- * doctor tool replaces `current` after reading a newer manifest, or `selection` when asked to.
+ * Shared by every McpServer of a process: one per HTTP session or stateless request, or the stdio
+ * one. The doctor tool replaces `current` after reading the manifest again, and `selection` when
+ * asked to; every subscribed server then re-syncs its tools, so a session other than the doctor's
+ * also gets `notifications/tools/list_changed`.
  */
 export class CatalogState {
+  private readonly listeners = new Set<() => void>();
+
   constructor(
-    public current: ExtensionCatalog = bundledCatalog(),
-    public selection: ToolSelection = parseToolSelection(DEFAULT_TOOLS),
+    private currentCatalog: ExtensionCatalog = bundledCatalog(),
+    private currentSelection: ToolSelection = parseToolSelection(DEFAULT_TOOLS),
   ) {}
+
+  get current(): ExtensionCatalog {
+    return this.currentCatalog;
+  }
+
+  get selection(): ToolSelection {
+    return this.currentSelection;
+  }
+
+  update(current: ExtensionCatalog, selection: ToolSelection = this.currentSelection): void {
+    this.currentCatalog = current;
+    this.currentSelection = selection;
+    for (const listener of [...this.listeners]) listener();
+  }
+
+  /** Calls `listener` after every {@link update}; the returned function unsubscribes. */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  /** Subscribed listeners; a server unsubscribes when it closes. */
+  get subscribers(): number {
+    return this.listeners.size;
+  }
 }
 
 /** The summary tool replaces the endpoint's own: a full /introspect answer is about 250 KB. */

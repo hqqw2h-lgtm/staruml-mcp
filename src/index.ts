@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import {
   createServer as createHttpServer,
+  type IncomingMessage,
   type RequestListener,
   type Server as HttpServer,
   type ServerResponse,
@@ -9,10 +10,13 @@ import type { AddressInfo } from "node:net";
 import type { Readable, Writable } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { Command } from "commander";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { diagnose, formatReport, healthy } from "./doctor.js";
 import { CatalogState, tierCheck } from "./extension-tools.js";
+import { DEFAULT_SESSION_LIMITS, SessionStore, type SessionLimits } from "./http-sessions.js";
 import { createServer, type ServerConfig } from "./server.js";
 import { StarUMLClient } from "./staruml-client.js";
 import { DEFAULT_TOOLS, parseToolSelection, type ToolSelection } from "./tiers.js";
@@ -33,6 +37,8 @@ export interface CliOptions {
   tools: ToolSelection;
   /** The extension's access token; undefined when none is configured. */
   extToken: string | undefined;
+  /** HTTP session idle timeout and cap. */
+  sessions: SessionLimits;
 }
 
 /**
@@ -93,6 +99,16 @@ export function parseArgs(
       `Access token staruml-mcp-extension requires (env ${EXT_TOKEN_ENV}); sent as Authorization: Bearer`,
     )
     .option(
+      "--session-timeout <duration>",
+      "Close an HTTP session idle this long: a number with ms, s, m or h",
+      `${DEFAULT_SESSION_LIMITS.idleTimeoutMs / 60_000}m`,
+    )
+    .option(
+      "--max-sessions <number>",
+      "Live HTTP sessions; the least recently used is closed beyond it, 0 serves every request statelessly",
+      String(DEFAULT_SESSION_LIMITS.maxSessions),
+    )
+    .option(
       "--tools <tiers>",
       `Extension tools to list: core, all or comma-separated names (env ${TOOLS_ENV}; default ${DEFAULT_TOOLS})`,
     )
@@ -108,6 +124,8 @@ export function parseArgs(
     doctor: boolean;
     tools?: string;
     extToken?: string;
+    sessionTimeout: string;
+    maxSessions: string;
   }>();
   const fromEnv = env[TOOLS_ENV];
 
@@ -126,6 +144,10 @@ export function parseArgs(
         : parseToolSelection(fromEnv || DEFAULT_TOOLS, TOOLS_ENV),
     // An empty value means no token, as an empty mcp-ext.token preference does in the extension.
     extToken: (raw.extToken ?? env[EXT_TOKEN_ENV]) || undefined,
+    sessions: {
+      idleTimeoutMs: parseDuration(raw.sessionTimeout, "--session-timeout"),
+      maxSessions: parseCount(raw.maxSessions, "--max-sessions"),
+    },
   };
 }
 
@@ -177,7 +199,10 @@ export async function main(
         "command); bind to 127.0.0.1 unless a firewall or proxy restricts who can connect.",
     );
   }
-  const handler = createHttpHandler(serverConfig, createServer, { loopbackOnly });
+  const handler = createHttpHandler(serverConfig, createServer, {
+    loopbackOnly,
+    sessions: options.sessions,
+  });
   const httpServer = await listen(createHttpServer(handler), options.port, options.host);
   const { port } = httpServer.address() as AddressInfo;
   console.error(
@@ -185,11 +210,13 @@ export async function main(
   );
   return {
     port,
-    close: () =>
-      new Promise<void>((resolve) => {
+    close: async () => {
+      await handler.close();
+      await new Promise<void>((resolve) => {
         httpServer.close(() => resolve());
         httpServer.closeAllConnections();
-      }),
+      });
+    },
   };
 }
 
@@ -202,6 +229,10 @@ export interface HttpHandlerOptions {
    * the MCP spec (2025-06-18, Transports) requires. Set when the server binds to loopback.
    */
   loopbackOnly?: boolean;
+  /** Session idle timeout and cap; {@link DEFAULT_SESSION_LIMITS} when absent. */
+  sessions?: SessionLimits;
+  /** The session clock; tests advance it instead of waiting. */
+  now?: () => number;
 }
 
 /** `localhost`, 127.0.0.0/8 and ::1, with or without IPv6 brackets or the IPv4-mapped prefix. */
@@ -238,17 +269,25 @@ function nonLoopback(headers: { host?: string; origin?: string }): string | unde
   return undefined;
 }
 
+/** A request listener that owns sessions, which `close` ends. */
+export interface HttpHandler extends RequestListener {
+  sessions: SessionStore;
+  close(): Promise<void>;
+}
+
 /**
- * Stateless mode: a fresh McpServer and transport per request, so reconnecting clients
- * (Claude Code, Cursor) never inherit state from an earlier session. This is the stateless
- * pattern from the MCP TypeScript SDK README ("Without Session Management").
+ * `initialize` opens a session ({@link SessionStore}) and requests carrying its id reach the same
+ * McpServer. A request with neither falls back to stateless mode, the pattern from the MCP
+ * TypeScript SDK README ("Without Session Management"): a fresh McpServer and transport for that
+ * request alone, so clients that never initialize (scripts, curl) keep working.
  */
 export function createHttpHandler(
   serverConfig: ServerConfig,
   factory: McpServerFactory = createServer,
   options: HttpHandlerOptions = {},
-): RequestListener {
-  return async (req, res) => {
+): HttpHandler {
+  const sessions = new SessionStore(options.sessions, options.now);
+  const handler = async (req: IncomingMessage, res: ServerResponse) => {
     const url = req.url ?? "/";
 
     const refused = options.loopbackOnly ? nonLoopback(req.headers) : undefined;
@@ -289,17 +328,33 @@ export function createHttpHandler(
       return;
     }
 
-    const mcpServer = factory(serverConfig);
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-
-    res.on("close", () => {
-      void transport.close();
-      void mcpServer.close();
-    });
-
     try {
-      await mcpServer.connect(transport);
-      await transport.handleRequest(req, res);
+      const sessionId = req.headers["mcp-session-id"];
+      if (sessions.enabled && typeof sessionId === "string") {
+        // The spec (2025-06-18, Session Management, item 4) has the client start a new session
+        // on 404, which is what an expired or evicted session needs.
+        if (!(await sessions.handle(sessionId, req, res))) {
+          sendJson(res, 404, jsonRpcError(-32001, "Session not found"));
+        }
+        return;
+      }
+      let body: unknown;
+      if (req.method === "POST") {
+        try {
+          body = JSON.parse(await readBody(req));
+        } catch {
+          sendJson(res, 400, jsonRpcError(-32700, "Parse error: Invalid JSON"));
+          return;
+        }
+      }
+      const initializes = Array.isArray(body)
+        ? body.some(isInitializeRequest)
+        : isInitializeRequest(body);
+      if (sessions.enabled && initializes) {
+        await sessions.open(factory(serverConfig), req, res, body);
+        return;
+      }
+      await stateless(factory(serverConfig), req, res, body);
     } catch (error) {
       console.error("[staruml-mcp] request error:", error);
       if (res.headersSent) {
@@ -312,6 +367,34 @@ export function createHttpHandler(
       });
     }
   };
+  return Object.assign(handler, { sessions, close: () => sessions.close() });
+}
+
+async function stateless(
+  mcpServer: McpServer,
+  req: IncomingMessage,
+  res: ServerResponse,
+  body: unknown,
+): Promise<void> {
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  res.on("close", () => {
+    void transport.close();
+    void mcpServer.close();
+  });
+  await mcpServer.connect(transport);
+  await transport.handleRequest(req, res, body);
+}
+
+async function readBody(req: IncomingMessage): Promise<string> {
+  let text = "";
+  req.setEncoding("utf8");
+  for await (const chunk of req) text += chunk as string;
+  return text;
+}
+
+/** A JSON-RPC error without a request id, as the SDK's transport writes its own. */
+function jsonRpcError(code: number, message: string): Record<string, unknown> {
+  return { jsonrpc: "2.0", error: { code, message }, id: null };
 }
 
 /**
@@ -370,6 +453,27 @@ function validateTransport(value: string): Transport {
     return value as Transport;
   }
   throw new Error(`Invalid --transport: "${value}". Must be one of: ${TRANSPORTS.join(", ")}`);
+}
+
+const UNIT_MS: Record<string, number> = { ms: 1, s: 1000, m: 60_000, h: 3_600_000 };
+
+/** `90s`, `30m`, `2h`: a duration must name its unit. */
+function parseDuration(value: string, flag: string): number {
+  const match = /^(\d+)(ms|s|m|h)$/.exec(value);
+  const ms = match === null ? 0 : Number(match[1]) * UNIT_MS[match[2]!]!;
+  if (!(ms > 0)) {
+    throw new Error(
+      `Invalid ${flag}: "${value}". Use a positive number with ms, s, m or h, e.g. 30m.`,
+    );
+  }
+  return ms;
+}
+
+function parseCount(value: string, flag: string): number {
+  if (!/^\d+$/.test(value)) {
+    throw new Error(`Invalid ${flag}: "${value}". Must be a non-negative integer.`);
+  }
+  return Number(value);
 }
 
 function parsePort(value: string, flag: string, min: number): number {
