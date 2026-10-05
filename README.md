@@ -224,8 +224,8 @@ default and reaches every other extension endpoint through two generic tools:
 
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
-| `core` (default) | the 6 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`; `describe_endpoints`, `call_endpoint` | 1,995 |
-| `all` | the 6 above and one tool per manifest endpoint | 9,325 |
+| `core` (default) | the 6 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`; `describe_endpoints`, `call_endpoint` | 1,992 |
+| `all` | the 6 above and one tool per manifest endpoint | 9,322 |
 | `core,create_diagram,…` | the 6 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
 Token counts include the server instructions (o200k_base, extension 0.3.0, `npm run
@@ -492,7 +492,7 @@ offline. Upstream responses are shaped like StarUML 7.1.1 + extension 0.3.0 outp
 summaries; the command list is the 322 ids captured from 7.1.1 in `scripts/benchmark-data/`). Four
 servers see the same data: `56864ca` (before issue #5), `0cfc06b` (issue #5, the last hand-written
 tool set, 21 tools), `45bedd4` (phase 2a, one tool per manifest endpoint, 34 tools) and the current
-one with the default core tier (15 tools). The first three are loaded with `git show` and run on
+one with the default core tier (16 tools). The first three are loaded with `git show` and run on
 the current dependencies (zod 4 lists schemas about 100 tokens shorter than zod 3 did, so #5's
 definitions measure 1831 here, 1930 when it was committed). When a step's tool is not listed, the
 scenario calls it through `call_endpoint` and first asks `describe_endpoints` for every such
@@ -517,18 +517,18 @@ Two accountings, side by side:
 
 | | pre-#5 | #5 | phase 2a | now batch | now (core) |
 |---|---|---|---|---|---|
-| Tools listed | 21 | 21 | 34 | 15 | 15 |
-| Definitions + instructions | 3011 | 1831 | 6154 | 1995 | 1995 |
+| Tools listed | 21 | 21 | 34 | 16 | 16 |
+| Definitions + instructions | 3011 | 1831 | 6154 | 1992 | 1992 |
 
 (a) Definitions once per scenario, plus results:
 
 | Scenario | Calls before / now | pre-#5 | #5 | phase 2a | now batch | now | vs pre-#5 | vs #5 |
 |---|---|---|---|---|---|---|---|---|
-| Mermaid class diagram + preview | 4 / 4 | 3197 | 1951 | 6274 | 2115 | 2115 | −33.8% | +8.4% |
-| Native use-case diagram | 11 / 2 | 3982 | 2497 | 6820 | 3726 | 2335 | −41.4% | −6.5% |
-| Inspect and refactor a class model | 8 / 8 | 6227 | 4234 | 8557 | 4601 | 4601 | −26.1% | +8.7% |
-| Native class diagram + export | 11 / 3 | 3917 | 2458 | 6781 | 3745 | 2358 | −39.8% | −4.1% |
-| All scenarios | 34 / 17 | 17323 | 11140 | 28432 | 14187 | 11409 | −34.1% | +2.4% |
+| Mermaid class diagram + preview | 4 / 4 | 3197 | 1951 | 6274 | 2112 | 2112 | −33.9% | +8.3% |
+| Native use-case diagram | 11 / 2 | 3982 | 2497 | 6820 | 3723 | 2332 | −41.4% | −6.6% |
+| Inspect and refactor a class model | 8 / 8 | 6227 | 4234 | 8557 | 4598 | 4598 | −26.2% | +8.6% |
+| Native class diagram + export | 11 / 3 | 3917 | 2458 | 6781 | 3742 | 2355 | −39.9% | −4.2% |
+| All scenarios | 34 / 17 | 17323 | 11140 | 28432 | 14175 | 11397 | −34.2% | +2.3% |
 
 (b) Definitions once per session, plus results and calls:
 
@@ -538,27 +538,27 @@ Two accountings, side by side:
 | Native use-case diagram | 1490 | 1185 | 1185 | 2223 | 449 | −69.9% | −62.1% |
 | Inspect and refactor a class model | 3369 | 2556 | 2556 | 2805 | 2805 | −16.7% | +9.7% |
 | Native class diagram + export | 1434 | 1155 | 1155 | 2259 | 496 | −65.4% | −57.1% |
-| Definitions, once | 3011 | 1831 | 6154 | 1995 | 1995 | | |
-| Session | 9586 | 6943 | 11266 | 9498 | 5961 | −37.8% | −14.1% |
+| Definitions, once | 3011 | 1831 | 6154 | 1992 | 1992 | | |
+| Session | 9586 | 6943 | 11266 | 9495 | 5958 | −37.8% | −14.2% |
 
 Targets of issues #5 and #8, under each accounting:
 
 | Target | (a) per scenario | (b) per session |
 |---|---|---|
-| #5 / #8: 60% below pre-#5, first three scenarios | not met: 9051 against ≤ 5362 (−32.5%) | not met: 5465 against ≤ 3260 (−33.0%) |
-| #5 / #8: 60% below pre-#5, all four scenarios | not met: 11409 against ≤ 6929 (−34.1%) | not met: 5961 against ≤ 3834 (−37.8%) |
-| #8: core definitions ≤ 2,000 | met: 1995 | met: 1995 |
-| #8: all scenarios below #5 | not met: 11409 against 11140 (+2.4%) | met: 5961 against 6943 (−14.1%) |
+| #5 / #8: 60% below pre-#5, first three scenarios | not met: 9042 against ≤ 5362 (−32.6%) | not met: 5462 against ≤ 3260 (−33.0%) |
+| #5 / #8: 60% below pre-#5, all four scenarios | not met: 11397 against ≤ 6929 (−34.2%) | not met: 5958 against ≤ 3834 (−37.8%) |
+| #8: core definitions ≤ 2,000 | met: 1992 | met: 1992 |
+| #8: all scenarios below #5 | not met: 11397 against 11140 (+2.3%) | met: 5958 against 6943 (−14.2%) |
 
 `build_diagram` does what it is for: a native diagram costs 449 and 496 tokens of results and calls
 (the spec it is given included), against 1185 and 1155 for #5's one call per element and 2223 and
 2259 for one `batch`, whose ops repeat every parent and diagram id and need `describe_endpoints` for
 four endpoint schemas. Under (a) that saving is hidden by the definitions, counted four times
-(7980 of 11409 tokens); under (b) the session is 14.1% below #5 and 37.8% below pre-#5. What keeps
-(b) above the 60% target is the fixed definitions (1995, a third of the session) and the refactor
+(7968 of 11397 tokens); under (b) the session is 14.2% below #5 and 37.8% below pre-#5. What keeps
+(b) above the 60% target is the fixed definitions (1992, a third of the session) and the refactor
 scenario, whose `get_all_commands` result alone is 1947 tokens of the 322 command ids; neither is
-touched by diagram building. `--tools all` lists 61 tools for 9325 tokens (all scenarios (a)
-40394, (b) 12864). Generated descriptions stay one line of at most 100 characters (a test enforces
+touched by diagram building. `--tools all` lists 62 tools for 9322 tokens (all scenarios (a)
+40382, (b) 12861). Generated descriptions stay one line of at most 100 characters (a test enforces
 it on every listed tool), and a test keeps the core listing within 2,000 tokens.
 
 ## Architecture

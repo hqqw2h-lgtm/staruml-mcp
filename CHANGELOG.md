@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/comparison-drawio.md`: a feature-by-feature comparison with jgraph/drawio-mcp (#12).
 
 ### Changed
+- Token benchmark re-run with `view_diagram` listed: the core tier is 16 tools and 1,992 definition tokens, `--tools all` 62 tools and 9,322; README numbers updated (#10, #12).
 - `export_diagram` lists a hand-written description and shorter parameter descriptions, 147 tools/list tokens instead of 208, which keeps the core tier with `view_diagram` within 2,000 tokens; bodies are still checked against the manifest's whole request schema before they are sent (#10).
 - The unreachable hints name the `doctor` tool, which the server instructions no longer repeat with every turn (#7).
 - Targets staruml-mcp-extension 0.3.x. Element results are its summaries `{_id, _type, name, _parent}`; `fields`, `summary`, `depth`, `limit` and `cursor` are passed through (read-only tools list the projection, writing tools accept it unlisted); `/create_*_with_view` return `{view, model}`; wrong-typed arguments are rejected by the tool's schema before any request; the extension's error codes (`INVALID_ARGUMENT`, `NOT_FOUND`, `NO_PROJECT`, `STARUML_ERROR`, …) and HTTP statuses 400/404/409/422 are passed through, and `UNKNOWN_ENDPOINT` gets the upgrade hint (#4).
