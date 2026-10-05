@@ -242,7 +242,7 @@ describe("startup check", () => {
       expect(names).toContain("create_diagram");
       expect(names).not.toContain("call_endpoint");
       expect(console.error).toHaveBeenCalledWith(
-        expect.stringMatching(/\ntier +ok +all: 29 extension tools listed, 0 endpoints through/),
+        expect.stringMatching(/\ntier +ok +all: 50 extension tools listed, 0 endpoints through/),
       );
     } finally {
       await server.close();

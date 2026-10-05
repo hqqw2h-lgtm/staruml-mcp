@@ -1,7 +1,7 @@
 /**
  * Which extension endpoints get a tool of their own. Every tool definition is resent with each
- * model turn: with one tool per endpoint of extension 0.3.0, tools/list and the instructions cost
- * 5,687 tokens, the core tier 1,331 (o200k_base, scripts/token-benchmark.mjs). The endpoints most
+ * model turn: with one tool per endpoint of extension 0.3.0 (50), tools/list and the instructions
+ * cost 8,412 tokens, the core tier 1,736 (o200k_base, scripts/token-benchmark.mjs). The endpoints most
  * modelling sessions need are listed and the rest are reached through describe_endpoints and
  * call_endpoint.
  */
@@ -67,11 +67,12 @@ export function selects(selection: ToolSelection, name: string): boolean {
  * reachable through a group without a release of this server.
  */
 const GROUP_RULES: readonly (readonly [string, RegExp])[] = [
-  ["project", /project/],
+  ["project", /project|modified/],
   ["command", /command/],
   ["meta", /^(introspect|debug)$/],
   ["feature", /^add_/],
-  ["diagram", /diagram|view|layout|export|image|style|color|font|move|resize|undo|redo/],
+  ["editor", /selection|editor|undo|redo/],
+  ["diagram", /diagram|view|layout|export|image|style|color|font|move|resize|z_order/],
   ["element", /./],
 ];
 

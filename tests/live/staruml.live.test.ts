@@ -71,6 +71,12 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
   let listed: Set<string>;
 
+  /** The class views of a model element; /get_views_of also lists their compartment views. */
+  const classViews = async (id: string) =>
+    payload<{ elements: Summary[] }>(await call("get_views_of", { id }))
+      .elements.filter((v) => v._type === "UMLClassView")
+      .map((v) => v._id);
+
   /** The tool of that name, or call_endpoint for an endpoint without one. */
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     called.add(name);
@@ -153,7 +159,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       const other = await connect({ catalog: state });
       try {
         expect(ok(await other.call("doctor", { tools: "core,create_diagram" }))).toMatch(
-          /tier +ok +core,create_diagram: 6 extension tools listed/,
+          /tier +ok +core,create_diagram: 8 extension tools listed/,
         );
         const names = (await other.client.listTools()).tools.map((t) => t.name);
         expect(names).toContain("create_diagram");
@@ -379,6 +385,8 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       expect(book.model!._type).toBe("UMLClass");
       ids.book = book.model!._id;
       ids.author = author.model!._id;
+      ids.bookView = book.view!._id;
+      ids.authorView = author.view!._id;
 
       const edge = payload<Created>(
         await call("create_edge_with_view", {
@@ -512,6 +520,141 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         ),
       ).toMatchObject({ stereotype: "entity", documentation: "A published work." });
     });
+
+    it("builds a class diagram with one batch call, one undo step", async () => {
+      const built = payload<{
+        succeeded: number;
+        results: { as?: string; data: Created & Summary }[];
+      }>(
+        await call("batch", {
+          ops: [
+            {
+              path: "/create_diagram",
+              body: { type: "UMLClassDiagram", parentId: packageId, name: "Batched" },
+              as: "d",
+            },
+            ...["Shelf", "Copy"].map((name, i) => ({
+              path: "/create_element_with_view",
+              body: {
+                type: "UMLClass",
+                parentId: packageId,
+                diagramId: "$d",
+                name,
+                x: 100 + 250 * i,
+                y: 100,
+              },
+              as: name.toLowerCase(),
+            })),
+            { path: "/add_attribute", body: { ownerId: "$shelf.model", name: "code" } },
+            {
+              path: "/create_edge_with_view",
+              body: {
+                type: "UMLAssociation",
+                diagramId: "$d",
+                tailViewId: "$shelf.view",
+                headViewId: "$copy.view",
+              },
+            },
+          ],
+        }),
+      );
+      expect(built.succeeded).toBe(5);
+      expect(JSON.stringify(built)).not.toContain('"path"');
+      const shelf = built.results[1]!.data.model!._id;
+      ids.batchedDiagram = built.results[0]!.data._id;
+      expect(await classViews(shelf)).toHaveLength(1);
+
+      expect(payload<{ modified: boolean }>(await call("is_modified")).modified).toBe(true);
+      ok(await call("undo"));
+      expect(failure(await call("get_element_by_id", { id: shelf })).code).toBe("NOT_FOUND");
+      ok(await call("redo"));
+      expect(payload<Summary>(await call("get_element_by_id", { id: shelf })).name).toBe("Shelf");
+    });
+
+    it("refuses a dangling batch reference locally and rolls back an atomic failure", async () => {
+      expect(
+        failure(await call("batch", { ops: [{ path: "/delete_element", body: { id: "$nope" } }] })),
+      ).toMatchObject({
+        code: "INVALID_ARGUMENT",
+        message: "ops.0.body.id: $nope names no earlier op",
+      });
+
+      const error = failure(
+        await call("batch", {
+          ops: [
+            {
+              path: "/create_element",
+              body: { type: "UMLClass", parentId: packageId, name: "Ghost" },
+            },
+            { path: "/delete_element", body: { id: "missing-id" } },
+          ],
+        }),
+      );
+      expect(error).toMatchObject({ code: "NOT_FOUND", status: 404 });
+      expect(error.message).toContain("ops.1 /delete_element failed, batch rolled back");
+      expect(
+        payload<{ count: number }>(await call("find_elements", { type: "UMLClass", name: "Ghost" }))
+          .count,
+      ).toBe(0);
+    });
+
+    it("looks up views, edges, relationships and references", async () => {
+      const count = async (name: string, args: Record<string, unknown>) =>
+        payload<{ count: number }>(await call(name, args)).count;
+
+      expect(await classViews(ids.book!)).toEqual([ids.bookView]);
+      expect(await count("get_edge_views_of", { id: ids.bookView })).toBeGreaterThan(0);
+      expect(await count("get_relationships_of", { id: ids.book })).toBeGreaterThanOrEqual(2);
+      expect(await count("get_refs_to", { id: ids.book })).toBeGreaterThan(0);
+      expect(await count("get_connected_node_views", { id: ids.bookView })).toBe(1);
+    });
+
+    it("lays out, moves, resizes, styles and reorders views", async () => {
+      ok(await call("layout_diagram", { id: classDiagramId, direction: "LR" }));
+      ok(await call("move_views", { ids: [ids.bookView], dx: 10, dy: 5 }));
+      ok(await call("resize_node", { id: ids.bookView, width: 180, height: 90 }));
+      ok(await call("set_view_style", { ids: [ids.bookView], fillColor: "#ffeecc" }));
+      ok(await call("set_z_order", { ids: [ids.bookView], position: "front" }));
+
+      const view = payload<Summary>(
+        await call("get_element_by_id", { id: ids.bookView, fields: ["width", "fillColor"] }),
+      );
+      // StarUML widens a class view to fit its compartments when it is next drawn.
+      expect(view.fillColor, JSON.stringify(view)).toBe("#ffeecc");
+      expect(view.width, JSON.stringify(view)).toBeGreaterThanOrEqual(180);
+    });
+
+    it("sets and reads the selection and editor state", async () => {
+      ok(await call("switch_diagram", { id: classDiagramId }));
+      ok(await call("set_selection", { viewIds: [ids.bookView] }));
+      expect(JSON.stringify(payload(await call("get_selection")))).toContain(ids.bookView);
+
+      ok(await call("set_editor_state", { zoom: 1.5 }));
+      expect(payload<{ zoom: number }>(await call("get_editor_state")).zoom).toBe(1.5);
+      ok(await call("set_editor_state", { zoom: 1 }));
+    });
+
+    it("exports a diagram as a PNG image block, to a file, to PDF and to HTML", async () => {
+      const result = await call("export_diagram", { id: classDiagramId });
+      ok(result);
+      const image = result.content[0] as { type: string; data: string; mimeType: string };
+      expect(image).toMatchObject({ type: "image", mimeType: "image/png" });
+      expect(Buffer.from(image.data, "base64").subarray(0, 8).toString("hex")).toBe(PNG_SIGNATURE);
+      expect(JSON.parse(text({ content: result.content.slice(1) }))).toMatchObject({
+        width: expect.any(Number),
+        bytes: expect.any(Number),
+      });
+
+      const svg = join(dir, "diagram.svg");
+      ok(await call("export_diagram", { id: classDiagramId, format: "svg", path: svg }));
+      expect(existsSync(svg)).toBe(true);
+      const pdf = join(dir, "diagram.pdf");
+      ok(await call("export_pdf", { path: pdf, ids: [classDiagramId] }));
+      expect(existsSync(pdf)).toBe(true);
+      const html = join(dir, "html");
+      ok(await call("export_html", { path: html }));
+      expect(existsSync(join(html, "index.html"))).toBe(true);
+    }, 60_000);
 
     it("introspects versions and the debug surface", async () => {
       const info = payload<{

@@ -1,5 +1,7 @@
 import type { McpServer, RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { BATCH, BATCH_DESCRIPTION, BatchInput, batchResult, checkBatch } from "./batch.js";
 import { ErrorCode, ToolInputError } from "./errors.js";
 import type { Check } from "./doctor.js";
 import {
@@ -21,7 +23,7 @@ import {
   selects,
   type ToolSelection,
 } from "./tiers.js";
-import { jsonResult, runTool } from "./tool-result.js";
+import { exportResult, jsonResult, runTool } from "./tool-result.js";
 
 /**
  * Tools written by hand: the four endpoints of StarUML's built-in API, which has no manifest, and
@@ -128,11 +130,19 @@ export function syncExtensionTools(
 }
 
 function specs(server: McpServer, client: StarUMLClient, state: CatalogState): ToolSpec[] {
-  const out: ToolSpec[] = listedTools(state).map((tool) => ({
-    name: tool.name,
-    fingerprint: tool.fingerprint,
-    register: () => registerGenerated(server, client, tool),
-  }));
+  const out: ToolSpec[] = listedTools(state).map((tool) =>
+    tool.name === BATCH
+      ? {
+          name: tool.name,
+          fingerprint: `batch ${tool.fingerprint}`,
+          register: () => registerBatch(server, client, state, tool),
+        }
+      : {
+          name: tool.name,
+          fingerprint: tool.fingerprint,
+          register: () => registerGenerated(server, client, tool),
+        },
+  );
   const introspect = summarized(state);
   if (introspect !== undefined) {
     out.push({
@@ -168,9 +178,70 @@ function registerGenerated(
     { description: tool.description, inputSchema: tool.inputSchema, annotations: tool.annotations },
     async (input: Record<string, unknown>) =>
       runTool(actionOf(tool.name), async () =>
-        jsonResult(await client.callExtension(tool.path, input), input),
+        resultOf(tool.name, await client.callExtension(tool.path, input), input),
       ),
   );
+}
+
+/** Endpoints whose answers are reshaped for the model; the rest are compact JSON. */
+const RESULT_SHAPES: Record<
+  string,
+  (data: unknown, input: Record<string, unknown>) => CallToolResult
+> = {
+  [BATCH]: batchResult,
+  export_diagram: exportResult,
+};
+
+function resultOf(name: string, data: unknown, input: Record<string, unknown>): CallToolResult {
+  return (RESULT_SHAPES[name] ?? jsonResult)(data, input);
+}
+
+/**
+ * /batch with a short listed schema; the body is checked against the manifest's schemas, the
+ * batch's and each op's, before it is sent.
+ */
+function registerBatch(
+  server: McpServer,
+  client: StarUMLClient,
+  state: CatalogState,
+  tool: GeneratedTool,
+): RegisteredTool {
+  return server.registerTool(
+    tool.name,
+    { description: BATCH_DESCRIPTION, inputSchema: BatchInput, annotations: tool.annotations },
+    async (input) =>
+      runTool(actionOf(tool.name), async () => {
+        const body = validated(state, tool, input);
+        return resultOf(tool.name, await client.callExtension(tool.path, body), body);
+      }),
+  );
+}
+
+/**
+ * `body` checked against the endpoint's whole request schema, unknown keys rejected, and for
+ * /batch every op against its own endpoint's.
+ */
+function validated(
+  state: CatalogState,
+  tool: GeneratedTool,
+  body: Record<string, unknown>,
+): Record<string, unknown> {
+  const parsed = tool.requestSchema.safeParse(body);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`);
+    throw new ToolInputError(issues.join("; "), {
+      code: ErrorCode.InvalidArgument,
+      endpoint: tool.path,
+      hint: `describe_endpoints({names: ["${tool.name}"]}) shows its schema.`,
+    });
+  }
+  if (tool.name === BATCH) {
+    checkBatch(
+      state.current.compiled.tools,
+      (parsed.data as { ops: Parameters<typeof checkBatch>[1] }).ops,
+    );
+  }
+  return parsed.data;
 }
 
 const IntrospectSummaryInput = unstamped(
@@ -286,18 +357,8 @@ function registerCall(
     async ({ name, body = {} }) =>
       runTool(actionOf(name), async () => {
         const tool = findTool(state, name);
-        const parsed = tool.requestSchema.safeParse(body);
-        if (!parsed.success) {
-          const issues = parsed.error.issues.map(
-            (i) => `${i.path.join(".") || "body"}: ${i.message}`,
-          );
-          throw new ToolInputError(issues.join("; "), {
-            code: ErrorCode.InvalidArgument,
-            endpoint: tool.path,
-            hint: `describe_endpoints({names: ["${name}"]}) shows its schema.`,
-          });
-        }
-        return jsonResult(await client.callExtension(tool.path, parsed.data), body);
+        const sent = validated(state, tool, body);
+        return resultOf(name, await client.callExtension(tool.path, sent), body);
       }),
   );
 }

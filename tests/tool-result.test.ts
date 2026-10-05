@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ErrorCode, StarUMLApiError } from "../src/errors.js";
-import { runTool, textResult, toolError } from "../src/tool-result.js";
+import { exportResult, runTool, textResult, toolError } from "../src/tool-result.js";
 
 describe("toolError", () => {
   it("renders a StarUMLApiError with code, endpoint, status and hint", () => {
@@ -85,5 +85,12 @@ describe("runTool", () => {
       throw new Error("nope");
     });
     expect(result.isError).toBe(true);
+  });
+});
+
+describe("exportResult", () => {
+  it("passes an answer without an image through as JSON", () => {
+    expect(exportResult(null, {})).toEqual(textResult("null"));
+    expect(exportResult(undefined, {})).toEqual(textResult("ok"));
   });
 });

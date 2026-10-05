@@ -21,7 +21,9 @@ export function sampleValue(schema: Schema): unknown {
     case "boolean":
       return true;
     case "array":
-      return [];
+      return Array.from({ length: (schema.minItems as number | undefined) ?? 0 }, () =>
+        sampleValue((schema.items ?? {}) as Schema),
+      );
     case "object":
       return sampleArgs(schema);
     default:

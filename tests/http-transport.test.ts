@@ -61,7 +61,7 @@ describe("POST /mcp", () => {
     const { message } = await rpc(server, 2, "tools/list");
 
     const tools = message.result!.tools as { name: string; inputSchema: object }[];
-    expect(tools).toHaveLength(12);
+    expect(tools).toHaveLength(14);
     expect(tools.map((t) => t.name)).toEqual(
       expect.arrayContaining(["generate_diagram", "find_elements", "call_endpoint"]),
     );
@@ -116,7 +116,9 @@ describe("POST /mcp", () => {
       expect(message.result!.isError).toBeUndefined();
     }
     expect(builtin.requests).toHaveLength(50);
-  });
+    // Correctness, not speed (scripts/load-test.mjs measures that): 50 fresh McpServers took
+    // 1.7–5 s on a host at load average 80, past vitest's 5 s default.
+  }, 20_000);
 
   it("rejects a client that does not accept text/event-stream", async () => {
     const res = await request(server)

@@ -79,9 +79,15 @@ const cases: ToolCase[] = [
  */
 const ENDPOINTS = BUNDLED_MANIFEST.endpoints.filter((e) => e.path !== "/introspect");
 
+/** Arguments for endpoints whose sample from the schema is refused before it is sent. */
+const ARGS: Record<string, Record<string, unknown>> = {
+  // An op path must name an endpoint of the manifest (src/batch.ts).
+  "/batch": { ops: [{ path: "/find_elements" }] },
+};
+
 /** One case per manifest endpoint: required arguments only, an element summary as the answer. */
 const generated: ToolCase[] = ENDPOINTS.map((entry) => {
-  const args = sampleArgs(entry.request);
+  const args = ARGS[entry.path] ?? sampleArgs(entry.request);
   return {
     tool: toolName(entry.path),
     upstream: "extension",
@@ -96,6 +102,8 @@ const generated: ToolCase[] = ENDPOINTS.map((entry) => {
 });
 
 const all = [...cases, ...generated];
+
+const UNDESCRIBED = new Set(["set_editor_state.gridVisible", "set_editor_state.snapToGrid"]);
 
 const HOST = "http://127.0.0.1";
 const builtin = new UpstreamFixture();
@@ -138,7 +146,7 @@ describe("tool registry", () => {
         ...BUNDLED_MANIFEST.endpoints.map((e) => toolName(e.path)),
       ].sort(),
     );
-    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(29);
+    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(50);
   });
 
   it("lists no $schema on any input schema", async () => {
@@ -155,20 +163,27 @@ describe("tool registry", () => {
         { description?: string }
       >;
       for (const [name, schema] of Object.entries(properties)) {
-        expect(schema.description, `${tool.name}.${name}`).toMatch(/^[^\n]+$/);
+        const label = `${tool.name}.${name}`;
+        // Extension 0.3.0 leaves these two booleans undescribed; their names say what they do.
+        if (UNDESCRIBED.has(label)) expect(schema.description, label).toBeUndefined();
+        else expect(schema.description, label).toMatch(/^[^\n]+$/);
       }
     }
   });
 
-  it.each(ENDPOINTS)("lists $path's request schema as the manifest defines it", async (entry) => {
-    const { tools } = await mcp.client.listTools();
-    const tool = tools.find((t) => t.name === toolName(entry.path))!;
+  // batch lists a shorter schema of its own (tests/batch.test.ts).
+  it.each(ENDPOINTS.filter((e) => e.path !== "/batch"))(
+    "lists $path's request schema as the manifest defines it",
+    async (entry) => {
+      const { tools } = await mcp.client.listTools();
+      const tool = tools.find((t) => t.name === toolName(entry.path))!;
 
-    const listed = tool.inputSchema as Record<string, unknown>;
-    const { schema, passthrough } = listedRequestSchema(entry);
-    const expected = withExplicitDefaults(schema) as Record<string, unknown>;
-    expect(listed).toEqual(passthrough ? { ...expected, additionalProperties: {} } : expected);
-  });
+      const listed = tool.inputSchema as Record<string, unknown>;
+      const { schema, passthrough } = listedRequestSchema(entry);
+      const expected = withExplicitDefaults(schema) as Record<string, unknown>;
+      expect(listed).toEqual(passthrough ? { ...expected, additionalProperties: {} } : expected);
+    },
+  );
 
   it.each(BUNDLED_MANIFEST.endpoints)("annotates $path from its manifest flags", async (entry) => {
     const { tools } = await mcp.client.listTools();
@@ -185,14 +200,20 @@ describe("tool registry", () => {
     const { tools } = await mcp.client.listTools();
     const destructive = tools.filter((t) => t.annotations?.destructiveHint).map((t) => t.name);
     expect(destructive.sort()).toEqual([
+      "batch",
       "delete_element",
       "execute_command",
+      "export_diagram",
+      "export_html",
+      "export_pdf",
       "new_project",
       "open_project",
+      "redo",
       "save_project",
       "save_project_as",
       "set_documentation",
       "set_stereotype",
+      "undo",
       "update_element",
     ]);
   });
@@ -357,8 +378,14 @@ describe("extension 0.3.0 contract", () => {
       .map((t) => t.name);
     expect(withProjection.sort()).toEqual([
       "find_elements",
+      "get_connected_node_views",
+      "get_edge_views_of",
       "get_element_by_id",
       "get_project_info",
+      "get_refs_to",
+      "get_relationships_of",
+      "get_selection",
+      "get_views_of",
     ]);
   });
 

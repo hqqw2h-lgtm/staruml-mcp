@@ -98,6 +98,7 @@ describe("endpointGroup", () => {
         "save_project_as",
         "new_project",
         "open_project",
+        "is_modified",
       ],
       element: [
         "get_element_by_id",
@@ -108,6 +109,9 @@ describe("endpointGroup", () => {
         "create_relationship",
         "set_stereotype",
         "set_documentation",
+        "get_relationships_of",
+        "get_refs_to",
+        "batch",
       ],
       diagram: [
         "create_element_with_view",
@@ -115,6 +119,17 @@ describe("endpointGroup", () => {
         "create_diagram",
         "switch_diagram",
         "close_diagram",
+        "get_views_of",
+        "get_edge_views_of",
+        "get_connected_node_views",
+        "layout_diagram",
+        "move_views",
+        "resize_node",
+        "set_view_style",
+        "set_z_order",
+        "export_diagram",
+        "export_pdf",
+        "export_html",
       ],
       feature: [
         "add_attribute",
@@ -125,19 +140,27 @@ describe("endpointGroup", () => {
         "add_slot",
         "add_tag",
       ],
+      editor: [
+        "get_selection",
+        "set_selection",
+        "get_editor_state",
+        "set_editor_state",
+        "undo",
+        "redo",
+      ],
       meta: ["introspect", "debug"],
     });
   });
 
   it("places endpoints of a newer extension in a group", () => {
-    expect(endpointGroup("batch")).toBe("element");
-    expect(endpointGroup("export_diagram")).toBe("diagram");
-    expect(endpointGroup("undo")).toBe("diagram");
+    expect(endpointGroup("build_diagram")).toBe("diagram");
+    expect(endpointGroup("generate_code")).toBe("element");
     expect(ENDPOINT_GROUPS).toEqual([
       "project",
       "command",
       "meta",
       "feature",
+      "editor",
       "diagram",
       "element",
     ]);
@@ -158,6 +181,8 @@ describe("core tier (default)", () => {
       "find_elements",
       "update_element",
       "delete_element",
+      "export_diagram",
+      "batch",
       "introspect",
       "describe_endpoints",
       "call_endpoint",
@@ -293,6 +318,8 @@ describe("describe_endpoints", () => {
       "create_relationship",
       "set_stereotype",
       "set_documentation",
+      "get_relationships_of",
+      "get_refs_to",
     ]);
   });
 
@@ -409,12 +436,12 @@ describe("call_endpoint", () => {
   );
 
   it("reports an unknown endpoint with UNKNOWN_ENDPOINT", async () => {
-    const result = await mcp.call("call_endpoint", { name: "batch", body: {} });
+    const result = await mcp.call("call_endpoint", { name: "build_diagram", body: {} });
 
     expect(result.structuredContent).toEqual({
       error: {
         code: "UNKNOWN_ENDPOINT",
-        message: 'No endpoint "batch" in staruml-mcp-extension 0.3.0',
+        message: 'No endpoint "build_diagram" in staruml-mcp-extension 0.3.0',
         hint: "describe_endpoints() lists the endpoints.",
       },
     });
@@ -530,7 +557,7 @@ describe("tierCheck", () => {
     expect(tierCheck(new CatalogState())).toEqual({
       name: "tier",
       status: "ok",
-      detail: `core: 5 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint`,
+      detail: `core: 7 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint`,
     });
   });
 
@@ -540,7 +567,7 @@ describe("tierCheck", () => {
     expect(tierCheck(state)).toEqual({
       name: "tier",
       status: "warn",
-      detail: `core,doctor,save_projekt: 5 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint; unknown: save_projekt`,
+      detail: `core,doctor,save_projekt: 7 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint; unknown: save_projekt`,
       remedy: "Check the names against describe_endpoints() or staruml://introspect/endpoints.",
     });
   });

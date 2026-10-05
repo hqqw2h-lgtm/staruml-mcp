@@ -44,6 +44,8 @@ describe("syncExtensionTools", () => {
   let client: Client;
   let registered: RegisteredExtensionTools;
   let changes: number;
+  /** The endpoints of the last catalog synced. */
+  let latest: ManifestEntry[] = [];
   const upstream = new StarUMLClient({ host: HOST, extPort: 1 });
 
   async function names(): Promise<string[]> {
@@ -77,12 +79,13 @@ describe("syncExtensionTools", () => {
     const next = [
       { ...first!, description: "Changed upstream." },
       ...rest.filter((e) => e.path !== "/debug"),
-      { ...first!, path: "/batch" },
+      { ...first!, path: "/build_diagram" },
     ];
+    latest = next;
 
     syncExtensionTools(server, upstream, state(live(next)), registered);
 
-    expect(await names()).toContain("batch");
+    expect(await names()).toContain("build_diagram");
     expect(await names()).not.toContain("debug");
     const changed = (await client.listTools()).tools.find((t) => t.name === first!.path.slice(1));
     expect(changed!.description).toBe("Changed upstream.");
@@ -92,12 +95,7 @@ describe("syncExtensionTools", () => {
   it("leaves unchanged tools alone", async () => {
     const before = new Map(registered);
 
-    const entries = [...registered.entries()]
-      .filter(([name]) => name !== "introspect")
-      .map(([, r]) => JSON.parse(r.fingerprint) as ManifestEntry);
-    const introspect = BUNDLED_MANIFEST.endpoints.find((e) => e.path === "/introspect")!;
-
-    syncExtensionTools(server, upstream, state(live([...entries, introspect])), registered);
+    syncExtensionTools(server, upstream, state(live([...latest])), registered);
 
     for (const [name, entry] of registered) expect(entry.tool).toBe(before.get(name)!.tool);
   });

@@ -2611,6 +2611,1706 @@
       }
     },
     {
+      "path": "/get_views_of",
+      "description": "Every view of a model element, on any diagram; empty for a model that is in no diagram.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Model element id."
+          },
+          "summary": {
+            "type": "boolean",
+            "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Attribute names to return besides _id and _type, e.g. ['name', 'attributes']; '_parent' is accepted. Names an element lacks are omitted."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8,
+            "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "elements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string",
+                  "description": "Metamodel class name."
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "_parent": {
+                  "description": "Owner id; null for the project.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type"
+              ],
+              "additionalProperties": {},
+              "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+            }
+          }
+        },
+        "required": [
+          "count",
+          "elements"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/get_edge_views_of",
+      "description": "Edge views attached to a view at either end.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "View id."
+          },
+          "summary": {
+            "type": "boolean",
+            "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Attribute names to return besides _id and _type, e.g. ['name', 'attributes']; '_parent' is accepted. Names an element lacks are omitted."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8,
+            "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "elements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string",
+                  "description": "Metamodel class name."
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "_parent": {
+                  "description": "Owner id; null for the project.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type"
+              ],
+              "additionalProperties": {},
+              "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+            }
+          }
+        },
+        "required": [
+          "count",
+          "elements"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/get_relationships_of",
+      "description": "Relationships (generalizations, associations, dependencies, ...) that have the element at an end.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Model element id."
+          },
+          "summary": {
+            "type": "boolean",
+            "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Attribute names to return besides _id and _type, e.g. ['name', 'attributes']; '_parent' is accepted. Names an element lacks are omitted."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8,
+            "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "elements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string",
+                  "description": "Metamodel class name."
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "_parent": {
+                  "description": "Owner id; null for the project.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type"
+              ],
+              "additionalProperties": {},
+              "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+            }
+          }
+        },
+        "required": [
+          "count",
+          "elements"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/get_refs_to",
+      "description": "Every element holding a reference to the element: typed attributes, relationship ends, views showing it. Check before deleting.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Element id."
+          },
+          "summary": {
+            "type": "boolean",
+            "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Attribute names to return besides _id and _type, e.g. ['name', 'attributes']; '_parent' is accepted. Names an element lacks are omitted."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8,
+            "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "elements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string",
+                  "description": "Metamodel class name."
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "_parent": {
+                  "description": "Owner id; null for the project.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type"
+              ],
+              "additionalProperties": {},
+              "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+            }
+          }
+        },
+        "required": [
+          "count",
+          "elements"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/get_connected_node_views",
+      "description": "Node views at the other end of a view's edges, optionally only edges of one view type.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "View id."
+          },
+          "edgeType": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Edge view type to follow, e.g. 'UMLAssociationView'; default every EdgeView."
+          },
+          "summary": {
+            "type": "boolean",
+            "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Attribute names to return besides _id and _type, e.g. ['name', 'attributes']; '_parent' is accepted. Names an element lacks are omitted."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8,
+            "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "elements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string",
+                  "description": "Metamodel class name."
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "_parent": {
+                  "description": "Owner id; null for the project.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type"
+              ],
+              "additionalProperties": {},
+              "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+            }
+          }
+        },
+        "required": [
+          "count",
+          "elements"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/layout_diagram",
+      "description": "Arrange a diagram's node views automatically (Format > Layout in the UI), as one undoable operation. Opens the diagram in the editor.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram id; default the current diagram."
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "TB",
+              "BT",
+              "LR",
+              "RL"
+            ],
+            "description": "Rank direction: TB top to bottom (default), BT, LR, RL."
+          },
+          "separations": {
+            "type": "object",
+            "properties": {
+              "node": {
+                "type": "number",
+                "minimum": 0
+              },
+              "edge": {
+                "type": "number",
+                "minimum": 0
+              },
+              "rank": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "node",
+              "edge",
+              "rank"
+            ],
+            "description": "Spacing in diagram units between nodes, edges and ranks; StarUML's defaults when omitted."
+          },
+          "edgeLineStyle": {
+            "type": "string",
+            "enum": [
+              "rectilinear",
+              "oblique",
+              "roundrect",
+              "curve"
+            ],
+            "description": "Line style applied to edges by the layout."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_id",
+          "direction"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/move_views",
+      "description": "Move views by an offset, carrying contained views and connected edges along, as one undoable operation.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ids": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "View ids, all on one diagram."
+          },
+          "dx": {
+            "type": "number",
+            "description": "Horizontal offset in diagram units."
+          },
+          "dy": {
+            "type": "number",
+            "description": "Vertical offset in diagram units."
+          },
+          "summary": {
+            "type": "boolean",
+            "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Attribute names to return besides _id and _type, e.g. ['name', 'attributes']; '_parent' is accepted. Names an element lacks are omitted."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8,
+            "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          }
+        },
+        "required": [
+          "ids",
+          "dx",
+          "dy"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "string",
+            "description": "Id of the diagram the views are on."
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string",
+                  "description": "Metamodel class name."
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "_parent": {
+                  "description": "Owner id; null for the project.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type"
+              ],
+              "additionalProperties": {},
+              "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+            }
+          }
+        },
+        "required": [
+          "diagram",
+          "views"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/resize_node",
+      "description": "Set a node view's bounds; omitted values keep the current ones. Connected edges follow, as one undoable operation.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Node view id."
+          },
+          "left": {
+            "type": "number",
+            "description": "Left edge in diagram units."
+          },
+          "top": {
+            "type": "number",
+            "description": "Top edge in diagram units."
+          },
+          "width": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Width."
+          },
+          "height": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Height."
+          },
+          "summary": {
+            "type": "boolean",
+            "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Attribute names to return besides _id and _type, e.g. ['name', 'attributes']; '_parent' is accepted. Names an element lacks are omitted."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8,
+            "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "_type": {
+            "type": "string",
+            "description": "Metamodel class name."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "_parent": {
+            "description": "Owner id; null for the project.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "_id",
+          "_type"
+        ],
+        "additionalProperties": {},
+        "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+      }
+    },
+    {
+      "path": "/set_view_style",
+      "description": "Change how views are drawn: colours, font, edge line style, stereotype display, auto-resize (the Format menu). Each given property is one undoable operation.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ids": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "View ids, all on one diagram."
+          },
+          "fillColor": {
+            "type": "string",
+            "pattern": "^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$",
+            "description": "Fill colour, CSS hex such as '#ffcc00'."
+          },
+          "lineColor": {
+            "type": "string",
+            "pattern": "^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$",
+            "description": "Line colour."
+          },
+          "fontColor": {
+            "type": "string",
+            "pattern": "^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$",
+            "description": "Text colour."
+          },
+          "fontFace": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Font family, e.g. 'Arial'."
+          },
+          "fontSize": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Font size in points."
+          },
+          "lineStyle": {
+            "type": "string",
+            "enum": [
+              "rectilinear",
+              "oblique",
+              "roundrect",
+              "curve"
+            ],
+            "description": "Edge line style; edges only."
+          },
+          "stereotypeDisplay": {
+            "type": "string",
+            "enum": [
+              "none",
+              "label",
+              "decoration",
+              "decoration-label",
+              "icon",
+              "icon-label"
+            ],
+            "description": "How a UML node view shows its stereotype."
+          },
+          "autoResize": {
+            "type": "boolean",
+            "description": "Grow node views to fit their content."
+          },
+          "summary": {
+            "type": "boolean",
+            "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Attribute names to return besides _id and _type, e.g. ['name', 'attributes']; '_parent' is accepted. Names an element lacks are omitted."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8,
+            "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "string",
+            "description": "Id of the diagram the views are on."
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string",
+                  "description": "Metamodel class name."
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "_parent": {
+                  "description": "Owner id; null for the project.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type"
+              ],
+              "additionalProperties": {},
+              "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+            }
+          }
+        },
+        "required": [
+          "diagram",
+          "views"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/set_z_order",
+      "description": "Bring views to the front or send them to the back of their diagram, as one undoable operation. Views nested in another view keep their order.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ids": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "View ids, all on one diagram."
+          },
+          "position": {
+            "type": "string",
+            "enum": [
+              "front",
+              "back"
+            ],
+            "description": "Where to move the views."
+          }
+        },
+        "required": [
+          "ids",
+          "position"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "string"
+          },
+          "order": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The diagram's top-level view ids, back to front, after the change."
+          }
+        },
+        "required": [
+          "diagram",
+          "order"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/get_selection",
+      "description": "What is selected in the UI: model elements (in the model explorer or as the models of selected views) and views.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "boolean",
+            "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Attribute names to return besides _id and _type, e.g. ['name', 'attributes']; '_parent' is accepted. Names an element lacks are omitted."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8,
+            "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string",
+                  "description": "Metamodel class name."
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "_parent": {
+                  "description": "Owner id; null for the project.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type"
+              ],
+              "additionalProperties": {},
+              "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+            }
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string",
+                  "description": "Metamodel class name."
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "_parent": {
+                  "description": "Owner id; null for the project.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type"
+              ],
+              "additionalProperties": {},
+              "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+            }
+          }
+        },
+        "required": [
+          "models",
+          "views"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/set_selection",
+      "description": "Select views in the diagram editor and/or model elements, replacing the selection; both empty or omitted clears it. Selecting views opens their diagram.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "viewIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Views to select, all on one diagram."
+          },
+          "modelIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Model elements to select besides the views' models."
+          },
+          "summary": {
+            "type": "boolean",
+            "description": "Default true: each element is {_id, _type, name, _parent}. False returns every saved attribute. Ignored when 'fields' is given."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Attribute names to return besides _id and _type, e.g. ['name', 'attributes']; '_parent' is accepted. Names an element lacks are omitted."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8,
+            "description": "Levels of owned elements (ownedElements, attributes, ownedViews, ...) to expand with the same projection. Default 0: owned elements are {$ref: id}."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string",
+                  "description": "Metamodel class name."
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "_parent": {
+                  "description": "Owner id; null for the project.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type"
+              ],
+              "additionalProperties": {},
+              "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+            }
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string",
+                  "description": "Metamodel class name."
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "_parent": {
+                  "description": "Owner id; null for the project.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type"
+              ],
+              "additionalProperties": {},
+              "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+            }
+          }
+        },
+        "required": [
+          "models",
+          "views"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/get_editor_state",
+      "description": "The diagram editor's state: current and open diagrams, zoom, scroll position, grid.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currentDiagram": {
+            "description": "Id of the diagram shown in the editor.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "workingDiagrams": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids of the diagrams open as editor tabs, in tab order."
+          },
+          "zoom": {
+            "type": "number",
+            "description": "Zoom scale, 1 = 100%."
+          },
+          "topLeft": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Diagram coordinates shown at the viewport's top-left corner; null without a current diagram."
+          },
+          "gridVisible": {
+            "type": "boolean"
+          },
+          "snapToGrid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "currentDiagram",
+          "workingDiagrams",
+          "zoom",
+          "topLeft",
+          "gridVisible",
+          "snapToGrid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/set_editor_state",
+      "description": "Change the diagram editor's view: show a diagram, zoom, scroll, grid. Nothing here changes the model or the undo history; gridVisible and snapToGrid are stored as StarUML preferences, as the View menu does.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagramId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Diagram to open and show first."
+          },
+          "zoom": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 3,
+            "description": "Zoom scale between 0.1 and 3 (DiagramEditor.setZoomScale's range)."
+          },
+          "center": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "description": "Diagram point to centre the viewport on, in diagram units."
+          },
+          "gridVisible": {
+            "type": "boolean"
+          },
+          "snapToGrid": {
+            "type": "boolean"
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currentDiagram": {
+            "description": "Id of the diagram shown in the editor.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "workingDiagrams": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids of the diagrams open as editor tabs, in tab order."
+          },
+          "zoom": {
+            "type": "number",
+            "description": "Zoom scale, 1 = 100%."
+          },
+          "topLeft": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Diagram coordinates shown at the viewport's top-left corner; null without a current diagram."
+          },
+          "gridVisible": {
+            "type": "boolean"
+          },
+          "snapToGrid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "currentDiagram",
+          "workingDiagrams",
+          "zoom",
+          "topLeft",
+          "gridVisible",
+          "snapToGrid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/export_diagram",
+      "description": "Render a diagram as PNG, JPEG or SVG, as File > Export Diagram As does, and return it base64-encoded or write it to a file.",
+      "readOnly": false,
+      "destructive": true,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Diagram id; default the current diagram."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "png",
+              "jpeg",
+              "svg"
+            ],
+            "description": "Image format; default png."
+          },
+          "scale": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 4,
+            "description": "Pixels per diagram unit for PNG and JPEG, up to 4; default 1. File > Export uses the display's pixel ratio. SVG is unscaled."
+          },
+          "background": {
+            "type": "string",
+            "pattern": "^(#[0-9a-f]{3,8}|[a-z]+)$",
+            "description": "CSS colour behind the diagram, e.g. '#ffffff'. Default transparent, white for JPEG."
+          },
+          "path": {
+            "type": "string",
+            "description": "Absolute file to write; overwritten, parent directories created. Omit to receive the image in the response."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number",
+            "description": "Pixels; SVG user units for svg."
+          },
+          "height": {
+            "type": "number"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Size of the encoded image."
+          },
+          "path": {
+            "type": "string",
+            "description": "The file written, when 'path' was given."
+          },
+          "base64": {
+            "type": "string",
+            "description": "The image, when 'path' was not given."
+          }
+        },
+        "required": [
+          "diagram",
+          "format",
+          "mimeType",
+          "width",
+          "height",
+          "bytes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/export_pdf",
+      "description": "Write diagrams to a PDF file, one page each, as File > Print to PDF and the CLI's pdf command do.",
+      "readOnly": false,
+      "destructive": true,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute .pdf file to write; overwritten."
+          },
+          "ids": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Diagram ids in page order; default every diagram in the project."
+          },
+          "size": {
+            "type": "string",
+            "minLength": 1,
+            "description": "pdfkit page size, e.g. 'A4' (default), 'LETTER', 'A3'."
+          },
+          "layout": {
+            "type": "string",
+            "enum": [
+              "landscape",
+              "portrait"
+            ],
+            "description": "Default landscape."
+          },
+          "showName": {
+            "type": "boolean",
+            "description": "Print each diagram's path name; default true."
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "pages": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "path",
+          "pages",
+          "bytes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/export_html",
+      "description": "Write HTML documentation of the whole project, with diagram images, into a directory (File > Export > HTML Docs).",
+      "readOnly": false,
+      "destructive": true,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute directory to write into; created if missing. index.html is its entry page."
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "index": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/undo",
+      "description": "Undo the last change (Edit > Undo). Every endpoint that changes the model is one step; an atomic /batch is one step.",
+      "readOnly": false,
+      "destructive": true,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "modified": {
+            "type": "boolean",
+            "description": "Whether the project has changes not yet saved to its file."
+          }
+        },
+        "required": [
+          "modified"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/redo",
+      "description": "Redo the last undone change (Edit > Redo).",
+      "readOnly": false,
+      "destructive": true,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "modified": {
+            "type": "boolean",
+            "description": "Whether the project has changes not yet saved to its file."
+          }
+        },
+        "required": [
+          "modified"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/is_modified",
+      "description": "Whether the project has unsaved changes.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "modified": {
+            "type": "boolean",
+            "description": "Whether the project has changes not yet saved to its file."
+          }
+        },
+        "required": [
+          "modified"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/batch",
+      "description": "Run several endpoint calls in one request. Later ops refer to earlier results as '$name' (the result's id), '$name.view' or '$name.model'. atomic (default true) makes the whole batch one undo step and undoes it all when an op fails; atomic false runs every op and reports each.",
+      "readOnly": false,
+      "destructive": true,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ops": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "pattern": "^\\/",
+                  "description": "Endpoint path, e.g. '/create_element_with_view'."
+                },
+                "body": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {},
+                  "description": "The endpoint's request body. Strings '$name' and '$name.field' are replaced by ids from earlier results."
+                },
+                "as": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][\\w-]*$",
+                  "description": "Name later ops use to refer to this op's result."
+                }
+              },
+              "required": [
+                "path"
+              ]
+            },
+            "description": "Calls in order. The limit is the mcp-ext.limits.maxBatchOps preference, default 500."
+          },
+          "atomic": {
+            "type": "boolean",
+            "description": "Default true. Atomic batches refuse /undo, /redo, /new_project, /open_project, /save_project*, /execute_command, /export_pdf and /export_html."
+          }
+        },
+        "required": [
+          "ops"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "atomic": {
+            "type": "boolean"
+          },
+          "succeeded": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Ops that succeeded."
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Ops that failed; always 0 for an atomic batch."
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "as": {
+                  "type": "string"
+                },
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "description": "The op's response data."
+                },
+                "code": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": "string"
+                },
+                "details": {}
+              },
+              "required": [
+                "path",
+                "success"
+              ],
+              "additionalProperties": false
+            },
+            "description": "One entry per op, in order: the op's data, or its error code and message."
+          }
+        },
+        "required": [
+          "atomic",
+          "succeeded",
+          "failed",
+          "results"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
       "path": "/introspect",
       "description": "StarUML and extension versions, factory ids, the metamodel catalogue, the diagram editor's toolbox, and this endpoint manifest with JSON Schemas.",
       "readOnly": true,

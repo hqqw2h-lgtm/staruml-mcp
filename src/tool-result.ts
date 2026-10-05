@@ -15,6 +15,28 @@ export function jsonResult(data: unknown, input: Record<string, unknown> = {}): 
   return textResult(serialize(data, input));
 }
 
+/** The raster types the Claude Messages API accepts as images besides GIF and WebP; SVG is not one. */
+const RASTER = new Set(["image/png", "image/jpeg"]);
+
+/**
+ * /export_diagram's answer with the PNG or JPEG as an image block: as text, its base64 would be
+ * read as tokens (a 352×130 two-class diagram from StarUML 7.1.1, 7,412 bytes, is 6,540
+ * o200k_base tokens of base64), as an image it is billed as vision input. SVG and file exports
+ * stay JSON.
+ */
+export function exportResult(data: unknown, input: Record<string, unknown>): CallToolResult {
+  const { base64, mimeType, ...rest } = (data ?? {}) as { base64?: unknown; mimeType?: unknown };
+  if (typeof base64 !== "string" || typeof mimeType !== "string" || !RASTER.has(mimeType)) {
+    return jsonResult(data, input);
+  }
+  return {
+    content: [
+      { type: "image", data: base64, mimeType },
+      { type: "text", text: serialize(rest, input) },
+    ],
+  };
+}
+
 function describeError(action: string, error: unknown): { text: string; detail: ErrorDetail } {
   const detail: ErrorDetail =
     error instanceof StarUMLApiError || error instanceof ToolInputError

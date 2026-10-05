@@ -13,7 +13,7 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 ```
   AI Agent  ──MCP──►  staruml-mcp (this package)  ──HTTP──►  StarUML
                                                   :58321 (built-in, 4 tools)
-                                                  :58322 (extension 0.3.x, 29 endpoints
+                                                  :58322 (extension 0.3.x, 50 endpoints
                                                           from its manifest: core ones as
                                                           tools, the rest via call_endpoint)
 ```
@@ -21,10 +21,10 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 | Package | What it is | Where it runs |
 |---|---|---|
 | **`staruml-mcp`** (this repo) | MCP server for AI agents | your machine via `npx -y staruml-mcp` |
-| **[`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 29 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
+| **[`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 50 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
 
 - Using only Mermaid-based diagram tools? Install `staruml-mcp` only. The 4 built-in tools and `doctor` work.
-- Want the extension's 29 endpoints (project save/open, element CRUD, relationships, attributes and operations, any StarUML command)? Install **both**.
+- Want the extension's 50 endpoints (project save/open, element CRUD, relationships, attributes and operations, view layout and styling, export, undo, batches, any StarUML command)? Install **both**.
 
 ## Prerequisites
 
@@ -120,8 +120,8 @@ node         ok    22.23.3
 staruml api  ok    http://localhost:58321
 extension    ok    0.3.0 at http://localhost:58322
 staruml      ok    7.1.1
-manifest     ok    29 endpoints from the live manifest
-tier         ok    core: 5 extension tools listed, 24 endpoints through call_endpoint
+manifest     ok    50 endpoints from the live manifest
+tier         ok    core: 7 extension tools listed, 43 endpoints through call_endpoint
 ```
 
 A failing check is followed by a `fix` line: start StarUML, enable `apiServer` in StarUML's
@@ -147,8 +147,8 @@ default and reaches every other extension endpoint through two generic tools:
 
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
-| `core` (default) | the 5 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, and `batch`, `build_diagram`, `export_diagram` once the extension has them; `describe_endpoints`, `call_endpoint` | 1,331 |
-| `all` | the 5 above and one tool per manifest endpoint | 5,687 |
+| `core` (default) | the 5 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `export_diagram`, and `build_diagram` once the extension has it; `describe_endpoints`, `call_endpoint` | 1,736 |
+| `all` | the 5 above and one tool per manifest endpoint | 8,412 |
 | `core,create_diagram,…` | the 5 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
 Token counts include the server instructions (o200k_base, extension 0.3.0, `npm run
@@ -159,7 +159,7 @@ environment but no arguments; the flag wins. An agent can switch it at runtime w
 reported by the `tier` check.
 
 - **`describe_endpoints()`** returns the endpoints without a tool, grouped (`project`, `command`,
-  `meta`, `feature`, `diagram`, `element`; grouped by name, since the manifest has none), one line
+  `meta`, `feature`, `editor`, `diagram`, `element`; grouped by name, since the manifest has none), one line
   each. `describe_endpoints({names: [...]})` or `({group})` returns their full description, `readOnly`
   / `destructive` flags and request schema as `tools/list` would show it. Named endpoints may be
   listed ones.
@@ -211,6 +211,12 @@ the core tier):
 | `add_attribute` / `add_operation` / `add_parameter` / `add_enumeration_literal` / `add_template_parameter` / `add_slot` / `add_tag` | Features of classifiers and instances. |
 | `set_stereotype` / `set_documentation` | Common element properties. |
 | `create_diagram` / `switch_diagram` / `close_diagram` | Diagrams. |
+| `get_views_of` / `get_edge_views_of` / `get_relationships_of` / `get_refs_to` / `get_connected_node_views` | Lookups between models, views and relationships. |
+| `layout_diagram` / `move_views` / `resize_node` / `set_view_style` / `set_z_order` | Arrange and style views. |
+| `get_selection` / `set_selection` / `get_editor_state` / `set_editor_state` | Selection, current diagram, zoom and grid. |
+| `export_diagram` / `export_pdf` / `export_html` | Diagram as PNG, JPEG or SVG (inline or to a file) / PDF / HTML docs. |
+| `undo` / `redo` / `is_modified` | History and unsaved state. |
+| `batch` | Several calls in one request, by default one undo step that rolls back when an op fails. |
 | `introspect` / `debug` | Versions, factory ids, metamodel, toolbox and manifest (the `introspect` tool is the summary) / the raw `app` surface. |
 
 To enable extension tools: install `staruml-mcp-extension` in StarUML (Tools → Extension Manager → Install From URL → `https://github.com/ezrabrilliant/staruml-mcp-extension`).
@@ -228,6 +234,19 @@ owned elements are `{$ref: id}`. Every tool that returns elements accepts `field
 names), `summary: false` (every saved attribute) and `depth` (levels of owned elements to expand),
 and `find_elements` pages with `limit` and `cursor` (`nextCursor` is absent on the last page). The
 `/create_*_with_view` and `/create_relationship` tools return `{view, model}`.
+
+`batch` takes `{ops: [{path, body, as}], atomic}`. A string `"$a"` in a body stands for the id of
+the result of the op named `a`, `"$a.view"` and `"$a.model"` for those of a `{view, model}` result,
+and `"$$"` escapes a literal `$`. Before sending, the server checks every op against its endpoint's
+manifest schema (a reference may stand where the schema wants another type, since its value is
+only known once the batch runs) and that each reference names an earlier op; a failure is
+`INVALID_ARGUMENT` with the op index, as in `ops.2.body.ownerId: …`. Each result comes back without
+the op's `path` and, when it succeeded, without `success: true`. An atomic batch that fails in
+StarUML is rolled back and reported with the failing op's code.
+
+`export_diagram` returns a PNG or JPEG as an image content block followed by the rest of the answer
+(`width`, `height`, `bytes`) as JSON; as text, the base64 of even a small diagram costs thousands of
+tokens. SVG and exports written to `path` come back as JSON.
 
 ### Resources
 
