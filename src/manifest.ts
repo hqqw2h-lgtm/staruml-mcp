@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
+import { LruCache } from "./cache.js";
 import snapshot from "./extension-manifest.json" with { type: "json" };
 
 type JsonSchema = Record<string, unknown>;
@@ -240,6 +241,39 @@ export function toolName(path: string): string {
   return path.slice(1);
 }
 
+/**
+ * Tools by their entry's JSON, the fingerprint. Converting the 61 request schemas of extension
+ * 0.3.0 to zod twice (listed and strict) is what `doctor`, every bundled-catalog fallback and the
+ * startup check repeat; an unchanged entry now costs a map lookup and keeps its tool object, and
+ * an entry the extension changed misses by construction. 512 holds several manifest versions.
+ * Entries that fail to convert are not kept: they are rare and their error is cheap to repeat.
+ */
+export const COMPILED_TOOLS = new LruCache<GeneratedTool>(512);
+
+/** The entry's tool, or why zod could not convert its request schema. */
+function compileEntry(entry: ManifestEntry): GeneratedTool | string {
+  try {
+    const fingerprint = JSON.stringify(entry);
+    let tool = COMPILED_TOOLS.get(fingerprint);
+    if (tool === undefined) {
+      tool = {
+        name: toolName(entry.path),
+        path: entry.path,
+        description: terseDescription(entry.description),
+        inputSchema: inputSchema(listedRequestSchema(entry)),
+        requestSchema: strictRequestSchema(entry),
+        entry,
+        annotations: annotationsOf(entry),
+        fingerprint,
+      };
+      COMPILED_TOOLS.set(fingerprint, tool);
+    }
+    return tool;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
 /** `reserved` are names of hand-written tools, which take precedence over a manifest entry. */
 export function compileManifest(
   manifest: Manifest,
@@ -248,28 +282,13 @@ export function compileManifest(
   const tools: GeneratedTool[] = [];
   const skipped: CompiledManifest["skipped"] = [];
   for (const entry of manifest.endpoints) {
-    const name = toolName(entry.path);
-    if (reserved.has(name)) {
+    if (reserved.has(toolName(entry.path))) {
       skipped.push({ path: entry.path, reason: "name taken by a built-in tool" });
       continue;
     }
-    try {
-      tools.push({
-        name,
-        path: entry.path,
-        description: terseDescription(entry.description),
-        inputSchema: inputSchema(listedRequestSchema(entry)),
-        requestSchema: strictRequestSchema(entry),
-        entry,
-        annotations: annotationsOf(entry),
-        fingerprint: JSON.stringify(entry),
-      });
-    } catch (error) {
-      skipped.push({
-        path: entry.path,
-        reason: error instanceof Error ? error.message : String(error),
-      });
-    }
+    const compiled = compileEntry(entry);
+    if (typeof compiled === "string") skipped.push({ path: entry.path, reason: compiled });
+    else tools.push(compiled);
   }
   return { manifest, tools, skipped };
 }

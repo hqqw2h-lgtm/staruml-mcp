@@ -606,6 +606,27 @@ throughput rises 2–4x and p99 falls by a similar factor. Against StarUML 7.1.1
 (`--live --requests 1000 --concurrency 50`, `get_all_diagrams_info`, two interleaved runs each, 0
 errors): stateless 270–428 req/s, p99 152–351 ms; one session 769–898 req/s, p99 73–94 ms.
 
+### Caching (#14)
+
+Two caches, both shared by every session of a process:
+
+- **Manifest compilation.** Each manifest entry's tool (its two zod schemas from the JSON Schema,
+  description and annotations) is kept by the entry's JSON, 512 entries at most. Compiling the
+  bundled 61-endpoint manifest takes 37 ms (median of 20 runs with an empty cache; 72 ms for the
+  first, before the JIT warms up) and 1.05 ms once cached, which is `JSON.stringify` of the entries.
+  `doctor`, the startup check and every fallback to the bundled manifest hit it; an entry the
+  extension changed has a new key, so it is compiled again and its tool re-registered.
+- **Catalogue reads.** `/introspect` answers (the `introspect` tool's sections and the
+  `staruml://introspect/metamodel` resource, keyed by request body) and `describe_endpoints`
+  answers are kept until the catalog changes: `doctor`, which reads the manifest again, or a tier
+  switch. Failed reads are not kept, concurrent reads of one key share a single request, and 64
+  entries at most are held. StarUML and the extension only change these by restarting, after which
+  `doctor` (which the skill runs first) refreshes them.
+
+`tests/cache.test.ts` shows repeated calls answering from the cache (one `/introspect` request for
+repeated tool calls, resource reads from two sessions and the matching tool call) and each
+invalidation path.
+
 ## Token efficiency
 
 `scripts/token-benchmark.mjs` (`npm run benchmark:tokens`) replays four modelling scenarios

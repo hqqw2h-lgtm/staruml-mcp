@@ -1,5 +1,6 @@
 import { McpError } from "@modelcontextprotocol/sdk/types.js";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { CatalogState } from "../src/extension-tools.js";
 import { BUNDLED_MANIFEST } from "../src/manifest.js";
 import { diagramImageUri } from "../src/server.js";
 import { closedPort, UpstreamFixture } from "./support/fixture.js";
@@ -16,13 +17,16 @@ const DIAGRAMS = [
 const builtin = new UpstreamFixture();
 const extension = new UpstreamFixture();
 let mcp: ConnectedClient;
+/** Its catalogue cache is emptied after each test, which serves the metamodel differently. */
+const catalog = new CatalogState();
 
 beforeAll(async () => {
   await Promise.all([builtin.start(), extension.start()]);
-  mcp = await connect({ apiHost: HOST, apiPort: builtin.port, extPort: extension.port });
+  mcp = await connect({ apiHost: HOST, apiPort: builtin.port, extPort: extension.port, catalog });
 });
 
 afterEach(() => {
+  catalog.reads.clear();
   builtin.reset();
   extension.reset();
 });

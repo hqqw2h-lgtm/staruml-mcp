@@ -6,6 +6,7 @@ import { diagnose, formatReport } from "./doctor.js";
 import { ErrorCode, ToolInputError } from "./errors.js";
 import {
   CatalogState,
+  readIntrospect,
   syncExtensionTools,
   tierCheck,
   type RegisteredExtensionTools,
@@ -352,7 +353,9 @@ function registerResources(server: McpServer, client: StarUMLClient, catalog: Ca
     },
     async (uri) => {
       try {
-        const data = await client.callExtension("/introspect", { include: ["metamodel"] });
+        const data = await readIntrospect(client, catalog, "/introspect", {
+          include: ["metamodel"],
+        });
         return rawJsonResource(uri, data);
       } catch (error) {
         throw resourceError("read metamodel", error);

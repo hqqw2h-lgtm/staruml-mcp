@@ -9,6 +9,7 @@ import {
   EXPORT_DIAGRAM_DESCRIPTION,
   exportDiagramInput,
 } from "./export-diagram.js";
+import { LruCache, memo } from "./cache.js";
 import type { Check } from "./doctor.js";
 import {
   FIND_ELEMENTS,
@@ -93,6 +94,13 @@ export function bundledCatalog(): ExtensionCatalog {
  */
 export class CatalogState {
   private readonly listeners = new Set<() => void>();
+  /**
+   * Catalogue reads: the /introspect sections and describe_endpoints answers. They change only
+   * with the extension or the selection, so {@link update} (doctor, a new manifest) drops them.
+   * Keys hold the request body, which the introspect tool's `types` makes open-ended; 64 entries
+   * keep the common ones without letting it grow.
+   */
+  readonly reads = new LruCache<Promise<unknown>>(64);
 
   constructor(
     private currentCatalog: ExtensionCatalog = bundledCatalog(),
@@ -110,7 +118,13 @@ export class CatalogState {
   update(current: ExtensionCatalog, selection: ToolSelection = this.currentSelection): void {
     this.currentCatalog = current;
     this.currentSelection = selection;
+    this.reads.clear();
     for (const listener of [...this.listeners]) listener();
+  }
+
+  /** `load()`'s answer, cached under `key` until the next {@link update}. */
+  read<T>(key: string, load: () => Promise<T>): Promise<T> {
+    return memo(this.reads, key, load);
   }
 
   /** Calls `listener` after every {@link update}; the returned function unsubscribes. */
@@ -248,7 +262,7 @@ function specs(server: McpServer, client: StarUMLClient, state: CatalogState): T
     out.push({
       name: SUMMARIZED,
       fingerprint: `summary ${introspect.fingerprint}`,
-      register: () => registerIntrospectSummary(server, client, introspect),
+      register: () => registerIntrospectSummary(server, client, state, introspect),
     });
   }
   if (unlistedTools(state).length > 0) {
@@ -366,6 +380,7 @@ const IntrospectSummaryInput = unstamped(
 function registerIntrospectSummary(
   server: McpServer,
   client: StarUMLClient,
+  state: CatalogState,
   tool: GeneratedTool,
 ): RegisteredTool {
   return server.registerTool(
@@ -378,10 +393,23 @@ function registerIntrospectSummary(
     async (input) =>
       runTool(actionOf(tool.name), async () => {
         const include = input.include ?? (input.types === undefined ? [] : ["metamodel"]);
-        const data = await client.callExtension(tool.path, { ...input, include });
+        const data = await readIntrospect(client, state, tool.path, { ...input, include });
         return jsonResult(data, input);
       }),
   );
+}
+
+/**
+ * An /introspect answer, cached in `state`: versions, metamodel, factory ids and toolbox only change
+ * when StarUML or the extension restarts, after which doctor reloads the catalog anyway.
+ */
+export function readIntrospect(
+  client: StarUMLClient,
+  state: CatalogState,
+  path: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return state.read(`${path} ${JSON.stringify(body)}`, () => client.callExtension(path, body));
 }
 
 const DescribeInput = unstamped(
@@ -399,7 +427,12 @@ function registerDescribe(server: McpServer, state: CatalogState): RegisteredToo
       inputSchema: DescribeInput,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async (input) => runTool("describe endpoints", async () => jsonResult(describe(state, input))),
+    async (input) =>
+      runTool("describe endpoints", async () =>
+        jsonResult(
+          await state.read(`describe ${JSON.stringify(input)}`, async () => describe(state, input)),
+        ),
+      ),
   );
 }
 

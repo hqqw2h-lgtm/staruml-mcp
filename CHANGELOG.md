@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Stateful HTTP sessions: `initialize` over `--transport http` opens a session (`Mcp-Session-Id`, SDK `sessionIdGenerator`) whose requests all reach one McpServer, so `view_diagram` shows the inline viewer to HTTP clients that render MCP Apps or read the viewer, and `notifications/tools/list_changed` reaches every live session when `doctor` reloads the manifest or switches the tier. `--session-timeout` (default `30m`) closes a session with no request in flight, `--max-sessions` (default 64) closes the least recently used beyond the cap and `0` turns sessions off. A request without a session id is still served statelessly; the loopback `Host`/`Origin` check runs before both. `scripts/load-test.mjs --session` drives one session (#14).
+- Caches: tools compiled from manifest entries are kept by the entry's JSON (bundled manifest 37 ms cold, 1 ms cached), and `/introspect` answers (the `introspect` tool, `staruml://introspect/metamodel`) and `describe_endpoints` answers are kept until `doctor` reloads the catalog or switches the tier. Failed reads are not cached (#14).
 
 ## [0.4.0] - 2026-10-05
 
