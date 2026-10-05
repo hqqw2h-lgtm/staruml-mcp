@@ -21,6 +21,7 @@ import { diagramImageUri, ENDPOINTS_URI, METAMODEL_URI } from "../../src/server.
 import { StarUMLClient } from "../../src/staruml-client.js";
 import { CORE_ENDPOINTS, parseToolSelection } from "../../src/tiers.js";
 import { closedPort } from "../support/fixture.js";
+import { decodePng, differingRows } from "../support/png.js";
 import { connect, text, type ConnectedClient } from "../support/mcp.js";
 import { rpc } from "../support/sse.js";
 
@@ -861,6 +862,223 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           (n) => !called.has(n) && !generic.includes(n),
         ),
       ).toEqual([]);
+    });
+  });
+
+  /**
+   * Upstream staruml/staruml-mcp-server issues #2 (diagram names), #3 (line breaks in names) and
+   * #4 (activity and use case diagrams), through generate_diagram's routing to build_diagram and
+   * through build_diagram itself; every diagram is exported and its views counted.
+   */
+  describe("official server parity (#7)", () => {
+    interface Built {
+      diagram: Summary;
+      ids: Record<string, { model: string; view: string }>;
+      edges: unknown[];
+    }
+
+    /** Top-level views of a diagram by type. */
+    const viewCounts = async (id: string) => {
+      const { ownedViews } = payload<{ ownedViews: Summary[] }>(
+        await call("get_element_by_id", { id, fields: ["ownedViews"], depth: 1 }),
+      );
+      const counts: Record<string, number> = {};
+      for (const view of ownedViews) counts[view._type] = (counts[view._type] ?? 0) + 1;
+      return counts;
+    };
+
+    /** The diagram exported through export_diagram as a decoded PNG. */
+    const png = async (id: string) => {
+      const result = await call("export_diagram", { id });
+      ok(result);
+      const image = result.content[0] as { type: string; data: string };
+      expect(image.type).toBe("image");
+      const decoded = decodePng(image.data);
+      expect(decoded.width).toBeGreaterThan(50);
+      return decoded;
+    };
+
+    const diagramNames = async () =>
+      payload<{ name: string }[]>(await call("get_all_diagrams_info")).map((d) => d.name);
+
+    it("#2: names a diagram after its Mermaid front matter title", async () => {
+      const built = payload<Built>(
+        await call("generate_diagram", {
+          code: "---\ntitle: Order lifecycle\n---\nclassDiagram\n  Order --> Line\n  Order --> Customer",
+        }),
+      );
+
+      expect(built.diagram).toMatchObject({ _type: "UMLClassDiagram", name: "Order lifecycle" });
+      expect(await diagramNames()).toContain("Order lifecycle");
+      expect(await viewCounts(built.diagram._id)).toEqual({
+        UMLClassView: 3,
+        UMLAssociationView: 2,
+      });
+      await png(built.diagram._id);
+    });
+
+    it("#2: names a diagram after the name parameter, over a title line", async () => {
+      const built = payload<Built>(
+        await call("generate_diagram", {
+          code: "sequenceDiagram\n  title Ignored\n  Browser->>Server: GET /\n  Server-->>Browser: 200",
+          name: "Checkout request",
+        }),
+      );
+
+      expect(built.diagram.name).toBe("Checkout request");
+      expect(await diagramNames()).toContain("Checkout request");
+      expect(await viewCounts(built.diagram._id)).toEqual({
+        UMLFrameView: 1,
+        UMLSeqLifelineView: 2,
+        UMLSeqMessageView: 2,
+      });
+      await png(built.diagram._id);
+    });
+
+    it("#3: stores <br/> as a newline in a participant's name, drawn on one line without the tag", async () => {
+      const lifelines = "\n  participant S as Server\n  W->>S: login";
+      const broken = payload<Built>(
+        await call("generate_diagram", {
+          code: `sequenceDiagram\n  participant W as Web<br/>App${lifelines}`,
+          name: "Break",
+        }),
+      );
+      const model = broken.ids["Web\nApp"]!.model;
+      expect(payload<Summary>(await call("get_element_by_id", { id: model })).name).toBe(
+        "Web\nApp",
+      );
+      expect(await viewCounts(broken.diagram._id)).toEqual({
+        UMLFrameView: 1,
+        UMLSeqLifelineView: 2,
+        UMLSeqMessageView: 1,
+      });
+
+      // The same diagram with the literal tag the built-in API keeps, and with no name at all.
+      const renamed = async (name: string) => {
+        const built = payload<Built>(
+          await call("build_diagram", {
+            mermaid: `sequenceDiagram\n  participant W as WebApp${lifelines}`,
+            name: "Break",
+          }),
+        );
+        ok(
+          await call("update_element", { id: built.ids.WebApp!.model, field: "name", value: name }),
+        );
+        return built;
+      };
+      const tagged = await renamed("Web<br/>App");
+      const unnamed = await renamed("");
+
+      const [withBreak, withTag, withoutName] = await Promise.all(
+        [broken, tagged, unnamed].map((b) => png(b.diagram._id)),
+      );
+      expect(differingRows(withBreak!, withTag!)).toBeDefined();
+      // StarUML 7.1.1 draws a label with one CanvasRenderingContext2D.fillText call, which does
+      // not break lines at "\n" (LabelView.draw in src/core/core.js; Canvas.wordWrap in
+      // src/core/graphics.js splits at spaces only). The name's pixels span one 13 px Arial
+      // line, so the picture reads "Web App"; a second line needs the extension to draw it.
+      const text = differingRows(withBreak!, withoutName!)!;
+      expect(text.last - text.first + 1).toBeLessThanOrEqual(16);
+    }, 60_000);
+
+    it("#4: builds a use case diagram from a JSON spec and from Mermaid", async () => {
+      const fromSpec = payload<Built>(
+        await call("build_diagram", {
+          kind: "usecase",
+          name: "Shop use cases",
+          spec: {
+            system: "Shop",
+            actors: ["Customer", "Clerk"],
+            useCases: ["Place order", "Pay", "Refund"],
+            relations: [
+              { from: "Customer", to: "Place order" },
+              { from: "Customer", to: "Pay" },
+              { from: "Clerk", to: "Refund" },
+              { from: "Place order", to: "Pay", type: "include" },
+            ],
+          },
+        }),
+      );
+      expect(fromSpec.diagram).toMatchObject({
+        _type: "UMLUseCaseDiagram",
+        name: "Shop use cases",
+      });
+      expect(await viewCounts(fromSpec.diagram._id)).toEqual({
+        UMLUseCaseSubjectView: 1,
+        UMLActorView: 2,
+        UMLUseCaseView: 3,
+        UMLAssociationView: 3,
+        UMLIncludeView: 1,
+      });
+      await png(fromSpec.diagram._id);
+
+      const fromMermaid = payload<Built>(
+        await call("generate_diagram", {
+          code: "---\ntitle: Shop use cases (Mermaid)\n---\nflowchart LR\n  C[Customer] --> P((Place order))\n  C --> Y((Pay))\n  P -->|include| Y\n  K[Clerk] --> R((Refund))",
+          kind: "usecase",
+        }),
+      );
+      expect(fromMermaid.diagram).toMatchObject({
+        _type: "UMLUseCaseDiagram",
+        name: "Shop use cases (Mermaid)",
+      });
+      expect(await viewCounts(fromMermaid.diagram._id)).toEqual({
+        UMLActorView: 2,
+        UMLUseCaseView: 3,
+        UMLAssociationView: 3,
+        UMLIncludeView: 1,
+      });
+      await png(fromMermaid.diagram._id);
+    }, 60_000);
+
+    it("#4: builds an activity diagram from a JSON spec and from Mermaid", async () => {
+      const fromSpec = payload<Built>(
+        await call("build_diagram", {
+          kind: "activity",
+          name: "Checkout activity",
+          spec: {
+            nodes: [
+              { id: "s", type: "initial" },
+              { id: "a", name: "Pick items", type: "action" },
+              { id: "d", name: "In stock?", type: "decision" },
+              { id: "b", name: "Pay", type: "action" },
+              { id: "e", type: "final" },
+            ],
+            flows: [
+              { from: "s", to: "a" },
+              { from: "a", to: "d" },
+              { from: "d", to: "b", guard: "yes" },
+              { from: "d", to: "e", guard: "no" },
+              { from: "b", to: "e" },
+            ],
+          },
+        }),
+      );
+      const fromMermaid = payload<Built>(
+        await call("generate_diagram", {
+          code: "flowchart TD\n  S((start)) --> A[Pick items]\n  A --> D{In stock?}\n  D -->|yes| B[Pay]\n  D -->|no| E((end))\n  B --> E",
+          kind: "activity",
+          name: "Checkout activity (Mermaid)",
+        }),
+      );
+
+      for (const built of [fromSpec, fromMermaid]) {
+        expect(built.diagram._type).toBe("UMLActivityDiagram");
+        expect(await viewCounts(built.diagram._id)).toEqual({
+          UMLControlNodeView: 3,
+          UMLActionView: 2,
+          UMLControlFlowView: 5,
+        });
+        await png(built.diagram._id);
+      }
+      expect(fromMermaid.diagram.name).toBe("Checkout activity (Mermaid)");
+    }, 60_000);
+
+    it("keeps plain Mermaid on StarUML's built-in API", async () => {
+      expect(ok(await call("generate_diagram", { code: "classDiagram\n  class Plain" }))).toBe(
+        "ok",
+      );
+      expect(await diagramNames()).toContain("Class Diagram by Mermaid");
     });
   });
 

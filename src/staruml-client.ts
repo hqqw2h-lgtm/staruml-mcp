@@ -31,6 +31,9 @@ const REFUSAL_STATUS: Record<number, string> = {
   504: "TIMEOUT",
 };
 
+/** Ends the unreachable hints; the server instructions used to say it with every turn. */
+const DOCTOR = "The doctor tool checks the whole setup.";
+
 const StarUMLResponseSchema = z.object({
   success: z.boolean(),
   data: z.unknown().optional(),
@@ -225,7 +228,7 @@ export class StarUMLClient {
     slug: string,
     cause: unknown,
   ): Promise<StarUMLApiError> {
-    const startStarUML = `Start StarUML 7.0.0+ with its API server enabled ("apiServer": true in StarUML's settings.json; port "apiServerPort", default 58321), or pass --api-host/--api-port if it listens elsewhere.`;
+    const startStarUML = `Start StarUML 7.0.0+ with its API server enabled ("apiServer": true in StarUML's settings.json; port "apiServerPort", default 58321), or pass --api-host/--api-port if it listens elsewhere. ${DOCTOR}`;
     if (upstream === "builtin") {
       return new StarUMLApiError(`Cannot reach the StarUML API server at ${this.baseUrl}`, {
         code: ErrorCode.StarUMLUnreachable,
@@ -247,7 +250,7 @@ export class StarUMLClient {
       code: ErrorCode.ExtensionUnreachable,
       slug,
       upstream,
-      hint: `Install staruml-mcp-extension (Tools > Extension Manager > Install From Url: ${EXTENSION_REPOSITORY}) and restart StarUML, or pass --ext-port if it listens on another port.`,
+      hint: `Install staruml-mcp-extension (Tools > Extension Manager > Install From Url: ${EXTENSION_REPOSITORY}) and restart StarUML, or pass --ext-port if it listens on another port. ${DOCTOR}`,
       cause,
     });
   }

@@ -152,11 +152,36 @@ extension    fail  http://localhost:58322 refused the request: Missing or wrong 
 
 | Tool | Description |
 |---|---|
-| `generate_diagram` | Generate a UML diagram from Mermaid code. |
+| `generate_diagram` | Generate a UML diagram from Mermaid code; `name` names it and `kind` (`activity`, `usecase`) reads a flowchart as that kind. Routed to the extension's `build_diagram` when needed (below). |
 | `get_all_diagrams_info` | List all diagrams in the current project (id, name, type). |
 | `get_current_diagram_info` | Get metadata of the currently focused diagram. |
 | `get_diagram_image_by_id` | Export a diagram as PNG by its ID. |
 | `doctor` | Check Node, both StarUML ports, the extension and StarUML versions; reloads the extension's tools and, given `tools`, switches the tier. |
+
+### generate_diagram routing
+
+StarUML 7.1.1's built-in `/generate_diagram` names every diagram "<Kind> Diagram by Mermaid", keeps
+`<br/>` as text, cannot draw activity or use case diagrams, and refuses front matter, a leading
+`%%` comment and the `graph` keyword (upstream staruml-mcp-server issues #2, #3, #4). The tool
+therefore sends the Mermaid to the extension's `build_diagram` when the call has a `name` or
+`kind`, a front matter `title:` or `title` line, `<br/>` or a literal `\n`, or a start the built-in
+cannot read, and the extension reads the diagram type (`classDiagram`, `sequenceDiagram`,
+`flowchart`/`graph`, `erDiagram`, `stateDiagram`). It then answers `build_diagram`'s result, with
+the diagram's id and name and the model and view ids of every node; otherwise the built-in renders
+it and the answer stays `ok`.
+
+Without a usable extension (not installed, incompatible, or not answering), a title or `<br/>` only
+costs the naming and line breaks: the built-in renders the diagram and the answer says so (`ok;
+built-in API without title, line breaks: staruml-mcp-extension did not answer`). An explicit `name`
+or `kind` cannot be honoured there and fails with `EXTENSION_REQUIRED` (or the extension's own
+`EXTENSION_UNREACHABLE`); a `name` or `kind` for a type `build_diagram` does not read from Mermaid,
+such as `mindmap`, fails with `INVALID_ARGUMENT` and points to `build_diagram`'s spec.
+
+`<br/>` and `\n` become a newline in the element's name. StarUML 7.1.1 draws every label with a
+single canvas `fillText` call, which does not break lines at a newline (`LabelView.draw`; its word
+wrap splits at spaces only), so the diagram shows `Web App` on one line rather than the literal
+`Web<br/>App`; drawing two lines needs a change to the extension or StarUML. The live suite checks
+both the stored newline and the one-line rendering.
 
 ### Tiers
 
@@ -165,8 +190,8 @@ default and reaches every other extension endpoint through two generic tools:
 
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
-| `core` (default) | the 5 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`; `describe_endpoints`, `call_endpoint` | 1,985 |
-| `all` | the 5 above and one tool per manifest endpoint | 9,315 |
+| `core` (default) | the 5 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`; `describe_endpoints`, `call_endpoint` | 1,995 |
+| `all` | the 5 above and one tool per manifest endpoint | 9,325 |
 | `core,create_diagram,…` | the 5 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
 Token counts include the server instructions (o200k_base, extension 0.3.0, `npm run
@@ -313,6 +338,7 @@ A failed tool call returns `isError: true` with a one-line cause, a hint where o
 | `REQUEST_REJECTED` | HTTP 4xx or `success: false` without a `code`: the arguments were rejected; read `message`. |
 | `UPSTREAM_ERROR` | HTTP 5xx without a `code` from StarUML or the extension. |
 | `INVALID_RESPONSE` | The port answered with something other than the `{ success, data, error }` envelope. |
+| `EXTENSION_REQUIRED` | `generate_diagram` was given a `name` or `kind` while no compatible extension with `build_diagram` is available. |
 | `INVALID_ARGUMENT`, `UNKNOWN_ENDPOINT` | Also raised by `call_endpoint` itself, before any request, for a body the manifest schema rejects or a name it does not have; `endpoint` and `hint` say which and how to look it up. |
 | extension 0.3.0 codes | Passed through with their HTTP status: `INVALID_ARGUMENT` (400), `UNKNOWN_TYPE` (400), `NOT_FOUND` (404), `UNKNOWN_ENDPOINT` (404, with the upgrade hint), `NO_PROJECT` (409), `STARUML_ERROR` (422, StarUML refused the operation), `DIALOG_REQUIRED` (422, the command or generator would have opened a dialog; the hint points to `describe_commands` for `execute_command` and to `list_code_generators` for code generation, and `details` names the missing arguments), `INTERNAL` (500). An error body's `details` is passed through as `error.details` and, except for a rolled-back batch's results, as a `Details:` line. |
 | extension request checks | Passed through with a hint naming the setting: `UNAUTHORIZED` (401: no or wrong access token; how to set or clear it), `FORBIDDEN_ORIGIN` (403: an `Origin` header not in Allowed Origins), `PAYLOAD_TOO_LARGE` (413: Max Request Body (KiB) or Max Batch Ops), `UNSUPPORTED_MEDIA_TYPE` (415: not `application/json`), `RATE_LIMITED` (429: Commands per Minute, with the `Retry-After` seconds), `TIMEOUT` (504: Request Timeout (s); the work may still complete). A 401/403/413/415/429/504 without these codes, as from a proxy, gets the same hint. |

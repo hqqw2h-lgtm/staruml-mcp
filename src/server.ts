@@ -1,7 +1,7 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { OK, serialize } from "./compact.js";
+import { serialize } from "./compact.js";
 import { diagnose, formatReport } from "./doctor.js";
 import { ErrorCode, ToolInputError } from "./errors.js";
 import {
@@ -10,6 +10,8 @@ import {
   tierCheck,
   type RegisteredExtensionTools,
 } from "./extension-tools.js";
+import { BUILD_DIAGRAM } from "./build-diagram.js";
+import { generateDiagram } from "./generate-diagram.js";
 import { PROJECTION_INSTRUCTIONS, unstamped } from "./manifest.js";
 import { readProjectTree } from "./project-tree.js";
 import { StarUMLClient } from "./staruml-client.js";
@@ -39,11 +41,10 @@ export function diagramImageUri(id: string): string {
 }
 
 const INSTRUCTIONS =
-  "Results are minified JSON without null or empty fields or echoed arguments. " +
+  "Results are JSON without null or empty fields or echoed arguments. " +
   `${PROJECTION_INSTRUCTIONS} ` +
   "Endpoints without a tool: describe_endpoints, then call_endpoint. " +
-  "Resources: diagram PNGs, project tree, metamodel, endpoint manifest. " +
-  "Run doctor when calls fail with STARUML_UNREACHABLE or EXTENSION_UNREACHABLE.";
+  "Resources: diagram PNGs, project tree, metamodel, endpoint manifest.";
 
 export interface ServerConfig {
   apiPort?: number;
@@ -66,7 +67,9 @@ const GenerateDiagramInput = unstamped(
     code: z
       .string()
       .min(1)
-      .describe(`Mermaid source starting with ${SUPPORTED_MERMAID_DIAGRAMS.join("|")}.`),
+      .describe(`Mermaid: ${SUPPORTED_MERMAID_DIAGRAMS.join("|")}.`),
+    name: z.string().optional().describe("Diagram name; default the Mermaid title."),
+    kind: z.enum(["activity", "usecase"]).optional().describe("Build a flowchart as this kind."),
   }),
 );
 
@@ -104,11 +107,8 @@ export function createServer(config: ServerConfig = {}): McpServer {
       inputSchema: GenerateDiagramInput,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     },
-    async ({ code }) =>
-      runTool("generate diagram", async () => {
-        await client.generateDiagram(code);
-        return textResult(OK);
-      }),
+    async (input) =>
+      runTool("generate diagram", () => generateDiagram(client, buildDiagramTool(catalog), input)),
   );
 
   server.registerTool(
@@ -169,6 +169,12 @@ export function createServer(config: ServerConfig = {}): McpServer {
   syncExtensionTools(server, client, catalog, extensionTools);
 
   return server;
+}
+
+/** /build_diagram of the current catalog, which generate_diagram uses whether listed or not. */
+function buildDiagramTool(catalog: CatalogState) {
+  const { enabled, compiled } = catalog.current;
+  return enabled ? compiled.tools.find((t) => t.name === BUILD_DIAGRAM) : undefined;
 }
 
 function selectionArgument(value: string): ToolSelection {

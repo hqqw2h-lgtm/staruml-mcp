@@ -16,6 +16,8 @@ export const ErrorCode = {
   // when this server catches them first, so a caller handles both sources alike.
   UnknownEndpoint: "UNKNOWN_ENDPOINT",
   InvalidArgument: "INVALID_ARGUMENT",
+  /** generate_diagram was asked for what only the extension's build_diagram does. */
+  ExtensionRequired: "EXTENSION_REQUIRED",
 } as const;
 
 export type Upstream = "builtin" | "extension";

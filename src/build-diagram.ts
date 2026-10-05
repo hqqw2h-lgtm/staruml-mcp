@@ -26,9 +26,9 @@ const SPEC =
 
 /** Listed parameters with their shorter descriptions. */
 const LISTED: Record<string, string> = {
-  kind: "One of spec's kinds; required with spec. activity|usecase reads a Mermaid flowchart so.",
+  kind: "Required with spec. activity|usecase reads a Mermaid flowchart so.",
   spec: SPEC,
-  mermaid: "Mermaid instead of spec; named by name, else its title.",
+  mermaid: "Instead of spec; its title names the diagram unless name is given.",
   name: "Diagram name; \\n or <br/> breaks lines.",
   upsert: "Add only what the same-named diagram lacks.",
   direction: "Layout direction.",
