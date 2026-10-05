@@ -284,7 +284,12 @@ export class StarUMLClient {
     }
     const hint =
       upstream === "extension"
-        ? this.refusalHint(envelope?.code ?? REFUSAL_STATUS[res.status], slug, res)
+        ? this.refusalHint(
+            envelope?.code ?? REFUSAL_STATUS[res.status],
+            slug,
+            res,
+            envelope?.details,
+          )
         : undefined;
     return new StarUMLApiError(message, {
       ...options,
@@ -294,9 +299,22 @@ export class StarUMLClient {
     });
   }
 
-  /** What to do about a refusal by the extension's request checks or limits. */
-  private refusalHint(code: string | undefined, slug: string, res: Response): string | undefined {
+  /** What to do about a refusal by the extension's request checks, limits or references. */
+  private refusalHint(
+    code: string | undefined,
+    slug: string,
+    res: Response,
+    details: unknown,
+  ): string | undefined {
     switch (code) {
+      case "AMBIGUOUS_REF":
+        return ambiguousHint(details);
+      case "DUPLICATE_NAME":
+        return duplicateHint(slug, details);
+      case "SNAPSHOT_STALE":
+        return "The undo history no longer reaches that snapshot (it was undone past, cut by StarUML's history limit, or another project is open); take a new one with snapshot.";
+      case "UNSUPPORTED_SYNTAX":
+        return 'The message names the construct and its line, which StarUML cannot draw; leave it out or rewrite it, or build the diagram from a spec (describe_endpoints({names: ["build_diagram"]})).';
       case "UNAUTHORIZED":
         return this.hasExtToken
           ? `The extension rejected the access token this server sent. ${TOKEN_HELP}`
@@ -319,6 +337,50 @@ export class StarUMLClient {
         return undefined;
     }
   }
+}
+
+/** Candidates the AMBIGUOUS_REF hint names; details carries up to 20 (extension src/refs.ts). */
+const MAX_HINTED_CANDIDATES = 5;
+
+interface Candidate {
+  _id?: unknown;
+  path?: unknown;
+}
+
+/**
+ * The candidates of an AMBIGUOUS_REF (`details.candidates`, each `{_id, _type, path}`) as
+ * references to pass instead: the path, which reads better and is what the caller tried to
+ * write, or the id where a path cannot name the element apart from the others.
+ */
+function ambiguousHint(details: unknown): string {
+  const lead = "Pass one of these instead, or a longer path";
+  const raw = (details as { candidates?: unknown } | null)?.candidates;
+  const candidates = Array.isArray(raw) ? (raw as Candidate[]) : [];
+  if (candidates.length === 0) return `${lead}; find_elements lists elements by name.`;
+  const paths = candidates.map((c) => c.path);
+  const named = candidates.slice(0, MAX_HINTED_CANDIDATES).map((c) => {
+    const unique = typeof c.path === "string" && paths.filter((p) => p === c.path).length === 1;
+    return unique ? String(c.path) : String(c._id);
+  });
+  const more = candidates.length - named.length;
+  return `${lead}: ${named.join(", ")}${more > 0 ? ` (and ${more} more)` : ""}.`;
+}
+
+/**
+ * DUPLICATE_NAME: a new element named like a sibling of its kind (`details.existing`, a summary
+ * with its path), which a path could not tell apart. Reusing the sibling is what was usually
+ * meant; build_diagram does so for names it finds once in the project.
+ */
+function duplicateHint(slug: string, details: unknown): string {
+  const existing = (details as { existing?: { path?: unknown; _id?: unknown } } | null)?.existing;
+  const name = existing?.path ?? existing?._id;
+  const which =
+    typeof name === "string" ? `${name} exists already` : "A sibling of that kind has the name";
+  const reuse =
+    slug === "/build_diagram"
+      ? "keep reuse on (the default) to show it again"
+      : "refer to it by its path";
+  return `${which}: ${reuse}, rename the new one, or pass allowDuplicateNames: true to add a second.`;
 }
 
 /**

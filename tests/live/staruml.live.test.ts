@@ -799,7 +799,11 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
     it("prompts name the reads, which run against StarUML as written (#11)", async () => {
       const { prompts } = await mcp.client.listPrompts();
-      expect(prompts.map((p) => p.name)).toEqual(["model-codebase", "review-diagram"]);
+      expect(prompts.map((p) => p.name)).toEqual([
+        "model-codebase",
+        "review-diagram",
+        "improve-diagram",
+      ]);
 
       const review = await mcp.client.getPrompt({
         name: "review-diagram",
@@ -1050,6 +1054,167 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       );
       expect(diff.identical).toBe(false);
       expect(diff.added.nodes).toEqual(["Loan"]);
+    });
+
+    it("runs improve-diagram's loop: snapshot, lint, autofixes in one batch, re-lint, restore (#13)", async () => {
+      // Three classes stacked at one point: L001 at least, and associations without multiplicity.
+      const messy = payload<{ results: { data: Created & Summary }[] }>(
+        await call("batch", {
+          ops: [
+            {
+              path: "/create_diagram",
+              body: { type: "UMLClassDiagram", parent: packageId, name: "Messy" },
+              as: "d",
+            },
+            ...["Cart", "Item", "Price"].map((name) => ({
+              path: "/create_element_with_view",
+              body: { type: "UMLClass", parent: packageId, diagram: "$d", name, x: 100, y: 100 },
+              as: name,
+            })),
+            {
+              path: "/create_edge_with_view",
+              body: {
+                type: "UMLAssociation",
+                diagram: "$d",
+                tail: "$Cart.view",
+                head: "$Item.view",
+              },
+            },
+          ],
+        }),
+      );
+      const messyId = messy.results[0]!.data._id;
+
+      const prompt = await mcp.client.getPrompt({
+        name: "improve-diagram",
+        arguments: { diagram: messyId },
+      });
+      const steps = (prompt.messages[0]!.content as { text: string }).text;
+      expect(steps).toContain(`lint_diagram({diagram: "${messyId}"})`);
+      expect(steps).toContain('call_endpoint({name: "snapshot", body: {label: "before-improve"}})');
+
+      // Step 1 and 2 as written.
+      ok(await call("snapshot", { label: "before-improve" }));
+      interface Finding {
+        rule: string;
+        severity: string;
+        autofix?: { path: string; body: Record<string, unknown> };
+      }
+      const lint = async () =>
+        payload<{ count: number; findings?: Finding[] }>(
+          await call("lint_diagram", { diagram: messyId }),
+        );
+      const before = await lint();
+      expect(before.findings!.map((f) => f.rule)).toContain("L001");
+      const owner = payload<Summary>(await call("get_element_by_id", { ref: messyId }))._parent!;
+      const uml = payload<{ findings: { rule: string; path: string }[] }>(
+        await call("uml_lint", { scope: owner }),
+      );
+      expect(uml.findings.some((f) => f.rule === "U001")).toBe(true);
+
+      // Step 3: every autofix in one batch, as each stands.
+      const fixes = before.findings!.flatMap((f) => (f.autofix ? [f.autofix] : []));
+      expect(fixes.length).toBeGreaterThan(0);
+      ok(await call("batch", { ops: fixes }));
+      const after = await lint();
+      const serious = (r: { findings?: Finding[] }) =>
+        (r.findings ?? []).filter((f) => f.severity !== "info").length;
+      expect(serious(after)).toBeLessThan(serious(before));
+      expect((after.findings ?? []).map((f) => f.rule)).not.toContain("L001");
+
+      // Step 5: the picture, what changed, and the way back.
+      const view = await call("view_diagram", { diagram: messyId });
+      expect(view.content[0]!.type).toBe("image");
+      const since = payload<{ counts: { changed: number } }>(
+        await call("diff_since", { snapshot: "before-improve" }),
+      );
+      expect(since.counts.changed).toBeGreaterThanOrEqual(0);
+      const restored = payload<{ undone: number }>(
+        await call("restore_snapshot", { snapshot: "before-improve" }),
+      );
+      expect(restored.undone).toBeGreaterThan(0);
+      expect((await lint()).findings!.map((f) => f.rule)).toContain("L001");
+    });
+
+    it("explains AMBIGUOUS_REF, DUPLICATE_NAME, SNAPSHOT_STALE and UNSUPPORTED_SYNTAX (#13)", async () => {
+      const made = payload<{ results: { data: Summary }[] }>(
+        await call("batch", {
+          ops: [
+            {
+              path: "/create_element",
+              body: { type: "UMLPackage", parent: packageId, name: "AmbA" },
+              as: "a",
+            },
+            {
+              path: "/create_element",
+              body: { type: "UMLPackage", parent: packageId, name: "AmbB" },
+              as: "b",
+            },
+            { path: "/create_element", body: { type: "UMLClass", parent: "$a", name: "Twin" } },
+            { path: "/create_element", body: { type: "UMLClass", parent: "$b", name: "Twin" } },
+          ],
+        }),
+      );
+      const twins = made.results.slice(2).map((r) => r.data.path!);
+
+      const ambiguous = await call("get_element_by_id", { ref: "Twin" });
+      expect(failure(ambiguous)).toMatchObject({ code: "AMBIGUOUS_REF", status: 409 });
+      expect(text(ambiguous)).toContain(
+        `Hint: Pass one of these instead, or a longer path: ${twins.join(", ")}.`,
+      );
+      expect(payload<Summary>(await call("get_element_by_id", { ref: twins[0]! }))._id).toBe(
+        made.results[2]!.data._id,
+      );
+
+      const duplicate = await call("create_element", {
+        type: "UMLClass",
+        parent: twins[0]!.replace(/\/Twin$/, ""),
+        name: "Twin",
+      });
+      expect(failure(duplicate).code).toBe("DUPLICATE_NAME");
+      expect(text(duplicate)).toContain(
+        `Hint: ${twins[0]} exists already: refer to it by its path`,
+      );
+
+      ok(await call("snapshot", { label: "stale" }));
+      ok(await call("undo"));
+      const stale = await call("restore_snapshot", { snapshot: "stale" });
+      expect(failure(stale).code).toBe("SNAPSHOT_STALE");
+      expect(text(stale)).toContain("Hint: The undo history no longer reaches that snapshot");
+      ok(await call("redo"));
+
+      const unsupported = await call("build_diagram", {
+        text: '@startuml\nrobust "Web Browser" as WB\n@enduml',
+        dryRun: true,
+      });
+      expect(failure(unsupported)).toMatchObject({ code: "UNSUPPORTED_SYNTAX", status: 422 });
+      expect(text(unsupported)).toContain("Hint: The message names the construct and its line");
+    });
+
+    it("plans a build with dryRun without changing the model (#13)", async () => {
+      const before = payload<{ count: number }>(
+        await call("find_elements", { type: "UMLClass", name: "Planned" }),
+      ).count;
+      const planned = payload<{
+        dryRun: boolean;
+        plan: { ops: number; creates: { op: string; name?: string }[] };
+      }>(
+        await call("build_diagram", {
+          kind: "class",
+          name: "Plan only",
+          parent: packageId,
+          dryRun: true,
+          spec: { classes: [{ name: "Planned" }] },
+        }),
+      );
+      expect(planned.dryRun).toBe(true);
+      expect(planned.plan.ops).toBeGreaterThan(0);
+      expect(planned.plan.creates.map((c) => c.name)).toContain("Planned");
+      expect(
+        payload<{ count: number }>(
+          await call("find_elements", { type: "UMLClass", name: "Planned" }),
+        ).count,
+      ).toBe(before);
     });
 
     it("lists code generators, generates Java from a class and reverses it", async () => {

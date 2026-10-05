@@ -92,7 +92,6 @@ describe("endpointGroup", () => {
     }
     expect(groups).toEqual({
       command: ["get_all_commands", "describe_commands", "execute_command"],
-      code: ["list_code_generators", "generate_code", "reverse_code"],
       project: [
         "get_project_info",
         "save_project",
@@ -100,7 +99,6 @@ describe("endpointGroup", () => {
         "new_project",
         "open_project",
         "is_modified",
-        "validate_model",
       ],
       element: [
         "get_element_by_id",
@@ -113,12 +111,7 @@ describe("endpointGroup", () => {
         "set_documentation",
         "get_relationships_of",
         "get_refs_to",
-        "divide_fragment",
         "batch",
-        "uml_lint",
-        "snapshot",
-        "diff_since",
-        "restore_snapshot",
       ],
       diagram: [
         "create_element_with_view",
@@ -135,6 +128,7 @@ describe("endpointGroup", () => {
         "resize_node",
         "set_view_style",
         "set_z_order",
+        "divide_fragment",
         "create_view_of",
         "export_diagram",
         "export_diagrams",
@@ -143,8 +137,6 @@ describe("endpointGroup", () => {
         "export_text",
         "build_diagram",
         "describe_diagram",
-        "lint_diagram",
-        "diff_diagram",
       ],
       feature: [
         "add_attribute",
@@ -155,15 +147,11 @@ describe("endpointGroup", () => {
         "add_slot",
         "add_tag",
       ],
-      editor: [
-        "get_selection",
-        "set_selection",
-        "get_editor_state",
-        "set_editor_state",
-        "undo",
-        "redo",
-      ],
+      editor: ["get_selection", "set_selection", "get_editor_state", "set_editor_state"],
+      code: ["list_code_generators", "generate_code", "reverse_code"],
+      history: ["undo", "redo", "snapshot", "diff_since", "restore_snapshot"],
       meta: ["search_types", "introspect", "debug"],
+      quality: ["validate_model", "lint_diagram", "uml_lint", "diff_diagram"],
     });
   });
 
@@ -171,6 +159,8 @@ describe("endpointGroup", () => {
     expect(endpointGroup("export_sequence_diagram")).toBe("diagram");
     expect(endpointGroup("merge_elements")).toBe("element");
     expect(ENDPOINT_GROUPS).toEqual([
+      "quality",
+      "history",
       "project",
       "command",
       "meta",
@@ -205,6 +195,7 @@ describe("core tier (default)", () => {
       "search_types",
       "describe_diagram",
       "validate_model",
+      "lint_diagram",
       "introspect",
       "describe_endpoints",
       "call_endpoint",
@@ -342,8 +333,20 @@ describe("describe_endpoints", () => {
       "set_documentation",
       "get_relationships_of",
       "get_refs_to",
-      "divide_fragment",
-      "uml_lint",
+    ]);
+  });
+
+  it("describes the checks and the history in groups of their own", async () => {
+    const group = async (name: string) =>
+      Object.keys(
+        JSON.parse(text(await mcp.call("describe_endpoints", { group: name }))) as object,
+      );
+
+    // validate_model and lint_diagram are core tools, so the group lists the rest.
+    expect(await group("quality")).toEqual(["uml_lint", "diff_diagram"]);
+    expect(await group("history")).toEqual([
+      "undo",
+      "redo",
       "snapshot",
       "diff_since",
       "restore_snapshot",
@@ -590,7 +593,7 @@ describe("tierCheck", () => {
     expect(tierCheck(new CatalogState())).toEqual({
       name: "tier",
       status: "ok",
-      detail: `core: 11 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint`,
+      detail: `core: 12 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint`,
     });
   });
 
@@ -600,7 +603,7 @@ describe("tierCheck", () => {
     expect(tierCheck(state)).toEqual({
       name: "tier",
       status: "warn",
-      detail: `core,doctor,save_projekt: 11 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint; unknown: save_projekt`,
+      detail: `core,doctor,save_projekt: 12 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint; unknown: save_projekt`,
       remedy: "Check the names against describe_endpoints() or staruml://introspect/endpoints.",
     });
   });

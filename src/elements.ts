@@ -10,12 +10,28 @@ import { shortInput, type ManifestEntry } from "./manifest.js";
 
 export const FIND_ELEMENTS = "find_elements";
 export const UPDATE_ELEMENT = "update_element";
+export const GET_ELEMENT_BY_ID = "get_element_by_id";
+export const DELETE_ELEMENT = "delete_element";
 
 export const FIND_ELEMENTS_DESCRIPTION =
   "Find elements by metamodel type (subtypes too) and/or exact name, a page at a time.";
 
 export const UPDATE_ELEMENT_DESCRIPTION =
   "Change an element: set a field, add or remove references, reorder a list, or move it.";
+
+/**
+ * The manifest's own descriptions of these two run past 100 characters, the first into the path
+ * forms the instructions already list, and are cut mid-sentence; these say it whole.
+ */
+export const GET_ELEMENT_BY_ID_DESCRIPTION = "Read one element by id or path.";
+
+export const DELETE_ELEMENT_DESCRIPTION =
+  "Delete an element with everything it owns, its views and the edges attached to them.";
+
+/** `ref` alone, required: get_element_by_id and delete_element. */
+export function refInput(entry: ManifestEntry): z.ZodObject {
+  return shortInput(entry, { ref: "Id or path." });
+}
 
 export function findElementsInput(entry: ManifestEntry): z.ZodObject {
   return shortInput(
@@ -34,10 +50,10 @@ export function updateElementInput(entry: ManifestEntry): z.ZodObject {
   return shortInput(
     entry,
     {
-      ref: "Element id or path.",
+      ref: "Id or path.",
       op:
-        "set (default): field = value. add/remove: value is element ids for the reference list " +
-        "field. reorder: move list item value to index. relocate: move to owner parent.",
+        "set (default): field = value. add/remove: value is ids for the reference list field. " +
+        "reorder: move list item value to index. relocate: move to owner parent.",
       field: "Attribute name; not for relocate.",
       value:
         "set: the value; an id or {$ref: id} for references, null clears. add/remove: ids. " +

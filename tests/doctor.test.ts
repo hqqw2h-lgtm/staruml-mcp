@@ -408,7 +408,7 @@ describe("doctor tool", () => {
       expect(catalog.selection.label).toBe("core,create_diagram,nope");
       expect(await names(mcp)).toContain("create_diagram");
       expect(text(result)).toMatch(
-        /tier +warn +core,create_diagram,nope: 12 extension tools .*; unknown: nope\n +fix +Check the names/,
+        /tier +warn +core,create_diagram,nope: 13 extension tools .*; unknown: nope\n +fix +Check the names/,
       );
       await vi.waitFor(() => expect(changed()).toBeGreaterThan(0));
     } finally {

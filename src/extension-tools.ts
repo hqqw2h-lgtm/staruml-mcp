@@ -2,7 +2,12 @@ import type { McpServer, RegisteredTool } from "@modelcontextprotocol/sdk/server
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { BATCH, BATCH_DESCRIPTION, BatchInput, batchResult, checkBatch } from "./batch.js";
-import { BUILD_DIAGRAM, BUILD_DIAGRAM_DESCRIPTION, buildDiagramInput } from "./build-diagram.js";
+import {
+  BUILD_DIAGRAM,
+  BUILD_DIAGRAM_DESCRIPTION,
+  buildDiagramInput,
+  buildResult,
+} from "./build-diagram.js";
 import { ErrorCode, ToolInputError } from "./errors.js";
 import {
   EXPORT_DIAGRAM,
@@ -12,9 +17,14 @@ import {
 import { LruCache, memo } from "./cache.js";
 import type { Check } from "./doctor.js";
 import {
+  DELETE_ELEMENT,
+  DELETE_ELEMENT_DESCRIPTION,
   FIND_ELEMENTS,
   FIND_ELEMENTS_DESCRIPTION,
   findElementsInput,
+  GET_ELEMENT_BY_ID,
+  GET_ELEMENT_BY_ID_DESCRIPTION,
+  refInput,
   UPDATE_ELEMENT,
   UPDATE_ELEMENT_DESCRIPTION,
   updateElementInput,
@@ -46,6 +56,14 @@ import {
   VALIDATE_MODEL_DESCRIPTION,
   validateModelInput,
 } from "./reads.js";
+import {
+  DIFF_DIAGRAM,
+  findingsResult,
+  LINT_DIAGRAM,
+  LINT_DIAGRAM_DESCRIPTION,
+  lintDiagramInput,
+  UML_LINT,
+} from "./quality.js";
 import type { StarUMLClient } from "./staruml-client.js";
 import {
   CORE_ENDPOINTS,
@@ -223,6 +241,18 @@ const SHORT_LISTED: Record<
     description: EXPORT_DIAGRAM_DESCRIPTION,
     input: (tool) => exportDiagramInput(tool.entry),
   },
+  [GET_ELEMENT_BY_ID]: {
+    description: GET_ELEMENT_BY_ID_DESCRIPTION,
+    input: (tool) => refInput(tool.entry),
+  },
+  [DELETE_ELEMENT]: {
+    description: DELETE_ELEMENT_DESCRIPTION,
+    input: (tool) => refInput(tool.entry),
+  },
+  [LINT_DIAGRAM]: {
+    description: LINT_DIAGRAM_DESCRIPTION,
+    input: (tool) => lintDiagramInput(tool.entry),
+  },
   [FIND_ELEMENTS]: {
     description: FIND_ELEMENTS_DESCRIPTION,
     input: (tool) => findElementsInput(tool.entry),
@@ -307,9 +337,13 @@ const RESULT_SHAPES: Record<
   (data: unknown, input: Record<string, unknown>) => CallToolResult
 > = {
   [BATCH]: batchResult,
+  [BUILD_DIAGRAM]: buildResult,
   [EXPORT_DIAGRAM]: exportResult,
   [SEARCH_TYPES]: searchResult,
   [DESCRIBE_DIAGRAM]: describeResult,
+  [LINT_DIAGRAM]: findingsResult,
+  [UML_LINT]: findingsResult,
+  [DIFF_DIAGRAM]: findingsResult,
 };
 
 function resultOf(name: string, data: unknown, input: Record<string, unknown>): CallToolResult {
@@ -370,14 +404,19 @@ function validated(
   return parsed.data;
 }
 
+/**
+ * Listed by description alone: the types and the section enum cost about 30 tools/list tokens
+ * for what the descriptions say. They are still checked.
+ */
 const IntrospectSummaryInput = unstamped(
   z.object({
-    include: z
-      .array(z.enum(["factory", "metamodel", "toolbox"]))
+    include: unlisted(z.array(z.enum(["factory", "metamodel", "toolbox"])), "type", "items")
       .optional()
-      .describe("Default none; metamodel when types is given."),
-    types: z.array(nonEmpty()).optional().describe("Only these metamodel types."),
-    inherited: z.boolean().optional().describe("With inherited attributes."),
+      .describe("Any of factory, metamodel, toolbox; default none, metamodel with types."),
+    types: unlisted(z.array(nonEmpty()), "type", "items")
+      .optional()
+      .describe("Only these metamodel types."),
+    inherited: unlisted(z.boolean(), "type").optional().describe("With inherited attributes."),
   }),
 );
 
@@ -422,7 +461,9 @@ export function readIntrospect(
 
 const DescribeInput = unstamped(
   z.object({
-    names: z.array(nonEmpty()).optional().describe("Endpoints to describe in full."),
+    names: unlisted(z.array(nonEmpty()), "type", "items")
+      .optional()
+      .describe("Endpoint names to describe in full."),
     // The index without arguments names the groups; listing them as an enum cost 30 tokens.
     group: unlisted(z.enum(ENDPOINT_GROUPS), "enum")
       .meta({ type: "string" })

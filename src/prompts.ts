@@ -1,6 +1,6 @@
 /**
- * MCP prompts: workflows a user starts by name (`/model-codebase`, `/review-diagram` in clients
- * that surface prompts as commands). They spell out the tool calls, so they name an endpoint's
+ * MCP prompts: workflows a user starts by name (`/model-codebase`, `/review-diagram`,
+ * `/improve-diagram` in clients that surface prompts as commands). They spell out the tool calls, so they name an endpoint's
  * call_endpoint form when the current tier does not list it.
  */
 import type { McpServer, RegisteredPrompt } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -15,6 +15,10 @@ import { listedTools, type CatalogState } from "./extension-tools.js";
 
 export const MODEL_CODEBASE = "model-codebase";
 export const REVIEW_DIAGRAM = "review-diagram";
+export const IMPROVE_DIAGRAM = "improve-diagram";
+
+/** The snapshot improve-diagram takes first, to compare with and to go back to. */
+export const IMPROVE_SNAPSHOT = "before-improve";
 
 /**
  * How the model calls endpoint `name` with `args` (a JSON-like object literal): the tool when it
@@ -101,6 +105,41 @@ export function reviewDiagram(state: CatalogState, diagram: string | undefined):
   );
 }
 
+/**
+ * The fix loop over extension 0.3.0's checks: a snapshot, lint_diagram for the layout and
+ * uml_lint for the model, every lint autofix in one batch (an autofix is a `{path, body}` request,
+ * the shape of a batch op), uml_lint's fixes by hand, again until clean, then a look at the
+ * picture. A rule that keeps firing after its autofix needs another remedy, so the loop is capped.
+ */
+export function improveDiagram(state: CatalogState, diagram: string | undefined): GetPromptResult {
+  const which = diagram === undefined ? "the diagram open in StarUML" : `diagram ${diagram}`;
+  const ref = diagram ?? "@current";
+  const call = (endpoint: string, body: string) => invocation(state, endpoint, body);
+  const snapshot = `{snapshot: "${IMPROVE_SNAPSHOT}"}`;
+  return message(
+    [
+      `Improve ${which} until it reads cleanly and models correctly.`,
+      "",
+      `1. ${call("snapshot", `{label: "${IMPROVE_SNAPSHOT}"}`)}, to compare with and go back to.`,
+      `2. ${call("lint_diagram", `{diagram: "${ref}"}`)} for layout problems and ` +
+        `${call("uml_lint", "{scope: <the diagram's _parent>}")} for modelling ones; ` +
+        "get_element_by_id gives the _parent.",
+      "3. Send the autofix of every lint finding that has one in a single batch({ops: [...]}): " +
+        "each autofix is a {path, body} op as it stands. Fix each uml_lint finding as its fix " +
+        "line says, with update_element, a build_diagram upsert (missing multiplicities, types, " +
+        "role names) or a rename.",
+      "4. Repeat steps 2 and 3 until lint_diagram reports no error or warning, at most three " +
+        "rounds. A finding that survives its autofix needs another remedy: layout_diagram with " +
+        "another preset, fewer nodes, or splitting the diagram by package or concern.",
+      `5. view_diagram({diagram: "${ref}"}) to look at the result and ` +
+        `${call("diff_since", snapshot)} for what changed. If it reads worse than before, ` +
+        `${call("restore_snapshot", snapshot)} undoes everything in one step.`,
+      "",
+      "Report what was fixed and what still needs a decision from a person.",
+    ].join("\n"),
+  );
+}
+
 const ModelCodebaseArgs = {
   path: z.string().optional().describe("Absolute source directory to reverse-engineer."),
   language: z.string().optional().describe("java, cpp, csharp or python, for reverse_code."),
@@ -111,6 +150,8 @@ const ModelCodebaseArgs = {
 const ReviewDiagramArgs = {
   diagram: z.string().optional().describe("Diagram id or path; default the current diagram."),
 };
+
+const ImproveDiagramArgs = ReviewDiagramArgs;
 
 /** A registered prompt's callback; every argument of these prompts is an optional string. */
 type Render = (args: Record<string, string>, extra: unknown) => GetPromptResult;
@@ -135,6 +176,15 @@ export function registerPrompts(server: McpServer, state: CatalogState): void {
         argsSchema: ReviewDiagramArgs,
       },
       ({ diagram }) => reviewDiagram(state, diagram),
+    ),
+    [IMPROVE_DIAGRAM]: server.registerPrompt(
+      IMPROVE_DIAGRAM,
+      {
+        title: "Improve a diagram",
+        description: "Lint a diagram and its model, apply the fixes, repeat, then look at it.",
+        argsSchema: ImproveDiagramArgs,
+      },
+      ({ diagram }) => improveDiagram(state, diagram),
     ),
   };
   // GetPromptRequest's arguments are optional (MCP 2025-06-18, schema.ts), but McpServer 1.29

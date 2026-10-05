@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
-import { BUILD_DIAGRAM_DESCRIPTION, buildDiagramInput } from "../src/build-diagram.js";
+import { BUILD_DIAGRAM_DESCRIPTION, buildDiagramInput, buildResult } from "../src/build-diagram.js";
 import { CatalogState } from "../src/extension-tools.js";
 import { BUNDLED_MANIFEST } from "../src/manifest.js";
 import { parseToolSelection } from "../src/tiers.js";
@@ -57,6 +57,8 @@ describe("build_diagram tool", () => {
       "mermaid",
       "name",
       "upsert",
+      "prune",
+      "dryRun",
       "direction",
       "layout",
     ]);
@@ -127,6 +129,60 @@ describe("build_diagram tool", () => {
     expect(text(result)).not.toContain('"kind"');
   });
 
+  it("answers a dry run's plan steps and counts its ops, without the placeholder ids", async () => {
+    const ops = [
+      { path: "/create_diagram", body: { type: "UMLClassDiagram", name: "Shop" }, as: "diagram" },
+      { path: "/create_element_with_view", body: { diagram: "$diagram", name: "Order" }, as: "n0" },
+    ];
+    const plan = {
+      ops,
+      creates: [
+        {
+          op: "create_diagram",
+          target: null,
+          as: "diagram",
+          type: "UMLClassDiagram",
+          name: "Shop",
+        },
+        { op: "create_element_with_view", target: null, as: "n0", type: "UMLClass", name: "Order" },
+      ],
+      updates: [],
+      deletes: [],
+    };
+    extension.reply("/build_diagram", {
+      body: {
+        success: true,
+        data: {
+          ...answer,
+          diagram: { _id: "$diagram", _type: "UMLClassDiagram", name: "Shop" },
+          ids: { Order: { model: "$n0.model", view: "$n0.view" } },
+          edges: [],
+          dryRun: true,
+          plan,
+        },
+      },
+    });
+
+    const result = await mcp.call("build_diagram", { mermaid, dryRun: true });
+
+    expect(extension.requests[0]!.body).toEqual({ mermaid, dryRun: true });
+    const shown = JSON.parse(text(result)) as Record<string, unknown>;
+    expect(shown).not.toHaveProperty("ids");
+    expect(shown).not.toHaveProperty("edges");
+    // Null targets and the empty lists are pruned, as everywhere.
+    expect(shown.plan).toEqual({
+      ops: 2,
+      creates: plan.creates.map(({ target: _target, ...step }) => step),
+    });
+    expect(shown.created).toBe(3);
+  });
+
+  it("passes a real build's answer, and an answer without a plan, through as JSON", () => {
+    expect(JSON.parse(text(buildResult(answer, {})))).toMatchObject({ ids: answer.ids });
+    expect(text(buildResult({ dryRun: true }, {}))).toBe('{"dryRun":true}');
+    expect(text(buildResult(null, {}))).toBe("null");
+  });
+
   it.each([
     ["an unknown key", { mermaid, title: "Shop" }, 'body: Unrecognized key: "title"'],
     [
@@ -136,6 +192,11 @@ describe("build_diagram tool", () => {
     ],
     ["a kind it does not build", { kind: "gantt", spec: {} }, "kind: Invalid option"],
     ["a layout preset it does not have", { mermaid, layout: "sideways" }, "layout: Invalid option"],
+    [
+      "a flag that is not a boolean",
+      { mermaid, dryRun: "yes" },
+      "dryRun: Invalid input: expected boolean, received string",
+    ],
     [
       "a wrong-typed unlisted parameter",
       { mermaid, autoLayout: "no" },
@@ -159,7 +220,7 @@ describe("build_diagram tool", () => {
   });
 
   it("rejects a wrong-typed listed parameter through the input schema", async () => {
-    const result = await mcp.call("build_diagram", { mermaid, upsert: "yes" });
+    const result = await mcp.call("build_diagram", { mermaid, name: 5 });
 
     expect(text(result)).toMatch(/Input validation error/);
     expect(extension.requests).toEqual([]);
@@ -202,7 +263,14 @@ describe("build_diagram tool", () => {
 describe("buildDiagramInput", () => {
   it("lists only the parameters the manifest entry has", () => {
     const properties = entry.request.properties as Record<string, unknown>;
-    const { upsert: _upsert, direction: _direction, layout: _layout, ...rest } = properties;
+    const {
+      upsert: _upsert,
+      prune: _prune,
+      dryRun: _dryRun,
+      direction: _direction,
+      layout: _layout,
+      ...rest
+    } = properties;
 
     const schema = z.toJSONSchema(
       buildDiagramInput({ ...entry, request: { ...entry.request, properties: rest } }),
@@ -211,7 +279,7 @@ describe("buildDiagramInput", () => {
     expect(Object.keys(schema.properties)).toEqual(["kind", "spec", "mermaid", "name"]);
   });
 
-  it("lists spec, kind and layout without the types the whole schema checks", () => {
+  it("lists spec, kind, layout and the flags without the types the whole schema checks", () => {
     const schema = z.toJSONSchema(buildDiagramInput(entry)) as {
       properties: Record<string, Record<string, unknown>>;
     };
@@ -219,6 +287,9 @@ describe("buildDiagramInput", () => {
     expect(Object.keys(schema.properties.spec!)).toEqual(["description"]);
     expect(Object.keys(schema.properties.kind!)).toEqual(["description"]);
     expect(Object.keys(schema.properties.layout!)).toEqual(["description"]);
+    for (const flag of ["upsert", "prune", "dryRun"]) {
+      expect(Object.keys(schema.properties[flag]!), flag).toEqual(["description"]);
+    }
     expect(schema.properties.direction!.enum).toEqual(["TB", "BT", "LR", "RL"]);
   });
 

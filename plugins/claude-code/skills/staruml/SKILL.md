@@ -32,17 +32,20 @@ extension's endpoints, so run it after the user upgrades the extension.
 | The user wants | Use |
 |---|---|
 | A new diagram of a kind below | `build_diagram` with a `spec`: exact names, one undo step, ids back |
-| Their Mermaid source rendered | `generate_diagram` (routes itself, see section 4) |
+| Their Mermaid source rendered | `generate_diagram` (routes itself, see section 5) |
 | Small edits to an existing model | `find_elements`, then `update_element` / `delete_element` |
 | Many related creations or edits | one `batch` |
-| To read or explain a diagram | `diagram_as_text` or `describe_diagram` (section 7), not a picture |
+| To read or explain a diagram | `diagram_as_text` or `describe_diagram` (section 8), not a picture |
 | The `type` or command id to pass | `search_types` |
-| To check a model | `validate_model` |
+| To check a model | `validate_model`; `uml_lint` for modelling mistakes (section 4) |
+| To check how a diagram reads | `lint_diagram`, then its autofixes in one `batch` (section 4) |
+| To see what a build would change | `build_diagram` with `dryRun: true`, or `diff_diagram` |
 | Anything else StarUML can do | `describe_endpoints`, then `call_endpoint` |
 | To see a diagram | `view_diagram`; `export_diagram` for files |
 
 A user may also start the server's prompts `model-codebase` (reverse-engineer a source directory
-or build class diagrams from a description) and `review-diagram`; they spell out the same calls.
+or build class diagrams from a description), `review-diagram` and `improve-diagram` (the lint and
+fix loop of section 4); they spell out the same calls.
 
 ### Ids and paths
 
@@ -62,7 +65,7 @@ need to look an id up first:
 A `\` escapes `/ . # @ ( ) ,` inside a name. Element results carry the `path` each element
 resolves by. A path that fits several elements is refused as `AMBIGUOUS_REF` with the candidates'
 ids and paths; pass one of those or a longer path. Use paths for what already exists and `$name`
-references (section 5) for what a batch creates.
+references (section 6) for what a batch creates.
 
 ## 3. build_diagram: one spec per kind
 
@@ -70,7 +73,9 @@ references (section 5) for what a batch creates.
 `id` where a node has one. `\n` or `<br/>` in a name stores a line break (StarUML 7.1.1 draws it
 on one line). The answer carries the diagram id and the model and view id of every node, keyed
 by name. `upsert: true` updates the diagram of the same name instead of adding a second one;
-it adds what is missing and never deletes. `direction` is `TB` (default), `BT`, `LR` or `RL`;
+it adds what is missing, and deletes what the spec lacks only with `prune: true`. A class,
+interface, enum, package, actor, use case or entity named like one elsewhere in the project is
+that element shown again, not a copy (`reuse`, default true). `direction` is `TB` (default), `BT`, `LR` or `RL`;
 `layout` picks a preset (`flow-down`, `flow-right`, `hierarchy-down`, ...: flow puts an edge's
 source first, hierarchy its target, as superclasses above subclasses), by default hierarchy for
 class diagrams and flow for the rest.
@@ -241,9 +246,79 @@ document, predefined, alternate, database, manualInput, preparation, connector, 
 }
 ```
 
-The full grammar with every optional field: `describe_endpoints({names: ["build_diagram"]})`.
+The full grammar with every optional field, the `requirement` and `c4` kinds, and `text` with
+`format` for PlantUML, SQL DDL or JSON Schema sources: `describe_endpoints({names:
+["build_diagram"]})`.
 
-## 4. Mermaid
+## 4. The build loop and drawing good UML
+
+Draw every diagram in this loop:
+
+1. **Plan**: `build_diagram` with `dryRun: true` changes nothing and answers the plan, the
+   paths it would create, update and delete. Check the names and that `reuse` found the existing
+   elements you meant.
+2. **Build**: the same call without `dryRun` (with `upsert: true` once the diagram exists).
+3. **Lint**: `lint_diagram` lists what makes the picture hard to read (stacked or overlapping
+   nodes, edges through nodes, names wider than their box, crowding); every finding with an
+   `autofix` carries a `{path, body}` request, the shape of a `batch` op, so send them all in one
+   `batch`. `uml_lint` (through `call_endpoint`) lists modelling mistakes, each with a `fix` line;
+   apply those with a `build_diagram` upsert or `update_element`.
+4. **Look**: `view_diagram` once, or `diagram_as_text` when the content is what matters.
+
+Take a `snapshot` before a larger change: `diff_since` lists what changed since, and
+`restore_snapshot` undoes all of it in one step.
+
+```json build_diagram
+{
+  "kind": "class",
+  "name": "Ordering",
+  "dryRun": true,
+  "upsert": true,
+  "spec": {
+    "classes": [{ "name": "Order" }, { "name": "Invoice", "attributes": ["+number: String"] }],
+    "relations": [{ "from": "Order", "to": "Invoice", "type": "directed", "fromMultiplicity": "1", "toMultiplicity": "0..1" }]
+  }
+}
+```
+
+```json lint_diagram
+{ "diagram": "Ordering" }
+```
+
+```json call_endpoint
+{ "name": "uml_lint", "body": { "rules": { "naming": "info" } } }
+```
+
+What a diagram needs to read well:
+
+- **One concern per diagram**, about 5 to 15 nodes. Split when it passes 20, when two clusters
+  share a single edge, or when a reader needs two questions answered; one diagram per package
+  for a larger model.
+- **Names**: classifiers are singular nouns in PascalCase, attributes nouns and operations verbs
+  in camelCase, enumeration literals UPPER_CASE (`uml_lint` U012). Use the domain's words, the
+  same word for the same thing on every diagram.
+- **Direction and layering**: superclasses above subclasses (the class default,
+  `hierarchy-down`); dependencies run one way, from user interface through services to the
+  domain and persistence, top to bottom or left to right; `LR` for pipelines and long flows.
+- **Grouping**: give classes a `package`; put what changes together in one package and draw
+  packages on an overview.
+- **Class diagrams**: a multiplicity on both ends of every association (U001); `directed` when
+  only one side knows the other (U002); `composition` when parts live and die with the whole,
+  `aggregation` for a shared part, `from` being the whole that gets the diamond; `generalization`
+  for is-a, `realization` for an interface; typed attributes (U003); an abstract class needs a
+  subclass (U005) and an interface a realizer (U006); show only the members the concern needs.
+- **Sequence diagrams**: one scenario; participants left to right in order of first use; every
+  message names an operation of its receiver (U007); replies as `kind: "reply"`; `alt`, `opt` and
+  `loop` fragments instead of conditions in message text.
+- **Use case diagrams**: actors outside the `system` boundary; use cases as verb phrases; every
+  use case has an actor (U008); `include` for a step always shared, `extend` for an optional one;
+  no ordering, which belongs on an activity diagram.
+- **State machines**: one initial (U009) and at least one final state (U010); states named as
+  conditions (`Paid`), transitions as `trigger [guard] / effect`.
+- **ER diagrams**: a primary key on every entity (U011), foreign keys marked `FK` with a
+  relationship giving both cardinalities, one naming style for tables and columns.
+
+## 5. Mermaid
 
 `build_diagram` reads `classDiagram`, `sequenceDiagram`, `flowchart`/`graph`, `erDiagram` and
 `stateDiagram` and names the diagram from `name`, front matter `title:` or a `title` line. `kind`
@@ -263,7 +338,7 @@ kind, a title or line breaks, which the built-in importer cannot do:
 
 Prefer a spec when you write the diagram yourself; use Mermaid when the user already has it.
 
-## 5. batch and `$name` references
+## 6. batch and `$name` references
 
 `batch` runs endpoint calls in order as one undo step and, by default, rolls every op back when
 one fails. `as` names an op's result; a later body refers to its id as `"$name"`, to a
@@ -287,7 +362,7 @@ The server checks every op's body and every reference before anything is sent.
 
 `atomic: false` runs every op and reports each result instead.
 
-## 6. Endpoints without a tool
+## 7. Endpoints without a tool
 
 The default tool list is a core set. The other endpoints (project open/save, views, layout,
 styles, undo/redo, commands, code generation, PDF/HTML export) are one step away:
@@ -307,7 +382,7 @@ Saving is `call_endpoint({name: "save_project", body: {filename: "/absolute/path
 If a session needs one endpoint often, `doctor({tools: "core,layout_diagram"})` lists it as a
 tool, and `doctor({tools: "core"})` goes back.
 
-## 7. Reading, viewing and exporting
+## 8. Reading, viewing and exporting
 
 Read a diagram as text. For a six-class diagram with members, Mermaid or a `describe_diagram`
 summary is about 270 tokens, a PNG about 1,600 (an estimate, billed as an image) and an element
@@ -358,7 +433,7 @@ after building.
 `export_diagram` returns PNG or JPEG as an image and SVG as text; with `path` it writes the file
 and returns only its size, which is what to do for anything the user wants on disk.
 
-## 8. Keeping token use down
+## 9. Keeping token use down
 
 - Element results are summaries `{_id, _type, name, _parent, path}`. Ask for more with `fields`
   (attribute names), `depth` (owned elements) or, rarely, `summary: false`.
@@ -375,7 +450,7 @@ and returns only its size, which is what to do for anything the user wants on di
 - `introspect` returns versions only unless asked for `include` sections; narrow the metamodel
   with `types: ["UMLClass"]`.
 
-## 9. Access token and refusals
+## 10. Access token and refusals
 
 If the extension's access token is set in StarUML (Server Info, Generate Access Token...), the
 server must be started with `--ext-token <token>` or the `STARUML_EXT_TOKEN` environment variable;
@@ -386,3 +461,8 @@ Errors come back as results with `isError`, a `[CODE, endpoint, HTTP status]` li
 `Hint:` line; follow the hint. `INVALID_ARGUMENT` names the failing field (`ops.2.body.ref`
 inside a batch). `DIALOG_REQUIRED` means the command would open a dialog: pass the arguments
 `describe_commands` lists, or use the dedicated endpoint. `RATE_LIMITED` says when to retry.
+`AMBIGUOUS_REF` means a path fits several elements; the hint names them, pass one of those.
+`DUPLICATE_NAME` means a sibling of that kind has the name: refer to the existing element, keep
+`build_diagram`'s `reuse` on, rename, or pass `allowDuplicateNames: true`. `SNAPSHOT_STALE` means
+the undo history no longer reaches the snapshot; `UNSUPPORTED_SYNTAX` names a construct of the
+diagram text and its line that StarUML cannot draw.

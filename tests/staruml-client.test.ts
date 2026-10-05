@@ -503,6 +503,80 @@ describe("StarUMLClient", () => {
       expect(error.hint).toContain(hint);
     });
 
+    const reference = (slug: string, code: string, details?: unknown) => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: false, code, error: `refused: ${code}`, details }), {
+          status: code === "UNSUPPORTED_SYNTAX" ? 422 : 409,
+        }),
+      );
+      return caught(new StarUMLClient().callExtension(slug, {}));
+    };
+    const candidate = (n: number, path: string | null = `Model/P${n}/Order`) => ({
+      _id: `C${n}`,
+      _type: "UMLClass",
+      path,
+    });
+
+    it("names the candidates of AMBIGUOUS_REF by path, or by id where paths collide", async () => {
+      const error = await reference("/get_element_by_id", "AMBIGUOUS_REF", {
+        candidates: [candidate(1), candidate(2), candidate(3, "Order"), candidate(4, "Order")],
+      });
+
+      expect(error).toMatchObject({ code: "AMBIGUOUS_REF", status: 409 });
+      expect(error.hint).toBe(
+        "Pass one of these instead, or a longer path: Model/P1/Order, Model/P2/Order, C3, C4.",
+      );
+      expect(error.details).toMatchObject({ candidates: [{ _id: "C1" }, {}, {}, {}] });
+    });
+
+    it("names five AMBIGUOUS_REF candidates and counts the rest", async () => {
+      const candidates = Array.from({ length: 8 }, (_, i) => candidate(i + 1));
+      const error = await reference("/delete_element", "AMBIGUOUS_REF", { candidates });
+
+      expect(error.hint).toMatch(/: Model\/P1\/Order, .*, Model\/P5\/Order \(and 3 more\)\.$/);
+    });
+
+    it("points to find_elements when AMBIGUOUS_REF has no candidates", async () => {
+      expect((await reference("/delete_element", "AMBIGUOUS_REF")).hint).toBe(
+        "Pass one of these instead, or a longer path; find_elements lists elements by name.",
+      );
+      expect((await reference("/delete_element", "AMBIGUOUS_REF", { candidates: 3 })).hint).toBe(
+        "Pass one of these instead, or a longer path; find_elements lists elements by name.",
+      );
+    });
+
+    it.each([
+      [
+        "/create_element",
+        { existing: { _id: "C1", path: "Model/Shop/Order" } },
+        "Model/Shop/Order exists already: refer to it by its path, rename the new one, or pass allowDuplicateNames: true to add a second.",
+      ],
+      [
+        "/build_diagram",
+        { existing: { _id: "C1" } },
+        "C1 exists already: keep reuse on (the default) to show it again, rename the new one, or pass allowDuplicateNames: true to add a second.",
+      ],
+      [
+        "/batch",
+        { index: 2 },
+        "A sibling of that kind has the name: refer to it by its path, rename the new one, or pass allowDuplicateNames: true to add a second.",
+      ],
+    ])(
+      "suggests reuse or allowDuplicateNames for DUPLICATE_NAME from %s",
+      async (slug, d, hint) => {
+        expect((await reference(slug, "DUPLICATE_NAME", d)).hint).toBe(hint);
+      },
+    );
+
+    it("explains SNAPSHOT_STALE and UNSUPPORTED_SYNTAX", async () => {
+      expect((await reference("/restore_snapshot", "SNAPSHOT_STALE")).hint).toMatch(
+        /^The undo history no longer reaches that snapshot .*take a new one with snapshot\.$/,
+      );
+      const syntax = await reference("/build_diagram", "UNSUPPORTED_SYNTAX");
+      expect(syntax.status).toBe(422);
+      expect(syntax.hint).toContain('describe_endpoints({names: ["build_diagram"]})');
+    });
+
     it("keeps the details of a success:false answer on HTTP 200", async () => {
       fetchSpy.mockResolvedValueOnce(
         new Response(

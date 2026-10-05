@@ -22,7 +22,7 @@ import {
   type TextFormat,
 } from "./diagram-text.js";
 import { generateDiagram } from "./generate-diagram.js";
-import { nonEmpty, PROJECTION_INSTRUCTIONS, unstamped, untrivial } from "./manifest.js";
+import { nonEmpty, PROJECTION_INSTRUCTIONS, unlisted, unstamped, untrivial } from "./manifest.js";
 import { readProjectTree } from "./project-tree.js";
 import { registerPrompts } from "./prompts.js";
 import { StarUMLClient } from "./staruml-client.js";
@@ -70,8 +70,10 @@ export function diagramTextUri(id: string, format: TextFormat): string {
 const INSTRUCTIONS =
   "Results are JSON without null or empty fields or echoed arguments. " +
   `${PROJECTION_INSTRUCTIONS} ` +
+  "Element fields take an _id or a path: Pkg/Class, Class.attr, Class#op(), Class@Diagram, " +
+  "@current. " +
   "Endpoints without a tool: describe_endpoints, then call_endpoint. " +
-  "Resources: diagram PNG, Mermaid and PlantUML, project tree, metamodel, endpoint manifest.";
+  "Resources: diagram PNG, Mermaid, PlantUML; project tree; metamodel; endpoints.";
 
 export interface ServerConfig {
   apiPort?: number;
@@ -104,7 +106,9 @@ const DiagramImageInput = unstamped(z.object({ diagramId: id("Diagram") }));
  * `@current`). `id`, the name before extension 0.3.0 took paths, still passes unlisted through
  * the loose root, as the extension keeps its own old names as aliases.
  */
-const diagramRef = nonEmpty().optional().describe("Diagram id or path; default the current one.");
+const diagramRef = unlisted(nonEmpty(), "type")
+  .optional()
+  .describe("Diagram id or path; default the current one.");
 
 const ViewDiagramInput = unstamped(untrivial(z.looseObject({ diagram: diagramRef })));
 

@@ -90,8 +90,8 @@ const ARGS: Record<string, Record<string, unknown>> = {
  * sample would pass the listing and be refused by the check against the whole schema instead.
  */
 const INVALID: Record<string, Record<string, unknown>> = {
-  "/build_diagram": { upsert: "yes" },
-  "/export_diagram": { scale: 9 },
+  "/build_diagram": { name: 5 },
+  "/export_diagram": { format: "gif" },
   "/find_elements": { type: 5 },
   "/update_element": { ref: 5 },
   "/search_types": { query: 5 },
@@ -102,6 +102,9 @@ const INVALID: Record<string, Record<string, unknown>> = {
 /** Endpoints listed with a hand-written schema, tested in their own files. */
 const SHORT = new Set([
   "/batch",
+  "/get_element_by_id",
+  "/delete_element",
+  "/lint_diagram",
   "/build_diagram",
   "/export_diagram",
   "/find_elements",

@@ -101,9 +101,14 @@ describe("SKILL.md", () => {
 
   it("has a build_diagram spec example for every kind and covers the core workflow", () => {
     const specKinds = examples
-      .filter((e) => e.tool === "build_diagram" && e.args.spec !== undefined)
+      .filter((e) => e.tool === "build_diagram" && e.args.spec !== undefined && !e.args.dryRun)
       .map((e) => e.args.kind);
     expect(specKinds).toEqual(KINDS);
+    // The build loop: a dry run, a lint and uml_lint (#13).
+    expect(examples.some((e) => e.tool === "build_diagram" && e.args.dryRun === true)).toBe(true);
+    expect(examples.some((e) => e.tool === "call_endpoint" && e.args.name === "uml_lint")).toBe(
+      true,
+    );
     expect(examples.some((e) => e.tool === "build_diagram" && "mermaid" in e.args)).toBe(true);
     expect(new Set(examples.map((e) => e.tool))).toEqual(
       new Set([
@@ -119,8 +124,34 @@ describe("SKILL.md", () => {
         "diagram_as_text",
         "search_types",
         "validate_model",
+        "lint_diagram",
       ]),
     );
+  });
+
+  it("teaches the build loop and what a readable UML diagram needs (#13)", () => {
+    const section = /^## 4\. The build loop and drawing good UML\n([\s\S]*?)^## /m.exec(
+      readSkill(),
+    )?.[1];
+
+    expect(section).toBeDefined();
+    const loop = ["**Plan**", "dryRun", "**Build**", "**Lint**", "autofix", "**Look**"].map(
+      (step) => section!.indexOf(step),
+    );
+    expect(loop.every((at, i) => at >= 0 && (i === 0 || at > loop[i - 1]!))).toBe(true);
+    for (const topic of [
+      "One concern per diagram",
+      "Split when",
+      "**Names**",
+      "multiplicity on both ends",
+      "`directed` when",
+      "**Direction and layering**",
+      "**Grouping**",
+      "`package`",
+      "snapshot",
+    ]) {
+      expect(section, topic).toContain(topic);
+    }
   });
 
   it("is copied unchanged, apart from a source note, to the Codex and Copilot plugins", () => {

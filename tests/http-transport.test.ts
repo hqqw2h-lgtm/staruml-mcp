@@ -119,7 +119,7 @@ describe("POST /mcp", () => {
     const { message } = await rpc(server, 2, "tools/list");
 
     const tools = message.result!.tools as { name: string; inputSchema: object }[];
-    expect(tools).toHaveLength(20);
+    expect(tools).toHaveLength(21);
     expect(tools.map((t) => t.name)).toEqual(
       expect.arrayContaining(["generate_diagram", "find_elements", "call_endpoint"]),
     );

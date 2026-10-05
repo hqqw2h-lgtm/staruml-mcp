@@ -15,11 +15,11 @@ export const EXPORT_DIAGRAM_DESCRIPTION =
 const LISTED: Record<string, string> = {
   diagram: "Diagram id or path; default the current one.",
   format: "Default png.",
-  scale: "PNG/JPEG pixels per unit; default 1.",
+  scale: "PNG/JPEG pixels per unit, up to 4; default 1.",
   background: "CSS colour, e.g. #fff; default transparent.",
   path: "Absolute file to write instead of answering the image.",
 };
 
 export function exportDiagramInput(entry: ManifestEntry): z.ZodObject {
-  return shortInput(entry, LISTED, new Set(["background"]));
+  return shortInput(entry, LISTED, new Set(["background", "scale"]));
 }

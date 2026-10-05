@@ -26,8 +26,10 @@ describe("listing", () => {
     expect(mcp.client.getInstructions()).toBe(
       "Results are JSON without null or empty fields or echoed arguments. " +
         `${PROJECTION_INSTRUCTIONS} ` +
+        "Element fields take an _id or a path: Pkg/Class, Class.attr, Class#op(), Class@Diagram, " +
+        "@current. " +
         "Endpoints without a tool: describe_endpoints, then call_endpoint. " +
-        "Resources: diagram PNG, Mermaid and PlantUML, project tree, metamodel, endpoint manifest.",
+        "Resources: diagram PNG, Mermaid, PlantUML; project tree; metamodel; endpoints.",
     );
   });
 

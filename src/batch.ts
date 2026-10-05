@@ -6,7 +6,14 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { compactOpResults, serialize } from "./compact.js";
 import { ErrorCode, ToolInputError } from "./errors.js";
-import { canonicalBody, issuePath, unstamped, untrivial, type GeneratedTool } from "./manifest.js";
+import {
+  canonicalBody,
+  issuePath,
+  unlisted,
+  unstamped,
+  untrivial,
+  type GeneratedTool,
+} from "./manifest.js";
 import { textResult } from "./tool-result.js";
 
 export const BATCH = "batch";
@@ -26,21 +33,27 @@ const REFERENCE = /^\$([A-Za-z_][\w-]*)((?:\.(?:[A-Za-z_$][\w$]*|\d+))*)$/;
 /**
  * Shorter than the manifest's request schema, which repeats the refused paths and the limit
  * preference in parameter descriptions. The manifest schema still decides: a batch is checked
- * against it before it is sent.
+ * against it before it is sent. The patterns of `path` and `as` and the minimum of `ops` are
+ * checked here too but not listed; the descriptions say as much in fewer tokens.
  */
 export const BatchInput = unstamped(
   z.object({
     ops: z
       .array(
         z.object({
-          path: z.string().regex(/^\//).describe("Endpoint path, e.g. /create_element."),
+          path: unlisted(z.string().regex(/^\//), "pattern").describe(
+            "Endpoint path, e.g. /create_element.",
+          ),
           body: untrivial(z.record(z.string(), z.unknown()))
             .optional()
             .describe("Its request body."),
-          as: z.string().regex(OP_NAME).optional().describe("Name later ops refer to as $name."),
+          as: unlisted(z.string().regex(OP_NAME), "pattern")
+            .optional()
+            .describe("Name later ops refer to as $name."),
         }),
       )
       .min(1)
+      .meta({ minItems: undefined })
       .describe("Calls in order."),
     atomic: z
       .boolean()

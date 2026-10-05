@@ -49,7 +49,7 @@ describe("diagram_as_text", () => {
     expect(tool.inputSchema).toEqual({
       type: "object",
       properties: {
-        diagram: { type: "string", description: "Diagram id or path; default the current one." },
+        diagram: { description: "Diagram id or path; default the current one." },
         format: { type: "string", enum: ["mermaid", "plantuml"], description: "Default mermaid." },
       },
     });

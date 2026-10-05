@@ -9,8 +9,9 @@
 /**
  * The core tier: the element CRUD every session uses, the composite endpoints that replace
  * dozens of calls once an extension ships them (`/batch`, `/build_diagram`, `/export_diagram`),
- * and the reads that answer in a few hundred tokens what a PNG or an element dump answers in
- * thousands (`/search_types`, `/describe_diagram`, `/validate_model`).
+ * the reads that answer in a few hundred tokens what a PNG or an element dump answers in
+ * thousands (`/search_types`, `/describe_diagram`, `/validate_model`), and `/lint_diagram`, whose
+ * findings carry the fix for each layout problem, which a model cannot see in text.
  * Names missing from the running manifest are ignored. `introspect` is the summary tool.
  */
 export const CORE_ENDPOINTS: readonly string[] = [
@@ -25,6 +26,7 @@ export const CORE_ENDPOINTS: readonly string[] = [
   "search_types",
   "describe_diagram",
   "validate_model",
+  "lint_diagram",
 ];
 
 /** `all` lists every endpoint; otherwise `names` are listed, `core` expanded to {@link CORE_ENDPOINTS}. */
@@ -72,16 +74,22 @@ export function selects(selection: ToolSelection, name: string): boolean {
  * reachable through a group without a release of this server.
  */
 const GROUP_RULES: readonly (readonly [string, RegExp])[] = [
-  // validate_model checks the whole project unless given a scope.
-  ["project", /project|modified|^validate_model$/],
+  // Checks that change nothing: StarUML's validation, the extension's lints, a spec diff.
+  ["quality", /lint|^validate_model$|^diff_diagram$/],
+  // Model checkpoints and the undo history they restore through.
+  ["history", /snapshot|^diff_since$|^(undo|redo)$/],
+  ["project", /project|modified/],
   ["command", /command/],
   // search_types searches the same catalogues introspect dumps.
   ["meta", /^(introspect|debug|search_types)$/],
   ["feature", /^add_/],
-  ["editor", /selection|editor|undo|redo/],
+  ["editor", /selection|editor/],
   // Code generation and reverse engineering through StarUML's language extensions.
   ["code", /_code/],
-  ["diagram", /diagram|view|layout|route|export|image|style|color|font|move|resize|z_order/],
+  [
+    "diagram",
+    /diagram|view|layout|route|export|image|style|color|font|move|resize|z_order|fragment/,
+  ],
   // Matches the empty string too, so every name has a group (found by tests/properties.test.ts).
   ["element", /^/],
 ];

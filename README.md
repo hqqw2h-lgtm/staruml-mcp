@@ -289,8 +289,8 @@ default and reaches every other extension endpoint through two generic tools:
 
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
-| `core` (default) | the 7 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`, `search_types`, `describe_diagram`, `validate_model`; `describe_endpoints`, `call_endpoint` | 1,973 |
-| `all` | the 7 above and one tool per manifest endpoint | 10,954 |
+| `core` (default) | the 7 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`, `search_types`, `describe_diagram`, `validate_model`, `lint_diagram`; `describe_endpoints`, `call_endpoint` | 1,992 |
+| `all` | the 7 above and one tool per manifest endpoint | 10,839 |
 | `core,create_diagram,…` | the 7 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
 Token counts include the server instructions (o200k_base, extension 0.3.0, `npm run
@@ -300,8 +300,10 @@ environment but no arguments; the flag wins. An agent can switch it at runtime w
 `doctor` finds a manifest with other endpoints. Names that are neither endpoints nor tools are
 reported by the `tier` check.
 
-- **`describe_endpoints()`** returns the endpoints without a tool, grouped (`project`, `command`,
-  `meta`, `feature`, `editor`, `code`, `diagram`, `element`; grouped by name, since the manifest has none), one line
+- **`describe_endpoints()`** returns the endpoints without a tool, grouped (`quality`: lints,
+  validation and `diff_diagram`; `history`: snapshots, undo and redo; `project`, `command`,
+  `meta`, `feature`, `editor`, `code`, `diagram`, `element`; grouped by name, since the manifest
+  has none), one line
   each. `describe_endpoints({names: [...]})` or `({group})` returns their full description, `readOnly`
   / `destructive` flags and request schema as `tools/list` would show it. Named endpoints may be
   listed ones.
@@ -360,7 +362,10 @@ the core tier):
 
 | Endpoint | Does |
 |---|---|
-| `build_diagram` | A whole diagram in one call and one undo step, from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap) or from Mermaid; laid out with a `layout` preset (default by kind), optionally upserted into the diagram of the same name; answers the model and view ids by node name. |
+| `build_diagram` | A whole diagram in one call and one undo step, from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap, requirement, c4) or from Mermaid, PlantUML, SQL DDL or JSON Schema text; laid out with a `layout` preset (default by kind), optionally upserted into the diagram of the same name (`prune` deletes what the spec lacks); elements named like existing ones are shown again, not copied (`reuse`); `dryRun` answers the plan and changes nothing; answers the model and view ids by node name. |
+| `lint_diagram` / `uml_lint` | How a diagram reads (stacked, overlapping or off-canvas views, edges through nodes, names wider than their box, unconnected nodes, crowding), each finding with an `autofix` request / modelling mistakes StarUML's validation skips (association ends without multiplicity or navigability, untyped attributes, abstract classes without subclasses, unrealized interfaces, messages naming no operation, use cases without actors, state machines without initial or final state, entities without a key, naming conventions), each with a fix line. |
+| `diff_diagram` / `snapshot` / `diff_since` / `restore_snapshot` | What a spec or diagram text would change on a diagram / a model checkpoint / what changed since one / undo back to one in a single step. |
+| `create_view_of` / `divide_fragment` | Show an existing element on another diagram / set where a combined fragment's operands begin. |
 | `export_text` / `describe_diagram` | A diagram as Mermaid (the form `build_diagram` reads back) or PlantUML, with warnings for what the text cannot carry / a bounded text summary of its nodes, members and edges. |
 | `search_types` / `validate_model` | Fuzzy search over metamodel types, palette items, relationship kinds and commands, each hit with an example request / StarUML's validation rules over the open model, problems with element and rule ids. |
 | `get_all_commands` / `describe_commands` / `execute_command` | List command ids / their arguments and whether they open a dialog / run any StarUML command. |
@@ -407,20 +412,32 @@ StarUML is rolled back and reported with the failing op's code; the extension's
 `details: {index, results}` come back in `structuredContent.error.details`, the results compacted as
 above, and the text adds `Details: {"index": n}` (the results name elements the rollback removed).
 
-`build_diagram` lists a hand-written description and seven parameters (`kind`, `spec`, `mermaid`,
-`name`, `upsert`, `direction`, `layout`, 267 tokens); the manifest's own description of `spec` alone is ~400
+`build_diagram` lists a hand-written description and nine parameters (`kind`, `spec`, `mermaid`,
+`name`, `upsert`, `prune`, `dryRun`, `direction`, `layout`, 297 tokens); the manifest's own description of `spec` alone is ~400
 tokens, so `spec` lists a one-line grammar per kind and `describe_endpoints({names:
-["build_diagram"]})` serves the full one. The unlisted `parent` (an id or a path) and `autoLayout` are accepted, and
+["build_diagram"]})` serves the full one. The unlisted `parent` (an id or a path), `text`, `format`, `reuse`, `allowDuplicateNames` and `autoLayout` are accepted, and
 every body is checked against the manifest's whole request schema before it is sent, as for `batch`.
 
-`export_diagram` lists a hand-written description and shorter parameter descriptions (139 tokens
-against the manifest's 208); the colour pattern is left to the check against the whole request
+`export_diagram` lists a hand-written description and shorter parameter descriptions (132 tokens
+against the manifest's 208); the colour pattern and the scale bounds are left to the check against the whole request
 schema, as for `build_diagram`. It returns a PNG or JPEG as an image content block followed by the rest of the answer
 (`width`, `height`, `bytes`) as JSON; as text, the base64 of even a small diagram costs thousands of
 tokens. SVG and exports written to `path` come back as JSON.
 
+A `build_diagram` dry run answers the plan's `creates`,
+`updates` and `deletes` and counts its `/batch` ops instead of listing them: they are the largest
+part of the answer, and the build runs them. Its `ids` and `edges`, "$name" placeholders for
+elements that do not exist yet, are left out too.
+
+`lint_diagram` (core) lists `diagram` and `rules` in 70 tokens. Its findings, and those of
+`uml_lint` and `diff_diagram`, come back with the checked diagram as its path and without the ids
+a finding's paths already name (a view of no model keeps its id); each lint `autofix` is a
+`{path, body}` request, the shape of a `batch` op, so every autofix of an answer goes into one
+`batch`. `get_element_by_id` and `delete_element` list `ref` and a whole one-line description,
+which the manifest's run past 100 characters.
+
 `find_elements`, `update_element`, `search_types`, `describe_diagram` and `validate_model` list
-hand-written descriptions too, in 95, 202, 86, 68 and 58 tokens; `update_element` keeps the
+hand-written descriptions too, in 95, 199, 86, 67 and 59 tokens; `update_element` keeps the
 meaning of each `op` in one line. These short listings, like `build_diagram`'s and
 `export_diagram`'s, leave string lengths and integer bounds to the check against the whole
 request schema, keep the manifest's `required`, and, like every listing, leave out
@@ -455,12 +472,13 @@ image tool and resource offer no size options.
 
 ### Prompts
 
-Clients that surface MCP prompts (as slash commands in Claude Code, for instance) offer two:
+Clients that surface MCP prompts (as slash commands in Claude Code, for instance) offer three:
 
 | Prompt | Arguments | Workflow |
 |---|---|---|
 | `model-codebase` | `path`, `language`, `description`, `name` (all optional) | `doctor`; with a source directory, `list_code_generators` and `reverse_code` (StarUML's Java reverse adds type hierarchy and package overview diagrams by default); otherwise one `build_diagram` of the central classes from the code or the description; then `describe_diagram` and `validate_model` on the result. |
 | `review-diagram` | `diagram`, an id or a path (default `@current`) | `describe_diagram`, `validate_model` scoped to the diagram's owner, `diagram_as_text`; then a review with a concrete fix per finding, changing nothing until asked. |
+| `improve-diagram` | `diagram`, an id or a path (default `@current`) | `snapshot`; `lint_diagram` and `uml_lint` on the diagram's owner; every lint autofix in one `batch`, the `uml_lint` fixes by `update_element` or a `build_diagram` upsert; again until no error or warning is left, at most three rounds; `view_diagram`, `diff_since`, and `restore_snapshot` if the result reads worse. |
 
 The text names each endpoint as a tool when the current tier lists it and as `call_endpoint`
 otherwise, so it is right under `--tools` selections too.
@@ -509,6 +527,7 @@ A failed tool call returns `isError: true` with a one-line cause, a hint where o
 | `EXTENSION_REQUIRED` | `generate_diagram` was given a `name` or `kind` while no compatible extension with `build_diagram` is available. |
 | `INVALID_ARGUMENT`, `UNKNOWN_ENDPOINT` | Also raised by `call_endpoint` itself, before any request, for a body the manifest schema rejects or a name it does not have; `endpoint` and `hint` say which and how to look it up. |
 | extension 0.3.0 codes | Passed through with their HTTP status: `INVALID_ARGUMENT` (400), `UNKNOWN_TYPE` (400), `NOT_FOUND` (404), `UNKNOWN_ENDPOINT` (404, with the upgrade hint), `NO_PROJECT` (409), `STARUML_ERROR` (422, StarUML refused the operation), `DIALOG_REQUIRED` (422, the command or generator would have opened a dialog; the hint points to `describe_commands` for `execute_command` and to `list_code_generators` for code generation, and `details` names the missing arguments), `INTERNAL` (500). An error body's `details` is passed through as `error.details` and, except for a rolled-back batch's results, as a `Details:` line. |
+| extension reference codes | Passed through with a hint: `AMBIGUOUS_REF` (409: a path fits several elements; the hint names up to five of `details.candidates` by path, or by id where their paths collide), `DUPLICATE_NAME` (409: a sibling of that kind has the name; refer to `details.existing` by its path, keep `build_diagram`'s `reuse` on, rename, or pass `allowDuplicateNames: true`), `SNAPSHOT_STALE` (409: the undo history no longer reaches the snapshot; take a new one), `UNSUPPORTED_SYNTAX` (422: diagram text with a construct StarUML cannot draw; the message names it and its line). |
 | extension request checks | Passed through with a hint naming the setting: `UNAUTHORIZED` (401: no or wrong access token; how to set or clear it), `FORBIDDEN_ORIGIN` (403: an `Origin` header not in Allowed Origins), `PAYLOAD_TOO_LARGE` (413: Max Request Body (KiB) or Max Batch Ops), `UNSUPPORTED_MEDIA_TYPE` (415: not `application/json`), `RATE_LIMITED` (429: Commands per Minute, with the `Retry-After` seconds), `TIMEOUT` (504: Request Timeout (s); the work may still complete). A 401/403/413/415/429/504 without these codes, as from a proxy, gets the same hint. |
 
 Arguments are checked against the tool's schema before any request, so a wrong-typed field fails
@@ -776,6 +795,29 @@ name, but not multiplicities, aggregation or navigability; Mermaid and PlantUML 
 in a notation the model already reads, and the Mermaid can be edited and rebuilt with
 `build_diagram`. Reading the diagram as Mermaid instead of a PNG saves about 1,360 tokens per read,
 and about 4,190 against the dump.
+
+### Fixing a messy diagram
+
+A sixth scenario, "fix a messy diagram", also on the current server only, fixes one class diagram
+drawn as an agent placing views by hand leaves it: five classes with long names, three stacked at
+one point and two overlapping, four associations. `scripts/capture-messy-diagram.mjs` drew it in
+StarUML 7.1.1 and recorded both ways of fixing it from the same start into
+`scripts/benchmark-data/messy-diagram-7.1.1.json`. "By eye" is the way without the lint: look at
+the PNG, run Format > Layout through `call_endpoint` after reading its schema, look again. The
+lint loop is the #13 way (the `improve-diagram` prompt): `lint_diagram`, every autofix in one
+`batch`, `lint_diagram` again, one look at the PNG. The last column is what `lint_diagram` still
+finds after each.
+
+| Plan | Calls | Call tokens | Result text | Images (est.) | Total | Findings left |
+|---|---|---|---|---|---|---|
+| By eye: PNG, layout, PNG | 4 | 99 | 464 | 1287 | 1850 | 5 |
+| Lint loop: lint, batch of autofixes, lint, PNG | 4 | 305 | 1177 | 1052 | 2534 | 0 |
+
+The lint loop costs 684 tokens more and leaves nothing to fix; looking at the picture and laying
+it out separates the stacked and overlapping classes but cannot see that five names are wider
+than their boxes (L005), which only the lint measures. The loop's extra cost is its text: 801
+tokens for the seven findings with their paths, fixes and autofix requests, and 350 for the batch
+answer, whose resized views report their geometry.
 
 ## Architecture
 

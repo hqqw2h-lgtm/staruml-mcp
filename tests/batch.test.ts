@@ -382,7 +382,10 @@ describe("export_diagram", () => {
     expect(properties.background).toEqual({
       description: "CSS colour, e.g. #fff; default transparent.",
     });
-    expect(properties.scale).toMatchObject({ type: "number", exclusiveMinimum: 0, maximum: 4 });
+    // The bounds are left to the check against the whole request schema.
+    expect(properties.scale).toEqual({
+      description: "PNG/JPEG pixels per unit, up to 4; default 1.",
+    });
   });
 
   it("checks the colour against the manifest's pattern before sending", async () => {

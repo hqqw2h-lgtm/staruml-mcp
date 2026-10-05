@@ -199,7 +199,7 @@ describe("sessions", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers["mcp-session-id"]).toBeUndefined();
-    expect((parseSse(res.text).result!.tools as unknown[]).length).toBe(20);
+    expect((parseSse(res.text).result!.tools as unknown[]).length).toBe(21);
     expect(handler.sessions.size).toBe(1);
     // The stateless server unsubscribed when its response closed.
     await vi.waitFor(() => expect(catalog.subscribers).toBe(1));

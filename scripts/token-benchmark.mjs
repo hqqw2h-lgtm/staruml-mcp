@@ -438,7 +438,10 @@ const PLANS = [
   ["batch", "batched"],
 ];
 
-async function measure(createServer, plans = PLANS) {
+/** Arguments as written for the baselines, which predate extension 0.3.0's canonical names. */
+const asWritten = (_tool, args) => args;
+
+async function measure(createServer, plans = PLANS, argsFor = asWritten) {
   const builtin = await new UpstreamFixture().start();
   const extension = await new UpstreamFixture().start();
   const server = createServer({
@@ -483,9 +486,10 @@ async function measure(createServer, plans = PLANS) {
       for (const s of steps) {
         const fixture = s.upstream === "builtin" ? builtin : extension;
         fixture.reply(s.slug, { body: ok(s.data) });
+        const args = argsFor(s.tool, s.args);
         await (listed.has(s.tool)
-          ? call(s.tool, s.args)
-          : call("call_endpoint", { name: s.tool, body: s.args }));
+          ? call(s.tool, args)
+          : call("call_endpoint", { name: s.tool, body: args }));
       }
       perScenario.push({
         results,
@@ -517,9 +521,24 @@ const withTools = (value) => (config) =>
     ...config,
     catalog: new CatalogState(undefined, parseToolSelection(value)),
   });
-const all = await measure(withTools("all"));
-servers.push({ label: "now batch", ...(await measure(withTools("core"), [PLANS[1]])) });
-servers.push({ label: "now", ...(await measure(withTools("core"))) });
+const { BUNDLED_MANIFEST, aliasesOf } = await import("../src/manifest.ts");
+/** Old field name to canonical, by endpoint name (`id` to `ref`, `diagramId` to `diagram`, ...). */
+const ALIASES = Object.fromEntries(
+  BUNDLED_MANIFEST.endpoints.map((e) => [e.path.slice(1), aliasesOf(e)]),
+);
+const renamed = (tool, body) =>
+  Object.fromEntries(Object.entries(body).map(([k, v]) => [ALIASES[tool]?.[k] ?? k, v]));
+/**
+ * Arguments as a model writes them for the current server: the canonical names extension 0.3.0
+ * lists, in batch op bodies too. The scenarios are written with the names every baseline knows.
+ */
+const canonical = (tool, args) =>
+  tool === "batch"
+    ? { ...args, ops: args.ops.map((op) => ({ ...op, body: renamed(op.path.slice(1), op.body) })) }
+    : renamed(tool, args);
+const all = await measure(withTools("all"), PLANS, canonical);
+servers.push({ label: "now batch", ...(await measure(withTools("core"), [PLANS[1]], canonical)) });
+servers.push({ label: "now", ...(await measure(withTools("core"), PLANS, canonical)) });
 
 const pct = (b, a) => `${(((a - b) / b) * 100).toFixed(1)}%`;
 const sum = (list, key) => list.reduce((n, x) => n + x[key], 0);
@@ -634,7 +653,7 @@ const readPlans = [
   {
     name: "describe_diagram",
     tool: "describe_diagram",
-    args: { diagramId: read.diagramId },
+    args: { diagram: read.diagramId },
     upstream: "extension",
     slug: "/describe_diagram",
     data: read.describe,
@@ -642,7 +661,7 @@ const readPlans = [
   {
     name: "diagram_as_text (Mermaid)",
     tool: "diagram_as_text",
-    args: { id: read.diagramId },
+    args: { diagram: read.diagramId },
     upstream: "extension",
     slug: "/export_text",
     data: read.mermaid,
@@ -650,7 +669,7 @@ const readPlans = [
   {
     name: "diagram_as_text (PlantUML)",
     tool: "diagram_as_text",
-    args: { id: read.diagramId, format: "plantuml" },
+    args: { diagram: read.diagramId, format: "plantuml" },
     upstream: "extension",
     slug: "/export_text",
     data: read.plantuml,
@@ -703,3 +722,111 @@ console.log(
     "results and calls counted, definitions left out:",
 );
 console.table(await measureReads());
+
+// --- Fix a messy diagram ---------------------------------------------------------------------
+
+// What StarUML 7.1.1 and the extension answered while one messy class diagram was fixed both
+// ways, recorded by scripts/capture-messy-diagram.mjs in benchmark-data/messy-diagram-7.1.1.json:
+// five classes with long names, three stacked at one point and two overlapping. "By eye" is the
+// way without the lint: look at the PNG, run Format > Layout through call_endpoint (after reading
+// its schema), look again. "Lint loop" is the #13 way: lint_diagram, every autofix in one batch,
+// lint_diagram again, one look at the PNG. The PNG estimate is the one above; the last column is
+// what lint_diagram still finds after each.
+const messy = JSON.parse(
+  readFileSync(new URL("benchmark-data/messy-diagram-7.1.1.json", import.meta.url), "utf8"),
+);
+
+/** A step of a fixing plan: one tool call, the upstream answers it needs, an image estimate. */
+const fixStep = (tool, args, replies, image = 0) => ({ tool, args, replies, image });
+
+const look = (png) =>
+  fixStep(
+    "view_diagram",
+    { diagram: messy.diagramId },
+    [
+      ["extension", "/get_element_by_id", { _id: messy.diagramId, _type: "UMLClassDiagram" }],
+      ["builtin", "/get_diagram_image_by_id", "iVBORw0KGgo="],
+    ],
+    imageTokens(png),
+  );
+const lintStep = (answer) =>
+  fixStep("lint_diagram", { diagram: messy.diagramId }, [["extension", "/lint_diagram", answer]]);
+
+const fixPlans = [
+  {
+    name: "By eye: PNG, layout, PNG",
+    left: messy.byEye.lint.count,
+    steps: [
+      look(messy.before.png),
+      fixStep("describe_endpoints", { names: ["layout_diagram"] }, []),
+      fixStep("call_endpoint", { name: "layout_diagram", body: { diagram: messy.diagramId } }, [
+        ["extension", "/layout_diagram", messy.byEye.layout],
+      ]),
+      look(messy.byEye.png),
+    ],
+  },
+  {
+    name: "Lint loop: lint, batch of autofixes, lint, PNG",
+    left: messy.loop.lint.count,
+    steps: [
+      lintStep(messy.before.lint),
+      fixStep("batch", { ops: messy.loop.fixes }, [["extension", "/batch", messy.loop.batch]]),
+      lintStep(messy.loop.lint),
+      look(messy.loop.png),
+    ],
+  },
+];
+
+async function measureFixes() {
+  const builtin = await new UpstreamFixture().start();
+  const extension = await new UpstreamFixture().start();
+  const server = withTools("core")({
+    apiHost: "http://127.0.0.1",
+    apiPort: builtin.port,
+    extPort: extension.port,
+  });
+  const client = new Client({ name: "token-benchmark", version: "0.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    const rows = [];
+    for (const plan of fixPlans) {
+      let calls = 0;
+      let results = 0;
+      let images = 0;
+      for (const { tool, args, replies, image } of plan.steps) {
+        for (const [upstream, slug, data] of replies) {
+          (upstream === "builtin" ? builtin : extension).reply(slug, { body: ok(data) });
+        }
+        const result = await client.callTool({ name: tool, arguments: args });
+        if (result.isError) throw new Error(`${plan.name}: ${JSON.stringify(result.content)}`);
+        calls += callTokens(tool, args);
+        results += textTokens(result);
+        images += image;
+      }
+      rows.push({
+        plan: plan.name,
+        calls: plan.steps.length,
+        "call tokens": calls,
+        "result text": results,
+        "images (est.)": images,
+        total: calls + results + images,
+        "findings left": plan.left,
+      });
+    }
+    return rows;
+  } finally {
+    await client.close();
+    await server.close();
+    await builtin.stop();
+    await extension.stop();
+  }
+}
+
+console.log(
+  `\nFix a messy diagram: ${messy.nodes.length} classes, ${messy.before.lint.count} lint findings ` +
+    `(${messy.before.lint.findings.map((f) => f.rule).join(", ")}), StarUML ` +
+    `${messy.versions.staruml.version}, extension ${messy.versions.extension.version}; core tier, ` +
+    "results and calls counted, definitions left out:",
+);
+console.table(await measureFixes());

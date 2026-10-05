@@ -1,7 +1,7 @@
 import { GetPromptResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { bundledCatalog, CatalogState } from "../src/extension-tools.js";
-import { invocation, MODEL_CODEBASE, REVIEW_DIAGRAM } from "../src/prompts.js";
+import { IMPROVE_DIAGRAM, invocation, MODEL_CODEBASE, REVIEW_DIAGRAM } from "../src/prompts.js";
 import { parseToolSelection } from "../src/tiers.js";
 import { connect, type ConnectedClient } from "./support/mcp.js";
 
@@ -27,7 +27,7 @@ async function promptText(
 }
 
 describe("prompts/list", () => {
-  it("offers model-codebase and review-diagram with optional arguments", async () => {
+  it("offers model-codebase, review-diagram and improve-diagram with optional arguments", async () => {
     const { prompts } = await mcp.client.listPrompts();
 
     expect(prompts).toEqual([
@@ -63,6 +63,18 @@ describe("prompts/list", () => {
         name: REVIEW_DIAGRAM,
         title: "Review a diagram",
         description: "Describe, validate and read a diagram as text, then review it.",
+        arguments: [
+          {
+            name: "diagram",
+            description: "Diagram id or path; default the current diagram.",
+            required: false,
+          },
+        ],
+      },
+      {
+        name: IMPROVE_DIAGRAM,
+        title: "Improve a diagram",
+        description: "Lint a diagram and its model, apply the fixes, repeat, then look at it.",
         arguments: [
           {
             name: "diagram",
@@ -147,6 +159,41 @@ describe("review-diagram", () => {
       expect(text).toContain('3. diagram_as_text({diagram: "@current"})');
     } finally {
       await narrow.close();
+    }
+  });
+});
+
+describe("improve-diagram", () => {
+  it("lints, fixes in one batch, repeats and looks, with core tools where listed", async () => {
+    expect(await promptText(IMPROVE_DIAGRAM, { diagram: "Shop/Main" })).toBe(
+      [
+        "Improve diagram Shop/Main until it reads cleanly and models correctly.",
+        "",
+        '1. call_endpoint({name: "snapshot", body: {label: "before-improve"}}), to compare with and go back to.',
+        '2. lint_diagram({diagram: "Shop/Main"}) for layout problems and call_endpoint({name: "uml_lint", body: {scope: <the diagram\'s _parent>}}) for modelling ones; get_element_by_id gives the _parent.',
+        "3. Send the autofix of every lint finding that has one in a single batch({ops: [...]}): each autofix is a {path, body} op as it stands. Fix each uml_lint finding as its fix line says, with update_element, a build_diagram upsert (missing multiplicities, types, role names) or a rename.",
+        "4. Repeat steps 2 and 3 until lint_diagram reports no error or warning, at most three rounds. A finding that survives its autofix needs another remedy: layout_diagram with another preset, fewer nodes, or splitting the diagram by package or concern.",
+        '5. view_diagram({diagram: "Shop/Main"}) to look at the result and call_endpoint({name: "diff_since", body: {snapshot: "before-improve"}}) for what changed. If it reads worse than before, call_endpoint({name: "restore_snapshot", body: {snapshot: "before-improve"}}) undoes everything in one step.',
+        "",
+        "Report what was fixed and what still needs a decision from a person.",
+      ].join("\n"),
+    );
+  });
+
+  it("improves the current diagram, naming every endpoint's tool under --tools all", async () => {
+    const all = await connect({
+      catalog: new CatalogState(bundledCatalog(), parseToolSelection("all")),
+    });
+    try {
+      const text = await promptText(IMPROVE_DIAGRAM, {}, all);
+
+      expect(text).toMatch(/^Improve the diagram open in StarUML until/);
+      expect(text).toContain('1. snapshot({label: "before-improve"})');
+      expect(text).toContain('lint_diagram({diagram: "@current"})');
+      expect(text).toContain("uml_lint({scope: <the diagram's _parent>})");
+      expect(text).toContain('restore_snapshot({snapshot: "before-improve"})');
+    } finally {
+      await all.close();
     }
   });
 });
