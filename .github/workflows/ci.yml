@@ -77,3 +77,6 @@ jobs:
 
       - name: Load test (build_diagram)
         run: npm run load-test -- --build --requests 2000 --max-p99-ms 4000 --min-rps 100
+
+      - name: Load test (lint_diagram, one session)
+        run: npm run load-test -- --lint --session --requests 2000 --max-p99-ms 4000 --min-rps 100

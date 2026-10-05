@@ -125,7 +125,7 @@ describe("generate_diagram", () => {
 
     expect(result.isError).toBeFalsy();
     expect(extension.requests).toEqual([
-      { method: "POST", path: "/build_diagram", body: { mermaid: TITLED } },
+      { method: "POST", path: "/build_diagram", body: { mermaid: TITLED, result: "ids" } },
     ]);
     expect(JSON.parse(text(result))).toEqual(built);
     expect(builtin.requests).toEqual([]);
@@ -139,7 +139,12 @@ describe("generate_diagram", () => {
 
     const result = await mcp.call("generate_diagram", { code, name: "Order", kind: "activity" });
 
-    expect(extension.requests[0]!.body).toEqual({ mermaid: code, name: "Order", kind: "activity" });
+    expect(extension.requests[0]!.body).toEqual({
+      mermaid: code,
+      name: "Order",
+      kind: "activity",
+      result: "ids",
+    });
     expect(text(result)).not.toContain('"kind"');
   });
 

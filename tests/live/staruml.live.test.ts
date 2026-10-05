@@ -565,6 +565,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         results: { as?: string; data: Created & Summary }[];
       }>(
         await call("batch", {
+          result: "full",
           ops: [
             {
               path: "/create_diagram",
@@ -781,6 +782,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       // The Mermaid is the form build_diagram reads: built again, it describes the same diagram.
       const rebuilt = payload<{ diagram: Summary }>(
         await call("build_diagram", {
+          result: "full",
           mermaid: source,
           name: "LiveRoundTrip",
           parent: packageId,
@@ -916,6 +918,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
       const read = payload<{ results: { data: Summary }[] }>(
         await call("batch", {
+          result: "full",
           ops: [
             {
               path: "/get_element_by_id",
@@ -937,6 +940,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         ids: Record<string, unknown>;
       }>(
         await call("build_diagram", {
+          result: "full",
           kind: "class",
           spec: {
             classes: [{ name: "Shelf2", attributes: ["+code: String"] }, { name: "Copy2" }],
@@ -964,75 +968,93 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       expect(upserted.created).toBeGreaterThan(0);
     });
 
-    it("addresses elements by path, shows one again, divides a fragment and checkpoints (#20, #22)", async () => {
-      const book = payload<Summary>(await call("get_element_by_id", { ref: ids.book! }));
-      expect(book.path).toMatch(/\/Book$/);
-      expect(payload<Summary>(await call("get_element_by_id", { ref: book.path! }))._id).toBe(
-        ids.book,
-      );
-      const taken = payload<{ label: string; elements: number }>(
-        await call("snapshot", { label: "live-2g" }),
-      );
-      expect(taken.elements).toBeGreaterThan(10);
+    it(
+      "addresses elements by path, shows one again, divides a fragment and checkpoints (#20, #22)",
+      { timeout: 20_000 },
+      async () => {
+        const book = payload<Summary>(await call("get_element_by_id", { ref: ids.book! }));
+        expect(book.path).toMatch(/\/Book$/);
+        expect(payload<Summary>(await call("get_element_by_id", { ref: book.path! }))._id).toBe(
+          ids.book,
+        );
+        // The diagram tools take paths too; without the viewer, view_diagram resolves one to the
+        // id StarUML's built-in PNG export needs.
+        const diagramPath = payload<Summary>(
+          await call("get_element_by_id", { ref: classDiagramId }),
+        ).path!;
+        const asText = await call("diagram_as_text", { diagram: diagramPath });
+        expect(text({ content: asText.content.slice(1) })).toContain(`"id":"${classDiagramId}"`);
+        const png = await call("view_diagram", { diagram: diagramPath });
+        expect(png.content[0]!.type).toBe("image");
+        expect(
+          ok(await call("describe_diagram", { diagram: diagramPath })).split("\n")[0],
+        ).toContain("UMLClassDiagram");
 
-      const shown = payload<Created>(
-        await call("create_view_of", { ref: book.path!, diagram: ids.batchedDiagram!, x: 420 }),
-      );
-      expect(shown.view!._type).toBe("UMLClassView");
-      expect(shown.view!.path).toMatch(/\/Book@/);
+        const taken = payload<{ label: string; elements: number }>(
+          await call("snapshot", { label: "live-2g" }),
+        );
+        expect(taken.elements).toBeGreaterThan(10);
 
-      const sequence = payload<{ diagram: Summary }>(
-        await call("build_diagram", {
-          kind: "sequence",
-          name: "Live fragments",
-          parent: packageId,
-          spec: {
-            participants: ["A", "B"],
-            messages: [
-              { from: "A", to: "B", text: "ping()" },
-              { from: "B", to: "A", text: "pong", kind: "reply" },
-            ],
-            fragments: [{ operator: "alt", guard: "ok", operands: ["else"], from: 0, to: 1 }],
-          },
-        }),
-      );
-      const { ownedViews } = payload<{ ownedViews: Summary[] }>(
-        await call("get_element_by_id", {
-          ref: sequence.diagram._id,
-          fields: ["ownedViews"],
-          depth: 1,
-        }),
-      );
-      const fragment = ownedViews.find((v) => v._type === "UMLCombinedFragmentView")!;
-      const box = payload<{ top: number; height: number }>(
-        await call("get_element_by_id", { ref: fragment._id, fields: ["top", "height"] }),
-      );
-      const divided = payload<{ views: Summary[] }>(
-        await call("divide_fragment", {
-          ref: fragment._id,
-          at: [Math.round(box.top + box.height / 3)],
-        }),
-      );
-      expect(divided.views.length).toBeGreaterThan(0);
+        const shown = payload<Created>(
+          await call("create_view_of", { ref: book.path!, diagram: ids.batchedDiagram!, x: 420 }),
+        );
+        expect(shown.view!._type).toBe("UMLClassView");
+        expect(shown.view!.path).toMatch(/\/Book@/);
 
-      const since = payload<{ counts: { added: number; changed: number; removed: number } }>(
-        await call("diff_since", { snapshot: "live-2g" }),
-      );
-      expect(since.counts.added).toBeGreaterThan(0);
-      const restored = payload<{ undone: number; remaining: Record<string, number> }>(
-        await call("restore_snapshot", { snapshot: "live-2g" }),
-      );
-      expect(restored.undone).toBeGreaterThan(0);
-      expect(restored.remaining).toEqual({ added: 0, changed: 0, removed: 0 });
-      expect(failure(await call("get_element_by_id", { ref: sequence.diagram._id })).code).toBe(
-        "NOT_FOUND",
-      );
-      // One redo brings every undone operation back.
-      ok(await call("redo"));
-      expect(
-        payload<Summary>(await call("get_element_by_id", { ref: sequence.diagram._id })).name,
-      ).toBe("Live fragments");
-    });
+        const sequence = payload<{ diagram: Summary }>(
+          await call("build_diagram", {
+            result: "full",
+            kind: "sequence",
+            name: "Live fragments",
+            parent: packageId,
+            spec: {
+              participants: ["A", "B"],
+              messages: [
+                { from: "A", to: "B", text: "ping()" },
+                { from: "B", to: "A", text: "pong", kind: "reply" },
+              ],
+              fragments: [{ operator: "alt", guard: "ok", operands: ["else"], from: 0, to: 1 }],
+            },
+          }),
+        );
+        const { ownedViews } = payload<{ ownedViews: Summary[] }>(
+          await call("get_element_by_id", {
+            ref: sequence.diagram._id,
+            fields: ["ownedViews"],
+            depth: 1,
+          }),
+        );
+        const fragment = ownedViews.find((v) => v._type === "UMLCombinedFragmentView")!;
+        const box = payload<{ top: number; height: number }>(
+          await call("get_element_by_id", { ref: fragment._id, fields: ["top", "height"] }),
+        );
+        const divided = payload<{ views: Summary[] }>(
+          await call("divide_fragment", {
+            ref: fragment._id,
+            at: [Math.round(box.top + box.height / 3)],
+          }),
+        );
+        expect(divided.views.length).toBeGreaterThan(0);
+
+        const since = payload<{ counts: { added: number; changed: number; removed: number } }>(
+          await call("diff_since", { snapshot: "live-2g" }),
+        );
+        expect(since.counts.added).toBeGreaterThan(0);
+        const restored = payload<{ undone: number; remaining: Record<string, number> }>(
+          await call("restore_snapshot", { snapshot: "live-2g" }),
+        );
+        expect(restored.undone).toBeGreaterThan(0);
+        expect(restored.remaining).toEqual({ added: 0, changed: 0, removed: 0 });
+        expect(failure(await call("get_element_by_id", { ref: sequence.diagram._id })).code).toBe(
+          "NOT_FOUND",
+        );
+        // One redo brings every undone operation back.
+        ok(await call("redo"));
+        expect(
+          payload<Summary>(await call("get_element_by_id", { ref: sequence.diagram._id })).name,
+        ).toBe("Live fragments");
+      },
+    );
 
     it("lints a diagram and the model, and diffs a diagram against a spec (#21, #22)", async () => {
       const lint = payload<{ count: number; findings?: { rule: string; paths: string[] }[] }>(
@@ -1056,89 +1078,97 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       expect(diff.added.nodes).toEqual(["Loan"]);
     });
 
-    it("runs improve-diagram's loop: snapshot, lint, autofixes in one batch, re-lint, restore (#13)", async () => {
-      // Three classes stacked at one point: L001 at least, and associations without multiplicity.
-      const messy = payload<{ results: { data: Created & Summary }[] }>(
-        await call("batch", {
-          ops: [
-            {
-              path: "/create_diagram",
-              body: { type: "UMLClassDiagram", parent: packageId, name: "Messy" },
-              as: "d",
-            },
-            ...["Cart", "Item", "Price"].map((name) => ({
-              path: "/create_element_with_view",
-              body: { type: "UMLClass", parent: packageId, diagram: "$d", name, x: 100, y: 100 },
-              as: name,
-            })),
-            {
-              path: "/create_edge_with_view",
-              body: {
-                type: "UMLAssociation",
-                diagram: "$d",
-                tail: "$Cart.view",
-                head: "$Item.view",
+    it(
+      "runs improve-diagram's loop: snapshot, lint, autofixes in one batch, re-lint, restore (#13)",
+      { timeout: 20_000 },
+      async () => {
+        // Three classes stacked at one point: L001 at least, and associations without multiplicity.
+        const messy = payload<{ results: { data: Created & Summary }[] }>(
+          await call("batch", {
+            result: "full",
+            ops: [
+              {
+                path: "/create_diagram",
+                body: { type: "UMLClassDiagram", parent: packageId, name: "Messy" },
+                as: "d",
               },
-            },
-          ],
-        }),
-      );
-      const messyId = messy.results[0]!.data._id;
-
-      const prompt = await mcp.client.getPrompt({
-        name: "improve-diagram",
-        arguments: { diagram: messyId },
-      });
-      const steps = (prompt.messages[0]!.content as { text: string }).text;
-      expect(steps).toContain(`lint_diagram({diagram: "${messyId}"})`);
-      expect(steps).toContain('call_endpoint({name: "snapshot", body: {label: "before-improve"}})');
-
-      // Step 1 and 2 as written.
-      ok(await call("snapshot", { label: "before-improve" }));
-      interface Finding {
-        rule: string;
-        severity: string;
-        autofix?: { path: string; body: Record<string, unknown> };
-      }
-      const lint = async () =>
-        payload<{ count: number; findings?: Finding[] }>(
-          await call("lint_diagram", { diagram: messyId }),
+              ...["Cart", "Item", "Price"].map((name) => ({
+                path: "/create_element_with_view",
+                body: { type: "UMLClass", parent: packageId, diagram: "$d", name, x: 100, y: 100 },
+                as: name,
+              })),
+              {
+                path: "/create_edge_with_view",
+                body: {
+                  type: "UMLAssociation",
+                  diagram: "$d",
+                  tail: "$Cart.view",
+                  head: "$Item.view",
+                },
+              },
+            ],
+          }),
         );
-      const before = await lint();
-      expect(before.findings!.map((f) => f.rule)).toContain("L001");
-      const owner = payload<Summary>(await call("get_element_by_id", { ref: messyId }))._parent!;
-      const uml = payload<{ findings: { rule: string; path: string }[] }>(
-        await call("uml_lint", { scope: owner }),
-      );
-      expect(uml.findings.some((f) => f.rule === "U001")).toBe(true);
+        const messyId = messy.results[0]!.data._id;
 
-      // Step 3: every autofix in one batch, as each stands.
-      const fixes = before.findings!.flatMap((f) => (f.autofix ? [f.autofix] : []));
-      expect(fixes.length).toBeGreaterThan(0);
-      ok(await call("batch", { ops: fixes }));
-      const after = await lint();
-      const serious = (r: { findings?: Finding[] }) =>
-        (r.findings ?? []).filter((f) => f.severity !== "info").length;
-      expect(serious(after)).toBeLessThan(serious(before));
-      expect((after.findings ?? []).map((f) => f.rule)).not.toContain("L001");
+        const prompt = await mcp.client.getPrompt({
+          name: "improve-diagram",
+          arguments: { diagram: messyId },
+        });
+        const steps = (prompt.messages[0]!.content as { text: string }).text;
+        expect(steps).toContain(`lint_diagram({diagram: "${messyId}"})`);
+        expect(steps).toContain(
+          'call_endpoint({name: "snapshot", body: {label: "before-improve"}})',
+        );
 
-      // Step 5: the picture, what changed, and the way back.
-      const view = await call("view_diagram", { diagram: messyId });
-      expect(view.content[0]!.type).toBe("image");
-      const since = payload<{ counts: { changed: number } }>(
-        await call("diff_since", { snapshot: "before-improve" }),
-      );
-      expect(since.counts.changed).toBeGreaterThanOrEqual(0);
-      const restored = payload<{ undone: number }>(
-        await call("restore_snapshot", { snapshot: "before-improve" }),
-      );
-      expect(restored.undone).toBeGreaterThan(0);
-      expect((await lint()).findings!.map((f) => f.rule)).toContain("L001");
-    });
+        // Step 1 and 2 as written.
+        ok(await call("snapshot", { label: "before-improve" }));
+        interface Finding {
+          rule: string;
+          severity: string;
+          autofix?: { path: string; body: Record<string, unknown> };
+        }
+        const lint = async () =>
+          payload<{ count: number; findings?: Finding[] }>(
+            await call("lint_diagram", { diagram: messyId }),
+          );
+        const before = await lint();
+        expect(before.findings!.map((f) => f.rule)).toContain("L001");
+        const owner = payload<Summary>(await call("get_element_by_id", { ref: messyId }))._parent!;
+        const uml = payload<{ findings: { rule: string; path: string }[] }>(
+          await call("uml_lint", { scope: owner }),
+        );
+        expect(uml.findings.some((f) => f.rule === "U001")).toBe(true);
+
+        // Step 3: every autofix in one batch, as each stands.
+        const fixes = before.findings!.flatMap((f) => (f.autofix ? [f.autofix] : []));
+        expect(fixes.length).toBeGreaterThan(0);
+        ok(await call("batch", { ops: fixes }));
+        const after = await lint();
+        const serious = (r: { findings?: Finding[] }) =>
+          (r.findings ?? []).filter((f) => f.severity !== "info").length;
+        expect(serious(after)).toBeLessThan(serious(before));
+        expect((after.findings ?? []).map((f) => f.rule)).not.toContain("L001");
+
+        // Step 5: the picture, what changed, and the way back.
+        const view = await call("view_diagram", { diagram: messyId });
+        expect(view.content[0]!.type).toBe("image");
+        const since = payload<{ counts: { changed: number } }>(
+          await call("diff_since", { snapshot: "before-improve" }),
+        );
+        expect(since.counts.changed).toBeGreaterThanOrEqual(0);
+        const restored = payload<{ undone: number }>(
+          await call("restore_snapshot", { snapshot: "before-improve" }),
+        );
+        expect(restored.undone).toBeGreaterThan(0);
+        expect((await lint()).findings!.map((f) => f.rule)).toContain("L001");
+      },
+    );
 
     it("explains AMBIGUOUS_REF, DUPLICATE_NAME, SNAPSHOT_STALE and UNSUPPORTED_SYNTAX (#13)", async () => {
       const made = payload<{ results: { data: Summary }[] }>(
         await call("batch", {
+          result: "full",
           ops: [
             {
               path: "/create_element",
@@ -1196,7 +1226,6 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         await call("find_elements", { type: "UMLClass", name: "Planned" }),
       ).count;
       const planned = payload<{
-        dryRun: boolean;
         plan: { ops: number; creates: { op: string; name?: string }[] };
       }>(
         await call("build_diagram", {
@@ -1207,7 +1236,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           spec: { classes: [{ name: "Planned" }] },
         }),
       );
-      expect(planned.dryRun).toBe(true);
+      // dryRun echoes the argument and is dropped; the plan says what would run.
       expect(planned.plan.ops).toBeGreaterThan(0);
       expect(planned.plan.creates.map((c) => c.name)).toContain("Planned");
       expect(
@@ -1407,6 +1436,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       const renamed = async (name: string) => {
         const built = payload<Built>(
           await call("build_diagram", {
+            result: "full",
             mermaid: `sequenceDiagram\n  participant W as WebApp${lifelines}`,
             name: "Break",
           }),
@@ -1438,6 +1468,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     it("#4: builds a use case diagram from a JSON spec and from Mermaid", async () => {
       const fromSpec = payload<Built>(
         await call("build_diagram", {
+          result: "full",
           kind: "usecase",
           name: "Shop use cases",
           spec: {
@@ -1488,6 +1519,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     it("#4: builds an activity diagram from a JSON spec and from Mermaid", async () => {
       const fromSpec = payload<Built>(
         await call("build_diagram", {
+          result: "full",
           kind: "activity",
           name: "Checkout activity",
           spec: {
@@ -1542,20 +1574,26 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
    * what each spec describes (#12).
    */
   describe("skill examples (#12)", () => {
-    it.each(skillExamples())("SKILL.md line $line: $tool", async ({ tool, args }) => {
-      const result = await mcp.call(tool, args);
-      expect(result.isError, text(result)).toBeFalsy();
-      if (tool === "build_diagram") {
-        const built = JSON.parse(text(result)) as { diagram: Summary; ids: object };
-        expect(built.diagram._id).toEqual(expect.any(String));
-        expect(Object.keys(built.ids).length).toBeGreaterThan(0);
-      }
-      if (tool === "batch") {
-        expect(JSON.parse(text(result))).toMatchObject({
-          succeeded: (args.ops as unknown[]).length,
-        });
-      }
-    });
+    // A build takes StarUML seconds while other clients use it; the default 5 s is too tight.
+    it.each(skillExamples())(
+      "SKILL.md line $line: $tool",
+      { timeout: 20_000 },
+      async ({ tool, args }) => {
+        const result = await mcp.call(tool, args);
+        expect(result.isError, text(result)).toBeFalsy();
+        if (tool === "build_diagram") {
+          // The extension answers terse by default: the diagram and counts, no ids.
+          const built = JSON.parse(text(result)) as { diagram: Summary; created?: number };
+          expect(built.diagram._id).toEqual(expect.any(String));
+          expect(args.dryRun === true || built.created! > 0).toBe(true);
+        }
+        if (tool === "batch") {
+          expect(JSON.parse(text(result))).toMatchObject({
+            succeeded: (args.ops as unknown[]).length,
+          });
+        }
+      },
+    );
   });
 
   describe("extended tier", () => {

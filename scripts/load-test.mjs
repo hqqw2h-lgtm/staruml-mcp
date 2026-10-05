@@ -10,7 +10,8 @@
 // find_elements, which adds the manifest schema check and the extension port, with --batch a
 // batch of four read-only ops, one with a "$name" reference, which adds the per-op schema checks,
 // or with --build a build_diagram of a three-class Mermaid diagram, which adds the check against
-// the whole request schema. By default StarUML is replaced by an in-process stub so the numbers
+// the whole request schema, or with --lint a lint_diagram of the current diagram, whose findings
+// are reshaped (src/quality.ts). By default StarUML is replaced by an in-process stub so the numbers
 // measure this server, not StarUML; --live targets the real StarUML on 58321 and the extension
 // on 58322 instead. --build --live upserts one diagram named "load-test" into the open project:
 // the first call builds it and every later one finds nothing to add.
@@ -18,7 +19,7 @@
 // Usage: npm run build && node scripts/load-test.mjs
 //          [--concurrency 50,200] [--requests 5000] [--warmup 500]
 //          [--max-p99-ms N] [--min-rps N] [--live] [--session]
-//          [--call-endpoint | --batch | --build]
+//          [--call-endpoint | --batch | --build | --lint]
 // STARUML_EXT_TOKEN reaches the server, so --live works with an extension that requires a token.
 // Exits non-zero on any failed request or a breached budget.
 
@@ -39,6 +40,7 @@ const { values: args } = parseArgs({
     "call-endpoint": { type: "boolean", default: false },
     batch: { type: "boolean", default: false },
     build: { type: "boolean", default: false },
+    lint: { type: "boolean", default: false },
     session: { type: "boolean", default: false },
   },
 });
@@ -52,7 +54,7 @@ const HEADERS = {
 /** Read-only, so a --live run leaves the open project as it was. */
 const BATCH_OPS = [
   { path: "/get_project_info", as: "p" },
-  { path: "/get_element_by_id", body: { id: "$p.project" } },
+  { path: "/get_element_by_id", body: { ref: "$p.project" } },
   { path: "/find_elements", body: { type: "UMLClass", limit: 10 } },
   { path: "/is_modified" },
 ];
@@ -61,23 +63,27 @@ const BUILD = {
   name: "load-test",
   upsert: true,
 };
-const params = args.build
-  ? { name: "build_diagram", arguments: BUILD }
-  : args.batch
-    ? { name: "batch", arguments: { ops: BATCH_OPS } }
-    : callEndpoint
-      ? {
-          name: "call_endpoint",
-          arguments: { name: "find_elements", body: { type: "UMLClass", limit: 10 } },
-        }
-      : { name: "get_all_diagrams_info", arguments: {} };
-const label = args.build
-  ? "build_diagram (3 classes, upsert)"
-  : args.batch
-    ? `batch of ${BATCH_OPS.length} ops`
-    : callEndpoint
-      ? "call_endpoint find_elements"
-      : params.name;
+const params = args.lint
+  ? { name: "lint_diagram", arguments: {} }
+  : args.build
+    ? { name: "build_diagram", arguments: BUILD }
+    : args.batch
+      ? { name: "batch", arguments: { ops: BATCH_OPS } }
+      : callEndpoint
+        ? {
+            name: "call_endpoint",
+            arguments: { name: "find_elements", body: { type: "UMLClass", limit: 10 } },
+          }
+        : { name: "get_all_diagrams_info", arguments: {} };
+const label = args.lint
+  ? "lint_diagram (current diagram)"
+  : args.build
+    ? "build_diagram (3 classes, upsert)"
+    : args.batch
+      ? `batch of ${BATCH_OPS.length} ops`
+      : callEndpoint
+        ? "call_endpoint find_elements"
+        : params.name;
 
 const levels = args.concurrency.split(",").map(Number);
 const requestsPerLevel = Number(args.requests);
@@ -270,6 +276,41 @@ async function startStub() {
       },
     }),
     "POST /find_elements": JSON.stringify({ success: true, data: page }),
+    // Two findings in the shape src/handlers/lint.ts answers, one with an autofix.
+    "POST /lint_diagram": JSON.stringify({
+      success: true,
+      data: {
+        diagram: { ...element, _type: "UMLClassDiagram", name: "Main", path: "Model/Main" },
+        count: 2,
+        counts: { error: 0, warning: 2, info: 0 },
+        truncated: false,
+        findings: [
+          {
+            rule: "L005",
+            name: "label-overflow",
+            severity: "warning",
+            message: 'The name of "Order" needs about 104px and its box is 95px wide',
+            ids: ["AAAAAAFF+qBtyKM79v0="],
+            paths: ["Model/Order@Model/Main"],
+            fix: "Widen it to 104.",
+            autofix: {
+              path: "/resize_node",
+              body: { ref: "AAAAAAFF+qBtyKM79v0=", width: 104, height: 45 },
+            },
+          },
+          {
+            rule: "L006",
+            name: "isolated",
+            severity: "warning",
+            message: '"Order" has no edge',
+            ids: ["AAAAAAFF+qBtyKM79v0="],
+            paths: ["Model/Order@Model/Main"],
+            fix: "Connect it or move it to another diagram.",
+            autofix: null,
+          },
+        ],
+      },
+    }),
   };
   const diagrams = JSON.stringify({
     success: true,

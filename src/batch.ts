@@ -34,32 +34,36 @@ const REFERENCE = /^\$([A-Za-z_][\w-]*)((?:\.(?:[A-Za-z_$][\w$]*|\d+))*)$/;
  * Shorter than the manifest's request schema, which repeats the refused paths and the limit
  * preference in parameter descriptions. The manifest schema still decides: a batch is checked
  * against it before it is sent. The patterns of `path` and `as` and the minimum of `ops` are
- * checked here too but not listed; the descriptions say as much in fewer tokens.
+ * checked here too but not listed; the descriptions say as much in fewer tokens. The root is loose
+ * so that `result` (how much of each op's answer comes back; terse by default), which
+ * describe_endpoints shows, reaches that check unlisted.
  */
 export const BatchInput = unstamped(
-  z.object({
-    ops: z
-      .array(
-        z.object({
-          path: unlisted(z.string().regex(/^\//), "pattern").describe(
-            "Endpoint path, e.g. /create_element.",
-          ),
-          body: untrivial(z.record(z.string(), z.unknown()))
-            .optional()
-            .describe("Its request body."),
-          as: unlisted(z.string().regex(OP_NAME), "pattern")
-            .optional()
-            .describe("Name later ops refer to as $name."),
-        }),
-      )
-      .min(1)
-      .meta({ minItems: undefined })
-      .describe("Calls in order."),
-    atomic: z
-      .boolean()
-      .optional()
-      .describe("Default true: undo every op when one fails. False runs and reports each."),
-  }),
+  untrivial(
+    z.looseObject({
+      ops: z
+        .array(
+          z.object({
+            path: unlisted(z.string().regex(/^\//), "pattern").describe(
+              "Endpoint path, e.g. /create_element.",
+            ),
+            body: untrivial(z.record(z.string(), z.unknown()))
+              .optional()
+              .describe("Its request body."),
+            as: unlisted(z.string().regex(OP_NAME), "pattern")
+              .optional()
+              .describe("Name later ops refer to as $name."),
+          }),
+        )
+        .min(1)
+        .meta({ minItems: undefined })
+        .describe("Calls in order."),
+      atomic: z
+        .boolean()
+        .optional()
+        .describe("Default true: undo every op when one fails. False runs and reports each."),
+    }),
+  ),
 );
 
 interface Op {

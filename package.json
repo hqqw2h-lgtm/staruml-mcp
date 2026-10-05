@@ -1,6 +1,6 @@
 {
   "name": "staruml-mcp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "mcpName": "io.github.hqqw2h-lgtm/staruml-mcp",
   "description": "Model Context Protocol server for StarUML — generate UML diagrams from AI agents (Claude Code, Cursor, VS Code, Codex). Supports both stdio and Streamable HTTP transports.",
   "keywords": [

@@ -71,8 +71,8 @@ references (section 6) for what a batch creates.
 
 `kind` is required with `spec`. Nodes are named by `name`; edges refer to nodes by name, or by
 `id` where a node has one. `\n` or `<br/>` in a name stores a line break (StarUML 7.1.1 draws it
-on one line). The answer carries the diagram id and the model and view id of every node, keyed
-by name. `upsert: true` updates the diagram of the same name instead of adding a second one;
+on one line). The answer carries the diagram and what was created, updated or left unchanged;
+`result: "ids"` adds the model and view id of every node, keyed by name, and `"full"` the edges'. `upsert: true` updates the diagram of the same name instead of adding a second one;
 it adds what is missing, and deletes what the spec lacks only with `prune: true`. A class,
 interface, enum, package, actor, use case or entity named like one elsewhere in the project is
 that element shown again, not a copy (`reuse`, default true). `direction` is `TB` (default), `BT`, `LR` or `RL`;
@@ -246,7 +246,8 @@ document, predefined, alternate, database, manualInput, preparation, connector, 
 }
 ```
 
-The full grammar with every optional field, the `requirement` and `c4` kinds, and `text` with
+The full grammar with every optional field, the `requirement`, `c4`, `package`, `component` and
+`deployment` kinds, and `text` with
 `format` for PlantUML, SQL DDL or JSON Schema sources: `describe_endpoints({names:
 ["build_diagram"]})`.
 
@@ -344,7 +345,8 @@ Prefer a spec when you write the diagram yourself; use Mermaid when the user alr
 one fails. `as` names an op's result; a later body refers to its id as `"$name"`, to a
 `{view, model}` result's parts as `"$name.view"` and `"$name.model"`, to a nested field as
 `"$name.path.0"`. Paths are endpoint paths, so any endpoint works here, listed as a tool or not.
-The server checks every op's body and every reference before anything is sent.
+The server checks every op's body and every reference before anything is sent. Each op answers
+its success and the id it made or acted on; `result: "ids"` or `"full"` returns more.
 
 ```json batch
 {

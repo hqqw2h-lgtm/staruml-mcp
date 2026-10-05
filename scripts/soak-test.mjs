@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Soak test over stdio: starts the built server (dist/index.js) against an in-process stub of both
 // StarUML ports, sends tool calls one after another through the MCP SDK client (a rotation of
-// get_all_diagrams_info, call_endpoint find_elements, batch and build_diagram), and compares the
-// first and the last --window of --calls measured calls. The server's resident set size is sampled
-// with ps every --sample calls, and its live heap after a full GC is read at the end of both
-// windows. Exits non-zero when any call failed, or when the mean RSS, the live heap or the p99
+// get_all_diagrams_info, call_endpoint find_elements, batch, build_diagram and lint_diagram), and
+// compares the first and the last --window of --calls measured calls. The server's resident set
+// size is sampled with ps every --sample calls, and its live heap after a full GC is read at the
+// end of both windows. Exits non-zero when any call failed, or when the mean RSS, the live heap or the p99
 // latency of the last window exceeds the first by more than --max-growth percent: a leak or a
 // slowdown that builds up over a session.
 //
@@ -68,7 +68,7 @@ const ROTATION = [
     arguments: {
       ops: [
         { path: "/get_project_info", as: "p" },
-        { path: "/get_element_by_id", body: { id: "$p.project" } },
+        { path: "/get_element_by_id", body: { ref: "$p.project" } },
       ],
     },
   },
@@ -76,6 +76,7 @@ const ROTATION = [
     name: "build_diagram",
     arguments: { mermaid: "classDiagram\n  Order --> Line", name: "soak", upsert: true },
   },
+  { name: "lint_diagram", arguments: { diagram: "soak" } },
 ];
 
 const stub = await startStub();
@@ -225,6 +226,24 @@ async function startStub() {
       created: 0,
       updated: 0,
       unchanged: 3,
+    }),
+    "POST /lint_diagram": ok({
+      diagram: { _id: "D1", _type: "UMLClassDiagram", name: "soak", path: "soak" },
+      count: 1,
+      counts: { error: 0, warning: 1, info: 0 },
+      truncated: false,
+      findings: [
+        {
+          rule: "L005",
+          name: "label-overflow",
+          severity: "warning",
+          message: 'The name of "Order" needs about 104px and its box is 95px wide',
+          ids: ["V1"],
+          paths: ["Model/Order@soak"],
+          fix: "Widen it to 104.",
+          autofix: { path: "/resize_node", body: { ref: "V1", width: 104, height: 45 } },
+        },
+      ],
     }),
   };
   const diagrams = ok([{ id: "D1", type: "UMLClassDiagram", name: "soak" }]);

@@ -68,7 +68,7 @@ const start = await ext("/snapshot", { label: "capture-messy-start" });
 try {
   const parent = (await ext("/get_project_info")).project._id;
   const ops = [
-    { path: "/create_element", body: { type: "UMLModel", parent, name: "Billing" }, as: "m" },
+    { path: "/create_element", body: { type: "UMLModel", parent, name: "Messy capture" }, as: "m" },
     {
       path: "/create_diagram",
       body: { type: "UMLClassDiagram", parent: "$m", name: "Billing jobs" },
@@ -104,7 +104,8 @@ try {
   await ext("/restore_snapshot", { snapshot: "capture-messy-drawn" });
 
   const fixes = before.lint.findings.flatMap((f) => (f.autofix ? [f.autofix] : []));
-  const batch = await ext("/batch", { ops: fixes, result: "full" });
+  // The answer as the batch tool gets it: terse by default since the extension's phase 1g.
+  const batch = await ext("/batch", { ops: fixes });
   const loop = { fixes, batch, lint: await lint(), png: await png() };
 
   const versions = await ext("/introspect", { include: [] });

@@ -110,7 +110,10 @@ export async function generateDiagram(
   if (build !== undefined) {
     try {
       const { code, ...rest } = request;
-      const body = { mermaid: code, ...rest };
+      // The node ids by name, which the extension answers by default before 0.3.0's terse
+      // results (result: terse|ids|full, extension #35) and which an extension without the
+      // option ignores; an answer without them would leave the model looking them up.
+      const body = { mermaid: code, ...rest, result: "ids" };
       return jsonResult(await client.callExtension(build.path, body), body);
     } catch (error) {
       const unreachable =

@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-05
+
+Built against staruml-mcp-extension 0.3.0 with 69 endpoints (extension phases 1e to 1g: path
+references, canonical field names, lints, dry runs, diffs and snapshots). In short, by phase:
+
+- **2h-a** (#14): stateful HTTP sessions with an idle timeout and a cap; caches for compiled
+  manifest entries and catalogue reads; property, fuzz, mutation and soak verification layers.
+- **2g** (#4, #8, #13, #14): the 69-endpoint manifest with canonical names and paths wherever an
+  element is taken; `lint_diagram` in the core tier, `build_diagram` dry runs, `uml_lint`,
+  `diff_diagram` and snapshots in their own groups, hints for the reference error codes; the
+  `improve-diagram` prompt and the skill's build loop and UML playbook; a 4 MiB cap on HTTP
+  request bodies.
+
+The core tier lists 21 tools in 1,992 tokens (o200k_base). Fixing a recorded messy diagram costs
+2,325 tokens with the lint loop and leaves no finding, against 1,846 tokens and five findings by
+eye.
+
 ### Added
+- Bundled manifest re-synced from the extension's phase 1g build, still 69 endpoints: `build_diagram` kinds `package`, `component` and `deployment` and `showNamespace`, and `result: terse|ids|full` on `/batch` and `/build_diagram`, whose answers are now terse by default (counts and the diagram, or each op's success and id). `batch` passes `result` through unlisted; `generate_diagram` asks `build_diagram` for `ids`, so its answer still names every node's ids (#4, #7).
+- `scripts/load-test.mjs --lint` drives `lint_diagram`, also in CI in one session; the soak rotation includes it (#13, #14).
 - Stateful HTTP sessions: `initialize` over `--transport http` opens a session (`Mcp-Session-Id`, SDK `sessionIdGenerator`) whose requests all reach one McpServer, so `view_diagram` shows the inline viewer to HTTP clients that render MCP Apps or read the viewer, and `notifications/tools/list_changed` reaches every live session when `doctor` reloads the manifest or switches the tier. `--session-timeout` (default `30m`) closes a session with no request in flight, `--max-sessions` (default 64) closes the least recently used beyond the cap and `0` turns sessions off. A request without a session id is still served statelessly; the loopback `Host`/`Origin` check runs before both. `scripts/load-test.mjs --session` drives one session (#14).
 - Caches: tools compiled from manifest entries are kept by the entry's JSON (bundled manifest 37 ms cold, 1 ms cached), and `/introspect` answers (the `introspect` tool, `staruml://introspect/metamodel`) and `describe_endpoints` answers are kept until `doctor` reloads the catalog or switches the tier. Failed reads are not cached (#14).
 - Verification layers, listed with how to run each in `docs/verification.md`: property-based tests with fast-check (`tests/properties.test.ts`: compaction, tiers, batch references and escapes, resource URIs, descriptions, loopback names), fuzz tests of `call_endpoint` and `batch` with random JSON (`tests/fuzz.test.ts`), Stryker mutation testing of `src/` with an 85% break threshold (`npm run test:mutation`, weekly in `.github/workflows/mutation.yml`; 92.89% of 2,477 mutants killed or timed out), and `npm run soak-test` (2,000 calls over stdio, RSS, live heap and p99 within 25%), run with the live suite and live load tests by `.github/workflows/live.yml` on a self-hosted StarUML runner (#14).
@@ -29,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hints for the extension's reference codes (#13): `AMBIGUOUS_REF` names up to five candidates by path, or by id where paths collide; `DUPLICATE_NAME` names the existing sibling and suggests referring to it, `build_diagram`'s `reuse`, a rename or `allowDuplicateNames: true`; `SNAPSHOT_STALE` asks for a new snapshot; `UNSUPPORTED_SYNTAX` points at the named construct and at building from a spec.
 - Prompt `improve-diagram` (#13): snapshot, `lint_diagram` and `uml_lint`, every autofix in one `batch` and the `uml_lint` fixes by hand, repeated until no error or warning is left (at most three rounds), then `view_diagram`, `diff_since`, and `restore_snapshot` if the result reads worse.
 - The skill's section 4, "The build loop and drawing good UML": dry run, build, lint and autofix, look; snapshots; and what a readable diagram needs (one concern per diagram and when to split, naming, direction and layering, grouping by package, multiplicities and navigability, composition against aggregation, per kind for sequence, use case, state machine and ER diagrams, with the `uml_lint` rule each maps to). Its examples run a dry run, `lint_diagram` and `uml_lint` (#13, #12).
-- `npm run benchmark:tokens` adds "fix a messy diagram" from a recording of StarUML 7.1.1 (`scripts/capture-messy-diagram.mjs`): by eye (PNG, layout, PNG) 1,850 tokens leaving 5 findings, the lint loop 2,534 leaving none (#13, #5).
+- `npm run benchmark:tokens` adds "fix a messy diagram" from a recording of StarUML 7.1.1 (`scripts/capture-messy-diagram.mjs`): by eye (PNG, layout, PNG) 1,846 tokens leaving 5 findings, the lint loop 2,325 leaving none (#13, #5).
 
 ### Fixed
 - `describe_endpoints` grouping no longer throws for an empty name: the catch-all group matched only names of one character or more. Found by the property tests (#14).

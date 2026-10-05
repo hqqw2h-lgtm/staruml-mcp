@@ -290,6 +290,22 @@ describe("batch tool", () => {
     expect(extension.requests).toEqual([]);
   });
 
+  it("passes the unlisted result through, checked against the manifest", async () => {
+    extension.reply("/batch", { body: { success: true, data: { succeeded: 1, results: [] } } });
+    const ops = [{ path: "/get_project_info" }];
+
+    await mcp.call("batch", { ops, result: "ids" });
+    const refused = await mcp.call("batch", { ops, result: "everything" });
+
+    expect(extension.requests.map((r) => r.body)).toEqual([{ ops, result: "ids" }]);
+    expect(refused.structuredContent).toMatchObject({
+      error: {
+        code: "INVALID_ARGUMENT",
+        message: expect.stringMatching(/^result: Invalid option/),
+      },
+    });
+  });
+
   it("rejects an op path without a leading slash through the input schema", async () => {
     const result = await mcp.call("batch", { ops: [{ path: "delete_element" }] });
 
