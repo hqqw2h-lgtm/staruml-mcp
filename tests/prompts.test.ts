@@ -1,3 +1,4 @@
+import { GetPromptResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { bundledCatalog, CatalogState } from "../src/extension-tools.js";
 import { invocation, MODEL_CODEBASE, REVIEW_DIAGRAM } from "../src/prompts.js";
@@ -160,5 +161,25 @@ describe("invocation", () => {
     expect(invocation(state, "save_project", "{}")).toBe(
       'call_endpoint({name: "save_project", body: {}})',
     );
+  });
+});
+
+describe("prompts/get", () => {
+  it("reads absent arguments as none", async () => {
+    const result = await mcp.client.request(
+      { method: "prompts/get", params: { name: REVIEW_DIAGRAM } },
+      GetPromptResultSchema,
+    );
+
+    expect((result.messages[0]!.content as { text: string }).text).toMatch(
+      /^Review the diagram open in StarUML/,
+    );
+  });
+
+  it("refuses an unknown prompt", async () => {
+    await expect(mcp.client.getPrompt({ name: "draw-everything" })).rejects.toMatchObject({
+      code: -32602,
+      message: expect.stringContaining("Prompt draw-everything not found"),
+    });
   });
 });

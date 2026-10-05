@@ -261,7 +261,7 @@ describe("generate_diagram", () => {
         error: {
           code: "EXTENSION_REQUIRED",
           message: "kind usecase need staruml-mcp-extension 0.3's build_diagram",
-          hint: "Install it from https://github.com/ezrabrilliant/staruml-mcp-extension (Tools > Extension Manager > Install From Url), restart StarUML and run doctor.",
+          hint: "Install it from https://github.com/hqqw2h-lgtm/staruml-mcp-extension (Tools > Extension Manager > Install From Url), restart StarUML and run doctor.",
         },
       });
       expect(builtin.requests).toEqual([]);

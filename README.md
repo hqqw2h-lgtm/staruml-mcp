@@ -2,9 +2,13 @@
 
 [![npm version](https://img.shields.io/npm/v/staruml-mcp.svg)](https://www.npmjs.com/package/staruml-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/staruml-mcp.svg)](https://www.npmjs.com/package/staruml-mcp)
-[![CI](https://github.com/ezrabrilliant/staruml-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ezrabrilliant/staruml-mcp/actions/workflows/ci.yml)
+[![CI](https://github.com/hqqw2h-lgtm/staruml-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/hqqw2h-lgtm/staruml-mcp/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-compatible-blue.svg)](https://modelcontextprotocol.io/)
+
+This is the [hqqw2h-lgtm fork](https://github.com/hqqw2h-lgtm/staruml-mcp) of
+[ezrabrilliant/staruml-mcp](https://github.com/ezrabrilliant/staruml-mcp); it pairs with the
+[hqqw2h-lgtm fork of staruml-mcp-extension](https://github.com/hqqw2h-lgtm/staruml-mcp-extension).
 
 Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI agents (Claude Code, Cursor, VS Code Copilot, Codex) drive StarUML programmatically — generate UML diagrams from Mermaid, build native models and diagrams element by element, execute any built-in command, save projects, and more.
 
@@ -21,7 +25,7 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 | Package | What it is | Where it runs |
 |---|---|---|
 | **`staruml-mcp`** (this repo) | MCP server for AI agents | your machine via `npx -y staruml-mcp` |
-| **[`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 61 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
+| **[`staruml-mcp-extension`](https://github.com/hqqw2h-lgtm/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 61 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
 
 - Using only Mermaid-based diagram tools? Install `staruml-mcp` only. The 4 built-in tools, `doctor` and `view_diagram` (as a PNG) work.
 - Want the extension's 61 endpoints (whole diagrams from a spec or Mermaid in one call, diagrams read back as Mermaid, PlantUML or a text summary, type search, model validation, project save/open, element CRUD, relationships, attributes and operations, layout presets and edge routing, styling, export, undo, batches, code generation, any StarUML command)? Install **both**.
@@ -30,7 +34,7 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 
 - **StarUML v7.0.0+** with API Server enabled (see below)
 - **Node.js 20+** on the machine running the AI agent
-- **(Optional)** [`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension) 0.3.x installed in StarUML — required for every tool except the 4 built-in ones and `doctor`
+- **(Optional)** [`staruml-mcp-extension`](https://github.com/hqqw2h-lgtm/staruml-mcp-extension) 0.3.x installed in StarUML — required for every tool except the 4 built-in ones and `doctor`
 
 ### Enable StarUML API Server
 
@@ -55,6 +59,32 @@ curl http://localhost:58321/
 # → "Hello from StarUML API Server!"
 ```
 
+### Keep StarUML's API off the network
+
+StarUML 7.1.1's built-in API server listens on every interface (`lsof -nP -iTCP:58321` shows
+`*:58321`) and has no authentication, so on a shared network anyone who can reach the machine
+can create diagrams in the open project. StarUML has no setting to bind it to localhost. The
+extension listens on `127.0.0.1:58322` only and can require a token ([Access
+token](#access-token)); this server's HTTP transport binds `127.0.0.1` by default
+([below](#http-transport-binding)). Block 58321 from other machines with the host firewall;
+loopback traffic, which is all this server needs, is not affected by any of these:
+
+- **macOS**: System Settings > Network > Firewall > Options, add StarUML and choose "Block
+  incoming connections", or from a terminal:
+  ```bash
+  sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
+  sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /Applications/StarUML.app
+  sudo /usr/libexec/ApplicationFirewall/socketfilterfw --blockapp /Applications/StarUML.app
+  ```
+- **Linux**: `sudo ufw deny in to any port 58321 proto tcp` (ufw keeps loopback open), or
+  `sudo iptables -A INPUT -p tcp --dport 58321 ! -i lo -j DROP` and the same with `ip6tables`.
+- **Windows** (elevated PowerShell): `New-NetFirewallRule -DisplayName "StarUML API" -Direction
+  Inbound -Protocol TCP -LocalPort 58321 -Action Block`; Windows Defender Firewall does not filter
+  loopback connections.
+
+Check from another machine that `curl --max-time 3 http://<this machine>:58321/` times out while
+`curl http://localhost:58321/` still answers here.
+
 ## Install & Use
 
 ### Claude Code (recommended — HTTP transport)
@@ -62,7 +92,7 @@ curl http://localhost:58321/
 Start the server in a terminal:
 ```bash
 npx -y staruml-mcp --transport http
-# listens on http://localhost:58323/mcp by default
+# listens on http://127.0.0.1:58323/mcp by default
 ```
 
 Register with Claude Code:
@@ -71,6 +101,25 @@ claude mcp add --transport http staruml http://localhost:58323/mcp
 ```
 
 > **Port `58323`** is the canonical HTTP port, chosen to sit alongside StarUML's built-in API (`58321`) and `staruml-mcp-extension` (`58322`). Override with `--port <n>` if needed.
+
+#### HTTP transport binding
+
+`--transport http` listens on `127.0.0.1` and answers only requests whose `Host` is a loopback
+name (`localhost`, `127.0.0.1`, `[::1]`) and whose `Origin`, when a browser sends one, is a
+loopback origin; anything else gets `403` (DNS rebinding protection, as the MCP spec's transport
+security warning asks of local servers). `--host <address>` binds elsewhere, for example
+`--host 0.0.0.0` for a container or another machine; the server then accepts any `Host` and
+prints a warning on start, since the endpoint has no authentication and its tools save, open and
+change projects and run StarUML commands. Put it behind a firewall or an authenticating proxy
+in that case.
+
+Limitations of the HTTP transport, which is stateless (a fresh MCP server per request):
+
+- `view_diagram` always answers the PNG: the server never sees the client's `initialize` or its
+  read of the viewer resource, so it cannot tell that the client renders MCP Apps. Use stdio for
+  the inline viewer ([below](#inline-viewer-mcp-apps)).
+- `notifications/tools/list_changed` after `doctor` reloads the manifest or switches the tier
+  is not delivered; the client sees the new tool list on its next `tools/list`.
 
 Restart Claude Code. Ask:
 > "What StarUML tools do you have?"
@@ -106,16 +155,16 @@ down, and the access token. The Claude Code plugin also registers this server ov
 
 ```bash
 # Claude Code
-claude plugin marketplace add ezrabrilliant/staruml-mcp
+claude plugin marketplace add hqqw2h-lgtm/staruml-mcp
 claude plugin install staruml@staruml
 # or from a clone: claude --plugin-dir ./plugins/claude-code
 
 # Codex CLI (skill only; add the MCP server as above)
-codex plugin marketplace add ezrabrilliant/staruml-mcp
+codex plugin marketplace add hqqw2h-lgtm/staruml-mcp
 codex plugin add staruml@staruml
 
 # GitHub Copilot CLI (skill only)
-copilot plugin marketplace add ezrabrilliant/staruml-mcp
+copilot plugin marketplace add hqqw2h-lgtm/staruml-mcp
 copilot plugin install staruml@staruml
 ```
 
@@ -136,6 +185,7 @@ staruml-mcp [options]
 
   -t, --transport <type>   stdio | http              (default: stdio)
   -p, --port <number>      HTTP listen port          (default: 58323)
+      --host <address>     HTTP bind address         (default: 127.0.0.1; warns otherwise)
       --api-port <number>  StarUML built-in API port (default: 58321)
       --ext-port <number>  staruml-mcp-extension port(default: 58322)
       --ext-token <token>  extension access token    (env STARUML_EXT_TOKEN)
@@ -250,7 +300,7 @@ reported by the `tier` check.
   `describe_endpoints` and `staruml://introspect/endpoints`; the full `/introspect` stays callable
   through `call_endpoint`.
 
-### Extension tools (require [`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension) 0.3.x, port 58322)
+### Extension tools (require [`staruml-mcp-extension`](https://github.com/hqqw2h-lgtm/staruml-mcp-extension) 0.3.x, port 58322)
 
 These tools are not written by hand. The extension publishes a manifest from `POST /introspect`:
 each endpoint's name, description, read-only and destructive flags, and JSON Schemas for request
@@ -301,7 +351,7 @@ the core tier):
 | `batch` | Several calls in one request, by default one undo step that rolls back when an op fails. |
 | `introspect` / `debug` | Versions, factory ids, metamodel, toolbox and manifest (the `introspect` tool is the summary) / the raw `app` surface. |
 
-To enable extension tools: install `staruml-mcp-extension` in StarUML (Tools → Extension Manager → Install From URL → `https://github.com/ezrabrilliant/staruml-mcp-extension`).
+To enable extension tools: install `staruml-mcp-extension` in StarUML (Tools → Extension Manager → Install From URL → `https://github.com/hqqw2h-lgtm/staruml-mcp-extension`).
 
 ### Results
 
@@ -447,7 +497,7 @@ with an MCP input validation error and the extension never sees it.
 ## Development
 
 ```bash
-git clone https://github.com/ezrabrilliant/staruml-mcp.git
+git clone https://github.com/hqqw2h-lgtm/staruml-mcp.git
 cd staruml-mcp
 npm install            # also installs the pre-commit hook (lint-staged: eslint + prettier)
 npm run dev            # tsx watch on src/
@@ -510,6 +560,16 @@ single Node process, not a slower code path. Against the real StarUML 7.1.1 with
 `build_diagram` 620–648 req/s, p50 76 ms, p99 114–124 ms (3,000 upserts, warm-up included, of one three-class
 diagram, which StarUML built once and then found complete). The generated tools' zod schemas are
 built once per manifest and shared by every per-request server.
+
+Re-run for 0.4.0 (core tier of 20 tools registered per request, loopback binding with the
+`Host` check) on the same machine while other test suites kept the load average at 9–14, 5000
+requests per level, 0 errors on every path: `get_all_diagrams_info` 341–480 req/s at 50 (p99
+183–626 ms) and 472–562 at 200; `call_endpoint` 379–566 / 608–650; `batch` 517–535 / 483–594;
+`build_diagram` 306–570 / 559–639. Against StarUML 7.1.1 with the extension (`--live --requests
+1000 --concurrency 50`, 0 errors): `get_all_diagrams_info` 273 req/s, p99 362 ms;
+`call_endpoint` 463 req/s, p99 184 ms; `batch` 482 req/s, p99 139 ms. These runs shared the CPU,
+so they show the paths still finish without errors under load rather than a regression against
+the table above.
 
 ## Token efficiency
 

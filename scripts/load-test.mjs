@@ -270,8 +270,8 @@ function startMcp(port) {
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
-      const match = /ready on (http:\/\/localhost:\d+\/mcp)/.exec(stderr);
-      if (match) resolve({ child, url: match[1].replace("localhost", "127.0.0.1") });
+      const match = /ready on (http:\/\/127\.0\.0\.1:\d+\/mcp)/.exec(stderr);
+      if (match) resolve({ child, url: match[1] });
     });
     child.once("exit", (code) => reject(new Error(`server exited with ${code}: ${stderr}`)));
   });

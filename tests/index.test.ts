@@ -5,7 +5,18 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { EXT_TOKEN_ENV, isEntrypoint, main, parseArgs, run, TOOLS_ENV } from "../src/index.js";
+import { createServer as createHttpServer, request, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import {
+  createHttpHandler,
+  EXT_TOKEN_ENV,
+  isEntrypoint,
+  isLoopback,
+  main,
+  parseArgs,
+  run,
+  TOOLS_ENV,
+} from "../src/index.js";
 import { CORE_ENDPOINTS, parseToolSelection } from "../src/tiers.js";
 import packageJson from "../package.json" with { type: "json" };
 import { BUNDLED_MANIFEST } from "../src/manifest.js";
@@ -35,6 +46,7 @@ describe("parseArgs", () => {
     expect(parseArgs(ARGV0, {})).toEqual({
       transport: "stdio",
       port: 58323,
+      host: "127.0.0.1",
       apiPort: 58321,
       extPort: 58322,
       apiHost: "http://localhost",
@@ -92,6 +104,8 @@ describe("parseArgs", () => {
         "http",
         "-p",
         "0",
+        "--host",
+        "0.0.0.0",
         "--api-port",
         "1",
         "--ext-port",
@@ -107,6 +121,7 @@ describe("parseArgs", () => {
     ).toEqual({
       transport: "http",
       port: 0,
+      host: "0.0.0.0",
       apiPort: 1,
       extPort: 65535,
       apiHost: "http://10.0.0.2",
@@ -147,8 +162,61 @@ describe("main", () => {
         version: packageJson.version,
       });
       expect(console.error).toHaveBeenCalledWith(
-        `[staruml-mcp] http transport ready on http://localhost:${server.port}/mcp`,
+        `[staruml-mcp] http transport ready on http://127.0.0.1:${server.port}/mcp`,
       );
+      expect(console.error).not.toHaveBeenCalledWith(expect.stringContaining("warning"));
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("binds the HTTP transport to loopback by default", async () => {
+    const server = await main([...OFFLINE, "--transport", "http", "--port", "0"]);
+    try {
+      const { status, body } = await get(server.port!, { host: "127.0.0.1", path: "/" });
+      expect(status).toBe(200);
+      expect(JSON.parse(body)).toMatchObject({ name: packageJson.name });
+      // Only loopback names reach it, whatever the client resolved.
+      const rebound = await get(server.port!, { host: "127.0.0.1", hostHeader: "evil.example" });
+      expect(rebound.status).toBe(403);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("warns when --host exposes the transport and then accepts any Host", async () => {
+    const server = await main([
+      ...OFFLINE,
+      "--transport",
+      "http",
+      "--port",
+      "0",
+      "--host",
+      "0.0.0.0",
+    ]);
+    try {
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /^\[staruml-mcp\] warning: --host 0\.0\.0\.0 accepts MCP requests from other machines\. The endpoint has no authentication/,
+        ),
+      );
+      expect(console.error).toHaveBeenCalledWith(
+        `[staruml-mcp] http transport ready on http://0.0.0.0:${server.port}/mcp`,
+      );
+      const { status } = await get(server.port!, { host: "127.0.0.1", hostHeader: "staruml.lan" });
+      expect(status).toBe(200);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("puts an IPv6 --host in brackets in the ready line", async () => {
+    const server = await main([...OFFLINE, "--transport", "http", "--port", "0", "--host", "::1"]);
+    try {
+      expect(console.error).toHaveBeenCalledWith(
+        `[staruml-mcp] http transport ready on http://[::1]:${server.port}/mcp`,
+      );
+      expect((await get(server.port!, { host: "::1", hostHeader: "[::1]" })).status).toBe(200);
     } finally {
       await server.close();
     }
@@ -386,6 +454,103 @@ describe("module entrypoint", () => {
       await expect(exited).resolves.toBe(1);
     } finally {
       process.argv = argv;
+    }
+  });
+});
+
+/** A GET through node:http, which lets a test set the Host header fetch would not. */
+function get(
+  port: number,
+  options: { host: string; path?: string; hostHeader?: string; origin?: string },
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const req = request(
+      {
+        host: options.host,
+        port,
+        path: options.path ?? "/",
+        // An empty hostHeader sends none at all.
+        setHost: options.hostHeader !== "",
+        headers: {
+          ...(options.hostHeader ? { Host: options.hostHeader } : {}),
+          ...(options.origin === undefined ? {} : { Origin: options.origin }),
+        },
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk) => (body += String(chunk)));
+        res.on("end", () => resolve({ status: res.statusCode!, body }));
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+describe("isLoopback", () => {
+  it.each([
+    ["localhost", true],
+    ["LOCALHOST", true],
+    ["127.0.0.1", true],
+    ["127.1.2.3", true],
+    ["::1", true],
+    ["[::1]", true],
+    ["::ffff:127.0.0.1", true],
+    ["0.0.0.0", false],
+    ["::", false],
+    ["192.168.1.20", false],
+    ["localhost.evil.example", false],
+    ["", false],
+  ])("%j is %s", (host, expected) => {
+    expect(isLoopback(host)).toBe(expected);
+  });
+});
+
+describe("createHttpHandler with loopbackOnly", () => {
+  let server: Server;
+  let port: number;
+
+  beforeAll(async () => {
+    server = createHttpServer(
+      createHttpHandler({ name: "t", version: "0" }, undefined, { loopbackOnly: true }),
+    );
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    port = (server.address() as AddressInfo).port;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it("leaves a request without Host to Node, which refuses it", async () => {
+    expect((await get(port, { host: "127.0.0.1", hostHeader: "" })).status).toBe(400);
+  });
+
+  it.each([
+    ["127.0.0.1:port", undefined, undefined],
+    ["localhost", undefined, undefined],
+    ["[::1]:1", undefined, undefined],
+    ["localhost", "http://localhost:6274", undefined],
+    ["localhost", "http://[::1]:6274", undefined],
+    ["evil.example", undefined, 'Host "evil.example" is not a loopback address'],
+    [
+      "localhost",
+      "https://evil.example",
+      'Origin "https://evil.example" is not a loopback address',
+    ],
+    ["localhost", "null", 'Origin "null" is not a loopback address'],
+  ])("Host %j, Origin %j", async (host, origin, refusal) => {
+    const hostHeader = host.replace("port", String(port));
+    const { status, body } = await get(port, { host: "127.0.0.1", hostHeader, origin });
+
+    if (refusal === undefined) {
+      expect(status).toBe(200);
+    } else {
+      expect(status).toBe(403);
+      expect(JSON.parse(body)).toEqual({
+        error: "forbidden",
+        error_description: `${refusal}; staruml-mcp listens on loopback only (--host).`,
+      });
     }
   });
 });

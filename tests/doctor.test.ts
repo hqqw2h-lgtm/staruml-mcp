@@ -160,7 +160,7 @@ describe("diagnose", () => {
     });
 
     expect(check(checks, "extension").remedy).toBe(
-      "Install staruml-mcp-extension 0.3.x (Tools > Extension Manager > Install From Url: https://github.com/ezrabrilliant/staruml-mcp-extension), then restart StarUML; or pass --ext-port.",
+      "Install staruml-mcp-extension 0.3.x (Tools > Extension Manager > Install From Url: https://github.com/hqqw2h-lgtm/staruml-mcp-extension), then restart StarUML; or pass --ext-port.",
     );
     expect(catalog.source).toBe("bundled");
   });
@@ -175,7 +175,7 @@ describe("diagnose", () => {
       status: "fail",
       detail: `0.2.2 at ${HOST}:${extension.port} is incompatible; this server needs 0.3.x, so extension tools are not offered`,
       remedy:
-        "Install staruml-mcp-extension 0.3.x from https://github.com/ezrabrilliant/staruml-mcp-extension (Tools > Extension Manager > Install From Url), then restart StarUML.",
+        "Install staruml-mcp-extension 0.3.x from https://github.com/hqqw2h-lgtm/staruml-mcp-extension (Tools > Extension Manager > Install From Url), then restart StarUML.",
     });
     expect(catalog.enabled).toBe(false);
     expect(check(checks, "manifest").detail).toBe("0 endpoints from the bundled manifest");

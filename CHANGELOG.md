@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-05
+
+First release of the [hqqw2h-lgtm fork](https://github.com/hqqw2h-lgtm/staruml-mcp), built
+against the [hqqw2h-lgtm fork of staruml-mcp-extension](https://github.com/hqqw2h-lgtm/staruml-mcp-extension)
+0.3.x. In short, by phase:
+
+- **2a** (#4, #5, #6): extension tools generated from the manifest the extension publishes at
+  `POST /introspect`, with a bundled copy for offline listing; terse descriptions and compact
+  results; MCP resources; the `doctor` tool and startup check with version gating; an offline
+  token benchmark.
+- **2b** (#8): a core tier of tools, every other endpoint through `describe_endpoints` and
+  `call_endpoint`, `--tools` / `STARUML_MCP_TOOLS`.
+- **2c** (#4, #5, #6, #8): `batch` with `$name` references checked before sending,
+  `export_diagram` as image blocks, the extension's access token and its refusals explained.
+- **2d** (#4, #7, #8): `build_diagram` in the core tier, `generate_diagram` routed to it for
+  names, kinds, titles and line breaks the built-in importer cannot do.
+- **2e** (#10, #12): `view_diagram` with an MCP Apps SVG viewer, the `staruml` agent skill and
+  plugins for Claude Code, Codex and Copilot, a comparison with drawio-mcp.
+- **2f** (#11, #4, #8): diagrams read back as Mermaid or PlantUML (`diagram_as_text`, `.mmd` and
+  `.puml` resources), `search_types`, `describe_diagram` and `validate_model` in the core tier,
+  the `model-codebase` and `review-diagram` prompts, the 61-endpoint manifest with layout
+  presets; the HTTP transport bound to loopback; ownership moved to the hqqw2h-lgtm forks.
+
+The core tier lists 20 tools in 1,992 tokens (o200k_base); reading a six-class diagram as
+Mermaid costs 267 tokens against an estimated 1,629 as a PNG.
+
+### Security
+- `--transport http` binds `127.0.0.1` by default instead of every interface, and refuses requests whose `Host` is not a loopback name or whose `Origin` is not a loopback origin with `403` (DNS rebinding protection). `--host <address>` binds elsewhere, with a startup warning that the endpoint has no authentication; the `Host`/`Origin` check is then off.
+- The README explains that StarUML 7.1.1's built-in API listens on every interface without authentication and how to block port 58321 at the macOS, Linux and Windows firewalls.
+- The README lists the HTTP transport's limits: no inline viewer and no `list_changed` notifications, since every request gets a fresh server.
+
 ### Added
 - 100% line/branch/function/statement coverage enforced through vitest thresholds, with tool-level tests over the MCP in-memory transport, HTTP transport e2e tests, a `STARUML_LIVE=1` suite and `scripts/load-test.mjs` (#1).
 - Pre-commit hook running lint-staged (#2).
@@ -24,18 +55,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `generate_diagram` takes `name` and `kind` (`activity`, `usecase`) and routes to the extension's `build_diagram` when the call needs it: a name or kind, a front matter or `title` line title, `<br/>` or `\n` in the source, or a start StarUML's built-in API refuses (`graph`, front matter, a leading comment). Plain Mermaid keeps the built-in path. Without the extension a title or line break falls back to the built-in with a note of what was left out; an explicit name or kind fails with `EXTENSION_REQUIRED`. Live tests cover upstream staruml-mcp-server #2 (names), #3 (`<br/>` stored as a newline; StarUML 7.1.1 draws it on one line) and #4 (activity and use case diagrams from a spec and from Mermaid), each exported to PNG with its views counted (#7).
 - `npm run benchmark:tokens` replays the two native-diagram scenarios as one `build_diagram` call on a server that lists it, keeps the `batch` plan as "now batch", and reports two accountings side by side: definitions once per scenario, and definitions once per session (prompt caching) plus results and the calls' own tokens, with the issue #5 and #8 targets under each. `scripts/load-test.mjs --build` drives an upserting `build_diagram`, also run in CI (#5, #8).
 - `doctor` tool and `--doctor` flag: Node version, both StarUML ports, extension and StarUML versions from `/introspect`, and the number of extension tools, with a fix for every failing check (install URL, enable `apiServer`, restart StarUML). The same report is written to stderr on start (#6).
-
 - `view_diagram` tool and resource `ui://staruml/viewer.html`: a client that renders MCP Apps (declares `io.modelcontextprotocol/ui` with `text/html;profile=mcp-app`, or has read the viewer) gets the diagram as SVG from the extension's `export_diagram` in an interactive viewer with pan, zoom, fit, the diagram's name and a dark mode; the SVG travels in `structuredContent` and the model gets a one-line summary. Every other client gets the PNG `get_diagram_image_by_id` returns. Implements the MCP Apps convention of protocol 2026-01-26 (ext-apps 1.7.4) on MCP SDK 1.29.0, which has no UI helpers (#10).
 - Agent skill `plugins/claude-code/skills/staruml/SKILL.md` (doctor first, the `build_diagram` spec of every kind with an example, Mermaid routing, `batch` and `$name`, `describe_endpoints` / `call_endpoint`, view and export, token tips, the access token), with Codex and Copilot copies written by `npm run sync:skills`; `.claude-plugin/marketplace.json` and a Claude Code plugin that also registers the MCP server, plus Codex and Copilot plugin manifests and marketplaces. `tests/skill.test.ts` runs every tool call in the skill through the in-memory transport and fails on stale copies; the live suite runs them against StarUML (#12).
 - `docs/comparison-drawio.md`: a feature-by-feature comparison with jgraph/drawio-mcp (#12).
-
 - Bundled manifest synced from extension 0.3.0 with 61 endpoints: `/route_edges`, `/search_types`, `/describe_diagram`, `/validate_model`, `/export_text`, and `layout_diagram` presets, separations and `fit`. `build_diagram` lists `layout` (a preset name, checked against the manifest's enum before sending). `describe_endpoints` places `search_types` in `meta`, `validate_model` in `project` and `route_edges` in `diagram` (#4, #8).
-
 - `diagram_as_text` tool (Mermaid by default, PlantUML with `format`) and resources `staruml://diagram/{id}.mmd` and `.puml`, through the extension's `/export_text`; the text comes in a block of its own, the kind and warnings after it (in `_meta` for the resources). `search_types`, `describe_diagram` and `validate_model` join the core tier with hand-written listings; `search_types` drops the ranking score from its hits and `describe_diagram` answers its text alone. MCP prompts `model-codebase` (reverse_code or one build_diagram, then describe and validate) and `review-diagram` (describe_diagram, validate_model, diagram_as_text, then a review), naming `call_endpoint` for endpoints the tier does not list (#11).
 - `npm run benchmark:tokens` adds "read and explain a diagram": a six-classifier diagram recorded from StarUML 7.1.1 by `scripts/capture-read-diagram.mjs` read as a PNG (1,629 tokens with the estimated image), an element dump (4,452), `describe_diagram` (286), Mermaid (267) and PlantUML (283) (#11).
 - The skill reads diagrams as text, searches types and validates models, with tested examples of each (#11, #12).
 
 ### Changed
+- `package.json` (`repository`, `bugs`, `homepage`, `mcpName` `io.github.hqqw2h-lgtm/staruml-mcp`), `server.json`, the plugin manifests and marketplaces, the README and the extension install URL in `doctor` and error hints point at the hqqw2h-lgtm forks (`https://github.com/hqqw2h-lgtm/staruml-mcp-extension`). The npm package name is unchanged.
+- The startup line names the bound address: `http transport ready on http://127.0.0.1:58323/mcp`.
 - The core tier lists 20 tools in 1,992 tokens with the four new reads. To make room, `find_elements` and `update_element` list hand-written descriptions (95 and 202 tokens instead of 130 and 274), short listings leave string lengths and integer bounds to the check against the whole request schema and keep `required`, no listing carries `additionalProperties: {}` or `propertyNames: {type: "string"}`, and `get_all_diagrams_info` / `get_diagram_image_by_id` no longer name their resources. `--tools all` lists 68 tools in 9,136 tokens (#8, #11).
 - No tool lists the projection parameters (`summary`, `fields`, `depth`) any more, read-only ones included; every tool still accepts and forwards them and the instructions name them once. `get_element_by_id` and `find_elements` list 126 tokens less, which pays for `build_diagram`'s `layout` and keeps the core tier at 1,884 tokens (#8).
 - Token benchmark re-run with `view_diagram` listed: the core tier is 16 tools and 1,992 definition tokens, `--tools all` 62 tools and 9,322; README numbers updated (#10, #12).
@@ -129,5 +159,6 @@ The original 4 Mermaid/diagram tools continue to work without the extension.
 - Inspired by [`staruml/staruml-mcp-server`](https://github.com/staruml/staruml-mcp-server) by Minkyu Lee (StarUML creator).
 - Reimplemented with multi-transport support to work around stdio MCP registration issues in some clients (e.g., [Claude Code #36914](https://github.com/anthropics/claude-code/issues/36914)).
 
-[Unreleased]: https://github.com/ezrabrilliant/staruml-mcp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.3.2...v0.4.0
 [0.1.0]: https://github.com/ezrabrilliant/staruml-mcp/releases/tag/v0.1.0

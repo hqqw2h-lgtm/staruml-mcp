@@ -1,4 +1,4 @@
-export const EXTENSION_REPOSITORY = "https://github.com/ezrabrilliant/staruml-mcp-extension";
+export const EXTENSION_REPOSITORY = "https://github.com/hqqw2h-lgtm/staruml-mcp-extension";
 
 /**
  * Codes produced by this client. A `code` field in an upstream error body is passed through

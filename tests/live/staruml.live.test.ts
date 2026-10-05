@@ -9,7 +9,7 @@
  * whose path is printed.
  */
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -1405,6 +1405,23 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       });
       expect(message.result).toMatchObject({ content: [{ type: "text" }] });
       expect(message.result!.isError).toBeUndefined();
+
+      const prompt = await rpc(base, 3, "prompts/get", { name: "review-diagram" });
+      expect(JSON.stringify(prompt.message.result)).toContain("describe_diagram(");
+    });
+
+    it("listens on loopback only", async () => {
+      // The machine's own LAN address reaches a socket bound to every interface, not this one.
+      const lan = Object.values(networkInterfaces())
+        .flat()
+        .find((a) => a !== undefined && a.family === "IPv4" && !a.internal);
+      if (lan === undefined) {
+        console.info("[live] no LAN address to probe the HTTP binding from");
+        return;
+      }
+      await expect(fetch(`http://${lan.address}:${server.port}/`)).rejects.toThrow();
+      const local = await fetch(`http://127.0.0.1:${server.port}/`);
+      expect(local.status).toBe(200);
     });
   });
 });

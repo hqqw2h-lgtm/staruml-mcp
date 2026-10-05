@@ -3,8 +3,13 @@
  * that surface prompts as commands). They spell out the tool calls, so they name an endpoint's
  * call_endpoint form when the current tier does not list it.
  */
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { GetPromptResult } from "@modelcontextprotocol/sdk/types.js";
+import type { McpServer, RegisteredPrompt } from "@modelcontextprotocol/sdk/server/mcp.js";
+import {
+  ErrorCode,
+  GetPromptRequestSchema,
+  McpError,
+  type GetPromptResult,
+} from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { listedTools, type CatalogState } from "./extension-tools.js";
 
@@ -96,31 +101,51 @@ export function reviewDiagram(state: CatalogState, diagramId: string | undefined
   );
 }
 
+const ModelCodebaseArgs = {
+  path: z.string().optional().describe("Absolute source directory to reverse-engineer."),
+  language: z.string().optional().describe("java, cpp, csharp or python, for reverse_code."),
+  description: z.string().optional().describe("What the codebase does, or what to focus on."),
+  name: z.string().optional().describe("Name of the class diagram; default Overview."),
+};
+
+const ReviewDiagramArgs = {
+  diagramId: z.string().optional().describe("Diagram _id; default the current diagram."),
+};
+
+/** A registered prompt's callback; every argument of these prompts is an optional string. */
+type Render = (args: Record<string, string>, extra: unknown) => GetPromptResult;
+
 export function registerPrompts(server: McpServer, state: CatalogState): void {
-  server.registerPrompt(
-    MODEL_CODEBASE,
-    {
-      title: "Model a codebase",
-      description:
-        "Reverse-engineer a source directory or build class diagrams from a described codebase.",
-      argsSchema: {
-        path: z.string().optional().describe("Absolute source directory to reverse-engineer."),
-        language: z.string().optional().describe("java, cpp, csharp or python, for reverse_code."),
-        description: z.string().optional().describe("What the codebase does, or what to focus on."),
-        name: z.string().optional().describe("Name of the class diagram; default Overview."),
+  const registered: Record<string, RegisteredPrompt> = {
+    [MODEL_CODEBASE]: server.registerPrompt(
+      MODEL_CODEBASE,
+      {
+        title: "Model a codebase",
+        description:
+          "Reverse-engineer a source directory or build class diagrams from a described codebase.",
+        argsSchema: ModelCodebaseArgs,
       },
-    },
-    (args) => modelCodebase(state, args),
-  );
-  server.registerPrompt(
-    REVIEW_DIAGRAM,
-    {
-      title: "Review a diagram",
-      description: "Describe, validate and read a diagram as text, then review it.",
-      argsSchema: {
-        diagramId: z.string().optional().describe("Diagram _id; default the current diagram."),
+      (args) => modelCodebase(state, args),
+    ),
+    [REVIEW_DIAGRAM]: server.registerPrompt(
+      REVIEW_DIAGRAM,
+      {
+        title: "Review a diagram",
+        description: "Describe, validate and read a diagram as text, then review it.",
+        argsSchema: ReviewDiagramArgs,
       },
-    },
-    ({ diagramId }) => reviewDiagram(state, diagramId),
-  );
+      ({ diagramId }) => reviewDiagram(state, diagramId),
+    ),
+  };
+  // GetPromptRequest's arguments are optional (MCP 2025-06-18, schema.ts), but McpServer 1.29
+  // parses an absent one against the argument object and answers -32602. Every argument here is
+  // an optional string, which the request schema has checked, so the SDK's handler is replaced
+  // by one that reads an absent one as {}.
+  server.server.setRequestHandler(GetPromptRequestSchema, async (request, extra) => {
+    const prompt = registered[request.params.name];
+    if (prompt === undefined) {
+      throw new McpError(ErrorCode.InvalidParams, `Prompt ${request.params.name} not found`);
+    }
+    return (prompt.callback as Render)(request.params.arguments ?? {}, extra);
+  });
 }

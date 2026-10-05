@@ -24,6 +24,8 @@ type Transport = (typeof TRANSPORTS)[number];
 export interface CliOptions {
   transport: Transport;
   port: number;
+  /** Address the HTTP transport binds. */
+  host: string;
   apiPort: number;
   extPort: number;
   apiHost: string;
@@ -32,6 +34,13 @@ export interface CliOptions {
   /** The extension's access token; undefined when none is configured. */
   extToken: string | undefined;
 }
+
+/**
+ * The HTTP transport has no authentication and every tool drives StarUML, so it listens on
+ * loopback unless told otherwise: the MCP spec (2025-06-18, Transports, "Security Warning") asks
+ * local servers to bind only to localhost.
+ */
+export const DEFAULT_HOST = "127.0.0.1";
 
 /** Read when `--tools` is absent, for clients that pass environment but no arguments. */
 export const TOOLS_ENV = "STARUML_MCP_TOOLS";
@@ -66,6 +75,11 @@ export function parseArgs(
     .version(packageJson.version)
     .option("-t, --transport <transport>", `MCP transport: ${TRANSPORTS.join("|")}`, "stdio")
     .option("-p, --port <number>", "Port to listen on (HTTP transport only)", "58323")
+    .option(
+      "--host <address>",
+      "Address the HTTP transport binds; anything but loopback exposes StarUML to the network",
+      DEFAULT_HOST,
+    )
     .option("--api-port <number>", "StarUML built-in API Server port", "58321")
     .option("--ext-port <number>", "staruml-mcp-extension HTTP port (for extended tools)", "58322")
     .option(
@@ -87,6 +101,7 @@ export function parseArgs(
   const raw = program.opts<{
     transport: string;
     port: string;
+    host: string;
     apiPort: string;
     extPort: string;
     apiHost: string;
@@ -100,6 +115,7 @@ export function parseArgs(
     transport: validateTransport(raw.transport),
     // 0 asks the OS for a free port; the tests and scripts/load-test.mjs rely on it.
     port: parsePort(raw.port, "--port", 0),
+    host: raw.host,
     apiPort: parsePort(raw.apiPort, "--api-port", 1),
     extPort: parsePort(raw.extPort, "--ext-port", 1),
     apiHost: raw.apiHost,
@@ -153,9 +169,20 @@ export async function main(
     return { port: undefined, close: () => mcpServer.close() };
   }
 
-  const httpServer = await listen(createHttpServer(createHttpHandler(serverConfig)), options.port);
+  const loopbackOnly = isLoopback(options.host);
+  if (!loopbackOnly) {
+    console.error(
+      `[staruml-mcp] warning: --host ${options.host} accepts MCP requests from other machines. ` +
+        "The endpoint has no authentication and its tools drive StarUML (save, open, execute any " +
+        "command); bind to 127.0.0.1 unless a firewall or proxy restricts who can connect.",
+    );
+  }
+  const handler = createHttpHandler(serverConfig, createServer, { loopbackOnly });
+  const httpServer = await listen(createHttpServer(handler), options.port, options.host);
   const { port } = httpServer.address() as AddressInfo;
-  console.error(`[staruml-mcp] http transport ready on http://localhost:${port}/mcp`);
+  console.error(
+    `[staruml-mcp] http transport ready on http://${urlHost(options.host)}:${port}/mcp`,
+  );
   return {
     port,
     close: () =>
@@ -166,6 +193,51 @@ export async function main(
   };
 }
 
+export interface HttpHandlerOptions {
+  /**
+   * Refuse requests whose Host or Origin names anything but a loopback address. A web page can
+   * point a DNS name of its own at 127.0.0.1 and post to a loopback server from the browser (DNS
+   * rebinding); its requests then carry that name in Host and the page's in Origin. The check is
+   * the one MCP SDK 1.29's Express-only `localhostHostValidation` makes, plus the Origin check
+   * the MCP spec (2025-06-18, Transports) requires. Set when the server binds to loopback.
+   */
+  loopbackOnly?: boolean;
+}
+
+/** `localhost`, 127.0.0.0/8 and ::1, with or without IPv6 brackets or the IPv4-mapped prefix. */
+export function isLoopback(host: string): boolean {
+  const name = host
+    .toLowerCase()
+    .replace(/^\[(.*)\]$/, "$1")
+    .replace(/^::ffff:/, "");
+  return name === "localhost" || name === "::1" || /^127(\.\d{1,3}){3}$/.test(name);
+}
+
+/** `host` as it goes into a URL: IPv6 addresses in brackets. */
+function urlHost(host: string): string {
+  return host.includes(":") ? `[${host}]` : host;
+}
+
+/** Why a request from outside loopback is refused, or undefined when it is not. */
+function nonLoopback(headers: { host?: string; origin?: string }): string | undefined {
+  const hostname = (url: string) => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return "";
+    }
+  };
+  // Node's server answers 400 to an HTTP/1.1 request without Host before calling the handler
+  // (http.createServer requireHostHeader, default true since Node 20).
+  if (!isLoopback(hostname(`http://${headers.host}`))) {
+    return `Host ${JSON.stringify(headers.host)} is not a loopback address`;
+  }
+  if (headers.origin !== undefined && !isLoopback(hostname(headers.origin))) {
+    return `Origin ${JSON.stringify(headers.origin)} is not a loopback address`;
+  }
+  return undefined;
+}
+
 /**
  * Stateless mode: a fresh McpServer and transport per request, so reconnecting clients
  * (Claude Code, Cursor) never inherit state from an earlier session. This is the stateless
@@ -174,9 +246,19 @@ export async function main(
 export function createHttpHandler(
   serverConfig: ServerConfig,
   factory: McpServerFactory = createServer,
+  options: HttpHandlerOptions = {},
 ): RequestListener {
   return async (req, res) => {
     const url = req.url ?? "/";
+
+    const refused = options.loopbackOnly ? nonLoopback(req.headers) : undefined;
+    if (refused !== undefined) {
+      sendJson(res, 403, {
+        error: "forbidden",
+        error_description: `${refused}; staruml-mcp listens on loopback only (--host).`,
+      });
+      return;
+    }
 
     if (url === "/") {
       sendJson(res, 200, {
@@ -269,10 +351,10 @@ export async function run(argv: readonly string[], signals: SignalSource = proce
   signals.once("SIGTERM", shutdown);
 }
 
-function listen(server: HttpServer, port: number): Promise<HttpServer> {
+function listen(server: HttpServer, port: number, host: string): Promise<HttpServer> {
   return new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(port, () => {
+    server.listen(port, host, () => {
       server.off("error", reject);
       resolve(server);
     });

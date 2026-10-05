@@ -1,7 +1,7 @@
 {
   "name": "staruml-mcp",
-  "version": "0.3.3",
-  "mcpName": "io.github.ezrabrilliant/staruml-mcp",
+  "version": "0.4.0",
+  "mcpName": "io.github.hqqw2h-lgtm/staruml-mcp",
   "description": "Model Context Protocol server for StarUML — generate UML diagrams from AI agents (Claude Code, Cursor, VS Code, Codex). Supports both stdio and Streamable HTTP transports.",
   "keywords": [
     "mcp",
@@ -21,12 +21,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ezrabrilliant/staruml-mcp.git"
+    "url": "git+https://github.com/hqqw2h-lgtm/staruml-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/ezrabrilliant/staruml-mcp/issues"
+    "url": "https://github.com/hqqw2h-lgtm/staruml-mcp/issues"
   },
-  "homepage": "https://github.com/ezrabrilliant/staruml-mcp#readme",
+  "homepage": "https://github.com/hqqw2h-lgtm/staruml-mcp#readme",
   "type": "module",
   "bin": {
     "staruml-mcp": "dist/index.js"
