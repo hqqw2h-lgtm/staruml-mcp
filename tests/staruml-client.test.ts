@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { StarUMLClient } from "../src/staruml-client.js";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { ErrorCode, StarUMLApiError, StarUMLClient } from "../src/staruml-client.js";
 
 describe("StarUMLClient", () => {
-  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  let fetchSpy: MockInstance<typeof fetch>;
 
   beforeEach(() => {
     fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -12,39 +12,60 @@ describe("StarUMLClient", () => {
     vi.restoreAllMocks();
   });
 
-  function mockJsonResponse(body: unknown, status = 200): void {
+  function mockJsonResponse(body: unknown, status = 200, statusText?: string): void {
     fetchSpy.mockResolvedValueOnce(
       new Response(JSON.stringify(body), {
         status,
+        statusText,
         headers: { "Content-Type": "application/json" },
       }),
     );
   }
 
+  function mockTextResponse(body: string, status: number, statusText?: string): void {
+    fetchSpy.mockResolvedValueOnce(new Response(body, { status, statusText }));
+  }
+
+  async function caught(promise: Promise<unknown>): Promise<StarUMLApiError> {
+    const error = await promise.then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(StarUMLApiError);
+    return error as StarUMLApiError;
+  }
+
+  function lastRequest(): { url: string; body: unknown } {
+    const [url, init] = fetchSpy.mock.calls.at(-1)!;
+    return { url: String(url), body: JSON.parse(String(init?.body)) };
+  }
+
   describe("constructor", () => {
-    it("uses default host and port when no options given", () => {
+    it("uses default host and ports when no options given", async () => {
       const client = new StarUMLClient();
       mockJsonResponse({ success: true });
-      void client.generateDiagram("flowchart LR\n  A --> B");
-      expect(fetchSpy).toHaveBeenCalledWith(
-        "http://localhost:58321/generate_diagram",
-        expect.any(Object),
-      );
+      mockJsonResponse({ success: true });
+      await client.generateDiagram("flowchart LR\n  A --> B");
+      expect(lastRequest().url).toBe("http://localhost:58321/generate_diagram");
+      await client.callExtension("/get_project_info", {});
+      expect(lastRequest().url).toBe("http://localhost:58322/get_project_info");
     });
 
-    it("uses custom host and port when provided", () => {
-      const client = new StarUMLClient({ host: "http://example.com", port: 1234 });
+    it("uses custom host and ports when provided", async () => {
+      const client = new StarUMLClient({ host: "http://example.com", port: 1234, extPort: 4321 });
       mockJsonResponse({ success: true });
-      void client.generateDiagram("flowchart LR\n  A --> B");
-      expect(fetchSpy).toHaveBeenCalledWith(
-        "http://example.com:1234/generate_diagram",
-        expect.any(Object),
-      );
+      mockJsonResponse({ success: true });
+      await client.generateDiagram("x");
+      expect(lastRequest().url).toBe("http://example.com:1234/generate_diagram");
+      await client.callExtension("/new_project", {});
+      expect(lastRequest().url).toBe("http://example.com:4321/new_project");
+      expect(client.builtinUrl).toBe("http://example.com:1234");
+      expect(client.extensionUrl).toBe("http://example.com:4321");
     });
   });
 
-  describe("generateDiagram", () => {
-    it("sends POST with correct body shape", async () => {
+  describe("request shape", () => {
+    it("sends POST with a JSON body", async () => {
       const client = new StarUMLClient();
       const code = "erDiagram\n  USER ||--o{ ORDER : places";
       mockJsonResponse({ success: true });
@@ -52,74 +73,50 @@ describe("StarUMLClient", () => {
       await client.generateDiagram(code);
 
       expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const [url, init] = fetchSpy.mock.calls[0]!;
-      expect(url).toBe("http://localhost:58321/generate_diagram");
+      const [, init] = fetchSpy.mock.calls[0]!;
       expect(init?.method).toBe("POST");
       expect(init?.headers).toEqual({ "Content-Type": "application/json" });
       expect(JSON.parse(init?.body as string)).toEqual({ code });
     });
 
-    it("throws StarUMLApiError when response.success is false", async () => {
-      const client = new StarUMLClient();
-      mockJsonResponse({ success: false, error: "Invalid Mermaid syntax" });
+    const cases: [string, (c: StarUMLClient) => Promise<unknown>, string, unknown][] = [
+      ["getAllDiagramsInfo", (c) => c.getAllDiagramsInfo(), "/get_all_diagrams_info", {}],
+      ["getCurrentDiagramInfo", (c) => c.getCurrentDiagramInfo(), "/get_current_diagram_info", {}],
+      [
+        "callExtension",
+        (c) => c.callExtension("/find_elements", { type: "UMLClass", limit: 5 }),
+        "/find_elements",
+        { type: "UMLClass", limit: 5 },
+      ],
+      [
+        "introspectManifest",
+        (c) => c.introspectManifest(),
+        "/introspect",
+        { include: ["endpoints"] },
+      ],
+    ];
 
-      await expect(client.generateDiagram("invalid")).rejects.toMatchObject({
-        name: "StarUMLApiError",
-        slug: "/generate_diagram",
-        message: expect.stringContaining("Invalid Mermaid syntax"),
-      });
-    });
+    it.each(cases)(
+      "%s posts to the right endpoint and returns data",
+      async (_, call, slug, body) => {
+        const client = new StarUMLClient();
+        mockJsonResponse({ success: true, data: { ok: slug } });
 
-    it("throws StarUMLApiError with status when HTTP not ok", async () => {
-      const client = new StarUMLClient();
-      fetchSpy.mockResolvedValueOnce(new Response("Server error", { status: 500 }));
+        await expect(call(client)).resolves.toEqual({ ok: slug });
 
-      await expect(client.generateDiagram("x")).rejects.toMatchObject({
-        slug: "/generate_diagram",
-        status: 500,
-      });
-    });
-
-    it("throws StarUMLApiError with helpful message when fetch itself fails", async () => {
-      const client = new StarUMLClient();
-      fetchSpy.mockRejectedValueOnce(new Error("ECONNREFUSED"));
-
-      await expect(client.generateDiagram("x")).rejects.toMatchObject({
-        slug: "/generate_diagram",
-        message: expect.stringContaining("Is StarUML running"),
-      });
-    });
-  });
-
-  describe("getAllDiagramsInfo", () => {
-    it("returns data field from response", async () => {
-      const client = new StarUMLClient();
-      const diagrams = [{ id: "d1", name: "Flow", type: "flowchart" }];
-      mockJsonResponse({ success: true, data: diagrams });
-
-      const result = await client.getAllDiagramsInfo();
-
-      expect(result).toEqual(diagrams);
-    });
+        const request = lastRequest();
+        expect(new URL(request.url).pathname).toBe(slug);
+        expect(request.body).toEqual(body);
+      },
+    );
   });
 
   describe("getCurrentDiagramInfo", () => {
-    it("returns data field from response", async () => {
-      const client = new StarUMLClient();
-      mockJsonResponse({ success: true, data: { id: "x", name: "Current" } });
-
-      const result = await client.getCurrentDiagramInfo();
-
-      expect(result).toEqual({ id: "x", name: "Current" });
-    });
-
     it("returns undefined when data is absent", async () => {
       const client = new StarUMLClient();
       mockJsonResponse({ success: true });
 
-      const result = await client.getCurrentDiagramInfo();
-
-      expect(result).toBeUndefined();
+      await expect(client.getCurrentDiagramInfo()).resolves.toBeUndefined();
     });
   });
 
@@ -128,39 +125,442 @@ describe("StarUMLClient", () => {
       const client = new StarUMLClient();
       mockJsonResponse({ success: true, data: "iVBORw0KGgo=" });
 
-      const result = await client.getDiagramImageById("d1");
-
-      expect(result).toBe("iVBORw0KGgo=");
+      await expect(client.getDiagramImageById("d1")).resolves.toBe("iVBORw0KGgo=");
+      expect(lastRequest().body).toEqual({ diagramId: "d1" });
     });
 
-    it("throws when data is not a string", async () => {
+    it("rejects with INVALID_RESPONSE when data is not a string", async () => {
       const client = new StarUMLClient();
       mockJsonResponse({ success: true, data: { wrong: "shape" } });
 
-      await expect(client.getDiagramImageById("d1")).rejects.toThrow(/Expected image string/);
+      const error = await caught(client.getDiagramImageById("d1"));
+      expect(error.code).toBe(ErrorCode.InvalidResponse);
+      expect(error.message).toBe("Expected a base64 image string, got object");
+      expect(error.upstream).toBe("builtin");
+    });
+  });
+
+  describe("connectivity failures", () => {
+    it("reports STARUML_UNREACHABLE for the built-in API without probing again", async () => {
+      const client = new StarUMLClient();
+      const cause = new TypeError("fetch failed");
+      fetchSpy.mockRejectedValueOnce(cause);
+
+      const error = await caught(client.generateDiagram("x"));
+
+      expect(error).toMatchObject({
+        code: ErrorCode.StarUMLUnreachable,
+        slug: "/generate_diagram",
+        upstream: "builtin",
+        status: undefined,
+        cause,
+      });
+      expect(error.message).toBe("Cannot reach the StarUML API server at http://localhost:58321");
+      expect(error.hint).toContain('"apiServer": true');
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports STARUML_UNREACHABLE for an extension call when StarUML itself is down", async () => {
+      const client = new StarUMLClient();
+      fetchSpy.mockRejectedValueOnce(new TypeError("fetch failed"));
+      fetchSpy.mockRejectedValueOnce(new TypeError("fetch failed"));
+
+      const error = await caught(client.callExtension("/get_project_info", {}));
+
+      expect(error.code).toBe(ErrorCode.StarUMLUnreachable);
+      expect(error.upstream).toBe("extension");
+      expect(error.message).toContain("neither http://localhost:58321 nor http://localhost:58322");
+      expect(fetchSpy.mock.calls[1]![0]).toBe("http://localhost:58321");
+    });
+
+    it("reports EXTENSION_UNREACHABLE when StarUML answers but the extension does not", async () => {
+      const client = new StarUMLClient();
+      fetchSpy.mockRejectedValueOnce(new TypeError("fetch failed"));
+      mockTextResponse("Hello from StarUML API Server!", 200);
+
+      const error = await caught(client.callExtension("/get_project_info", {}));
+
+      expect(error.code).toBe(ErrorCode.ExtensionUnreachable);
+      expect(error.message).toBe(
+        "StarUML is running but nothing answers at http://localhost:58322",
+      );
+      expect(error.hint).toContain("Extension Manager");
+    });
+  });
+
+  describe("HTTP errors", () => {
+    it("surfaces the extension's error body on HTTP 400", async () => {
+      const client = new StarUMLClient();
+      mockJsonResponse(
+        { success: false, error: "Cannot read properties of null (reading 'model')" },
+        400,
+        "Bad Request",
+      );
+
+      const error = await caught(
+        client.callExtension("/create_element_with_view", { type: "T", diagramId: "d" }),
+      );
+
+      expect(error.toJSON()).toEqual({
+        code: ErrorCode.RequestRejected,
+        message: "Cannot read properties of null (reading 'model')",
+        endpoint: "/create_element_with_view",
+        upstream: "extension",
+        status: 400,
+      });
+    });
+
+    it("passes an upstream code through verbatim", async () => {
+      const client = new StarUMLClient();
+      mockJsonResponse({ success: false, error: "Element not found: e", code: "NOT_FOUND" }, 404);
+
+      const error = await caught(client.callExtension("/get_element_by_id", { id: "e" }));
+
+      expect(error.code).toBe("NOT_FOUND");
+      expect(error.hint).toBeUndefined();
+    });
+
+    it("maps an extension 404 without code to ENDPOINT_NOT_FOUND with a version hint", async () => {
+      const client = new StarUMLClient();
+      mockJsonResponse({ success: false, error: "No handler for /close_diagram" }, 404);
+
+      const error = await caught(client.callExtension("/close_diagram", { id: "d" }));
+
+      expect(error.code).toBe(ErrorCode.EndpointNotFound);
+      expect(error.message).toBe("No handler for /close_diagram");
+      expect(error.hint).toContain("GET http://localhost:58322/ lists the endpoints");
+    });
+
+    it("keeps extension 0.3.0's UNKNOWN_ENDPOINT code and adds the version hint", async () => {
+      const client = new StarUMLClient();
+      mockJsonResponse(
+        { success: false, code: "UNKNOWN_ENDPOINT", error: "No handler for /batch" },
+        404,
+      );
+
+      const error = await caught(client.callExtension("/batch", {}));
+
+      expect(error).toMatchObject({ code: "UNKNOWN_ENDPOINT", status: 404 });
+      expect(error.hint).toContain("does not provide /batch");
+    });
+
+    it.each([
+      ["INVALID_ARGUMENT", 400],
+      ["NO_PROJECT", 409],
+      ["STARUML_ERROR", 422],
+      ["INTERNAL", 500],
+    ])("passes extension 0.3.0's %s (HTTP %d) through without a hint", async (code, status) => {
+      const client = new StarUMLClient();
+      mockJsonResponse({ success: false, code, error: "why" }, status);
+
+      const error = await caught(client.callExtension("/create_element", {}));
+
+      expect(error.toJSON()).toEqual({
+        code,
+        message: "why",
+        endpoint: "/create_element",
+        upstream: "extension",
+        status,
+      });
+    });
+
+    it("maps a built-in 404 HTML page to ENDPOINT_NOT_FOUND with the status line", async () => {
+      const client = new StarUMLClient();
+      mockTextResponse("<pre>Cannot POST /get_all_diagrams_info</pre>", 404, "Not Found");
+
+      const error = await caught(client.getAllDiagramsInfo());
+
+      expect(error.code).toBe(ErrorCode.EndpointNotFound);
+      expect(error.message).toBe("HTTP 404 Not Found");
+      expect(error.hint).toContain("StarUML 7.0.0+");
+    });
+
+    it("maps HTTP 5xx without an envelope to UPSTREAM_ERROR", async () => {
+      const client = new StarUMLClient();
+      mockTextResponse("Server error", 500);
+
+      const error = await caught(client.generateDiagram("x"));
+
+      expect(error).toMatchObject({ code: ErrorCode.UpstreamError, status: 500 });
+      expect(error.message).toBe("HTTP 500");
+    });
+
+    it("uses the error body of a built-in 500", async () => {
+      const client = new StarUMLClient();
+      mockJsonResponse({ success: false, error: "Error: Unsupported diagram type" }, 500);
+
+      const error = await caught(client.generateDiagram("bogus"));
+
+      expect(error).toMatchObject({
+        code: ErrorCode.UpstreamError,
+        message: "Error: Unsupported diagram type",
+      });
+    });
+  });
+
+  describe("2xx responses that are not a success", () => {
+    it("rejects with REQUEST_REJECTED when success is false", async () => {
+      const client = new StarUMLClient();
+      mockJsonResponse({ success: false, error: "Invalid Mermaid syntax" });
+
+      const error = await caught(client.generateDiagram("invalid"));
+
+      expect(error).toMatchObject({
+        code: ErrorCode.RequestRejected,
+        slug: "/generate_diagram",
+        message: "Invalid Mermaid syntax",
+        status: 200,
+      });
+    });
+
+    it("keeps the upstream code and falls back to a generic message", async () => {
+      const client = new StarUMLClient();
+      mockJsonResponse({ success: false, code: "BUSY" });
+
+      const error = await caught(client.callExtension("/get_all_commands", {}));
+
+      expect(error.code).toBe("BUSY");
+      expect(error.message).toBe(
+        "http://localhost:58322/get_all_commands reported failure without a message",
+      );
+    });
+
+    it("rejects with INVALID_RESPONSE when the body is not JSON", async () => {
+      const client = new StarUMLClient();
+      mockTextResponse("<html></html>", 200);
+
+      const error = await caught(client.getAllDiagramsInfo());
+
+      expect(error.code).toBe(ErrorCode.InvalidResponse);
+      expect(error.hint).toContain("is the StarUML API server");
+    });
+
+    it("rejects with INVALID_RESPONSE when JSON lacks the envelope", async () => {
+      const client = new StarUMLClient();
+      mockJsonResponse({ hello: "world" });
+
+      const error = await caught(client.callExtension("/get_project_info", {}));
+
+      expect(error.code).toBe(ErrorCode.InvalidResponse);
+      expect(error.hint).toContain("is staruml-mcp-extension");
     });
   });
 
   describe("ping", () => {
     it("returns true when HTTP 200", async () => {
-      const client = new StarUMLClient();
       fetchSpy.mockResolvedValueOnce(new Response("OK", { status: 200 }));
-
-      await expect(client.ping()).resolves.toBe(true);
+      await expect(new StarUMLClient().ping()).resolves.toBe(true);
     });
 
     it("returns false when HTTP not ok", async () => {
-      const client = new StarUMLClient();
       fetchSpy.mockResolvedValueOnce(new Response("Not found", { status: 404 }));
-
-      await expect(client.ping()).resolves.toBe(false);
+      await expect(new StarUMLClient().ping()).resolves.toBe(false);
     });
 
     it("returns false when fetch throws", async () => {
-      const client = new StarUMLClient();
       fetchSpy.mockRejectedValueOnce(new Error("network down"));
+      await expect(new StarUMLClient().ping()).resolves.toBe(false);
+    });
+  });
 
-      await expect(client.ping()).resolves.toBe(false);
+  describe("extensionBanner", () => {
+    it("returns the parsed GET / banner", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response('{"name":"staruml-mcp-extension","version":"0.3.0"}', { status: 200 }),
+      );
+      await expect(new StarUMLClient().extensionBanner()).resolves.toEqual({
+        name: "staruml-mcp-extension",
+        version: "0.3.0",
+      });
+      expect(fetchSpy.mock.calls[0]![0]).toBe("http://localhost:58322");
+    });
+
+    it("returns null when something answers without JSON", async () => {
+      fetchSpy.mockResolvedValueOnce(new Response("Hello", { status: 200 }));
+      await expect(new StarUMLClient().extensionBanner()).resolves.toBeNull();
+    });
+
+    it("returns undefined when nothing answers", async () => {
+      fetchSpy.mockRejectedValueOnce(new Error("network down"));
+      await expect(new StarUMLClient().extensionBanner()).resolves.toBeUndefined();
+    });
+
+    it("gives up on a port that does not answer within the probe deadline", async () => {
+      fetchSpy.mockImplementationOnce(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason));
+          }),
+      );
+      vi.useFakeTimers();
+      try {
+        const banner = new StarUMLClient().extensionBanner();
+        await vi.advanceTimersByTimeAsync(2_000);
+        await expect(banner).resolves.toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe("access token", () => {
+    const headersOf = (call: number): Headers =>
+      new Headers(fetchSpy.mock.calls[call]![1]?.headers as Record<string, string>);
+
+    it("sends Authorization: Bearer to the extension only", async () => {
+      const client = new StarUMLClient({ extToken: "s3cret" });
+      mockJsonResponse({ success: true });
+      mockJsonResponse({ success: true });
+      fetchSpy.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+      fetchSpy.mockResolvedValueOnce(new Response("OK", { status: 200 }));
+
+      await client.callExtension("/is_modified", {});
+      await client.getAllDiagramsInfo();
+      await client.extensionBanner();
+      await client.ping();
+
+      expect(headersOf(0).get("Authorization")).toBe("Bearer s3cret");
+      expect(headersOf(0).get("Content-Type")).toBe("application/json");
+      expect(headersOf(1).get("Authorization")).toBeNull();
+      expect(headersOf(2).get("Authorization")).toBe("Bearer s3cret");
+      expect(headersOf(3).get("Authorization")).toBeNull();
+      expect(client.hasExtToken).toBe(true);
+    });
+
+    it.each([undefined, ""])("sends no Authorization for the token %j", async (extToken) => {
+      const client = new StarUMLClient({ extToken });
+      mockJsonResponse({ success: true });
+
+      await client.callExtension("/is_modified", {});
+
+      expect(headersOf(0).get("Authorization")).toBeNull();
+      expect(client.hasExtToken).toBe(false);
+    });
+  });
+
+  describe("extension refusals", () => {
+    const refusal = (code: string, status: number, headers: Record<string, string> = {}) =>
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: false, code, error: `refused: ${code}` }), {
+          status,
+          headers,
+        }),
+      );
+
+    it.each([
+      [
+        "UNAUTHORIZED",
+        401,
+        {},
+        "The extension requires an access token. In StarUML, Tools > MCP Extension > Server Info",
+      ],
+      ["FORBIDDEN_ORIGIN", 403, {}, "Preferences > MCP Extension > Allowed Origins"],
+      ["PAYLOAD_TOO_LARGE", 413, {}, "Max Request Body (KiB) or, for /batch, Max Batch Ops"],
+      ["UNSUPPORTED_MEDIA_TYPE", 415, {}, "Content-Type: application/json"],
+      [
+        "RATE_LIMITED",
+        429,
+        { "Retry-After": "12" },
+        "Retry in 12 s; Preferences > MCP Extension > Commands per Minute limits /execute_command",
+      ],
+      ["RATE_LIMITED", 429, {}, "Retry later; "],
+      ["TIMEOUT", 504, {}, "Request Timeout (s), but StarUML may still finish the work"],
+    ])("explains %s (HTTP %d)", async (code, status, headers, hint) => {
+      refusal(code, status, headers);
+
+      const error = await caught(new StarUMLClient().callExtension("/execute_command", {}));
+
+      expect(error).toMatchObject({ code, status, message: `refused: ${code}` });
+      expect(error.hint).toContain(hint);
+    });
+
+    it.each([
+      ["/execute_command", "describe_commands({ids: [<id>]}) names the arguments that avoid it"],
+      ["/generate_code", "list_code_generators shows the options each language takes"],
+      ["/reverse_code", "list_code_generators shows the options each language takes"],
+      ["/export_diagrams", "Pass the arguments that avoid it, or use a dedicated endpoint."],
+    ])("explains DIALOG_REQUIRED from %s and keeps its details", async (slug, hint) => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: false,
+            code: "DIALOG_REQUIRED",
+            error: "refused",
+            details: { dialog: "without-args", args: ["filename"] },
+          }),
+          { status: 422 },
+        ),
+      );
+
+      const error = await caught(new StarUMLClient().callExtension(slug, {}));
+
+      expect(error).toMatchObject({
+        code: "DIALOG_REQUIRED",
+        status: 422,
+        details: { dialog: "without-args", args: ["filename"] },
+      });
+      expect(error.hint).toMatch(/^StarUML would have opened a dialog and waited for someone/);
+      expect(error.hint).toContain(hint);
+    });
+
+    it("keeps the details of a success:false answer on HTTP 200", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ success: false, code: "NOT_FOUND", error: "x", details: { index: 0 } }),
+          { status: 200 },
+        ),
+      );
+
+      const error = await caught(new StarUMLClient().callExtension("/batch", {}));
+
+      expect(error.details).toEqual({ index: 0 });
+      expect(error.toJSON().details).toEqual({ index: 0 });
+    });
+
+    it("says a token that was sent was rejected", async () => {
+      refusal("UNAUTHORIZED", 401);
+
+      const error = await caught(
+        new StarUMLClient({ extToken: "old" }).callExtension("/is_modified", {}),
+      );
+
+      expect(error.hint).toMatch(/^The extension rejected the access token this server sent\./);
+      expect(error.hint).toContain("clear Preferences > MCP Extension > Access Token");
+    });
+
+    it("explains a refusal by status when a proxy answered without a code", async () => {
+      mockTextResponse("Gateway Timeout", 504, "Gateway Timeout");
+
+      const error = await caught(new StarUMLClient().callExtension("/export_pdf", {}));
+
+      expect(error.code).toBe(ErrorCode.UpstreamError);
+      expect(error.hint).toContain("Request Timeout (s)");
+    });
+
+    it("gives no extension hint for the built-in API", async () => {
+      mockTextResponse("Unauthorized", 401);
+
+      const error = await caught(new StarUMLClient().getAllDiagramsInfo());
+
+      expect(error.code).toBe(ErrorCode.RequestRejected);
+      expect(error.hint).toBeUndefined();
+    });
+
+    it.each([
+      ["UNAUTHORIZED", 401],
+      ["FORBIDDEN_ORIGIN", 403],
+    ])("makes the banner probe throw %s, since every call would fail", async (code, status) => {
+      refusal(code, status);
+
+      const error = await caught(new StarUMLClient().extensionBanner());
+
+      expect(error).toMatchObject({ code, status, slug: "/", upstream: "extension" });
+    });
+
+    it("treats another error status on GET / as no banner", async () => {
+      mockTextResponse("oops", 500);
+
+      await expect(new StarUMLClient().extensionBanner()).resolves.toBeUndefined();
     });
   });
 });

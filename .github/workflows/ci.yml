@@ -37,8 +37,40 @@ jobs:
       - name: Check formatting
         run: npm run format:check
 
-      - name: Test
-        run: npm test
+      - name: Test (100% coverage enforced by vitest thresholds)
+        run: npm test -- --coverage
 
       - name: Build
         run: npm run build
+
+  load:
+    name: HTTP transport load budget
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Budgets are several times looser than the README numbers (16-thread laptop) because
+      # hosted runners have 4 vCPUs; they catch order-of-magnitude regressions, not noise.
+      # Hosted runs measured p99 2010 ms for the single-call path and 2479 ms for batch at
+      # concurrency 200 (runs 37293764967, 37293397377), both with 0 errors, so 2000 ms sat on the
+      # noise floor; 4000 ms still fails a 2x regression against the laptop numbers.
+      - name: Load test
+        run: npm run load-test -- --requests 2000 --max-p99-ms 4000 --min-rps 100
+
+      - name: Load test (batch)
+        run: npm run load-test -- --batch --requests 2000 --max-p99-ms 4000 --min-rps 100
+
+      - name: Load test (build_diagram)
+        run: npm run load-test -- --build --requests 2000 --max-p99-ms 4000 --min-rps 100
