@@ -79,13 +79,13 @@ describe("syncExtensionTools", () => {
     const next = [
       { ...first!, description: "Changed upstream." },
       ...rest.filter((e) => e.path !== "/debug"),
-      { ...first!, path: "/build_diagram" },
+      { ...first!, path: "/frobnicate" },
     ];
     latest = next;
 
     syncExtensionTools(server, upstream, state(live(next)), registered);
 
-    expect(await names()).toContain("build_diagram");
+    expect(await names()).toContain("frobnicate");
     expect(await names()).not.toContain("debug");
     const changed = (await client.listTools()).tools.find((t) => t.name === first!.path.slice(1));
     expect(changed!.description).toBe("Changed upstream.");

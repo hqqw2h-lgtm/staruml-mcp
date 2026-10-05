@@ -693,6 +693,117 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       expect(payload<{ app_keys: string[] }>(await call("debug")).app_keys).toContain("project");
     });
 
+    it("refuses commands that would open a dialog with DIALOG_REQUIRED, a hint and details", async () => {
+      const always = await command(mcp, { id: "help:about" });
+      expect(failure(always)).toMatchObject({ code: "DIALOG_REQUIRED", status: 422 });
+      expect(text(always)).toContain("Hint: StarUML would have opened a dialog");
+
+      const needsArgs = await command(mcp, { id: "format:fill-color" });
+      expect(failure(needsArgs)).toMatchObject({
+        code: "DIALOG_REQUIRED",
+        details: { dialog: "without-args" },
+      });
+      expect(text(needsArgs)).toMatch(/\nDetails: \{"dialog":"without-args","args":\[/);
+
+      const described = payload<{ commands: { id: string; dialog: string; avoidWith?: number }[] }>(
+        await call("describe_commands", { ids: ["format:fill-color", "help:about"] }),
+      );
+      expect(described.commands).toEqual([
+        expect.objectContaining({ id: "format:fill-color", dialog: "without-args", avoidWith: 1 }),
+        expect.objectContaining({ id: "help:about", dialog: "always" }),
+      ]);
+    }, 150_000);
+
+    it("passes a rolled-back batch's details through and resolves numeric reference segments", async () => {
+      const error = failure(
+        await call("batch", {
+          ops: [
+            {
+              path: "/create_element",
+              body: { type: "UMLClass", parentId: modelId, name: "Gone" },
+            },
+            { path: "/delete_element", body: { id: "missing-id" } },
+          ],
+        }),
+      ) as { details?: { index: number; results: unknown[] } };
+      expect(error.details).toMatchObject({ index: 1, results: [{ data: { name: "Gone" } }, {}] });
+
+      const read = payload<{ results: { data: Summary }[] }>(
+        await call("batch", {
+          ops: [
+            {
+              path: "/get_element_by_id",
+              body: { id: modelId, fields: ["ownedElements"] },
+              as: "m",
+            },
+            { path: "/get_element_by_id", body: { id: "$m.ownedElements.0" } },
+          ],
+        }),
+      );
+      expect(read.results[1]!.data._parent).toBe(modelId);
+    });
+
+    it("builds a diagram from a spec and from Mermaid with build_diagram", async () => {
+      const fromSpec = payload<{ diagram: Summary; created: number; ids: Record<string, unknown> }>(
+        await call("build_diagram", {
+          kind: "class",
+          spec: {
+            classes: [{ name: "Shelf2", attributes: ["+code: String"] }, { name: "Copy2" }],
+            relations: [{ from: "Shelf2", to: "Copy2", type: "composition" }],
+          },
+          name: "LiveBuilt",
+          parentId: packageId,
+        }),
+      );
+      expect(fromSpec.diagram.name).toBe("LiveBuilt");
+      expect(fromSpec.created).toBe(3);
+      expect(Object.keys(fromSpec.ids).sort()).toEqual(["Copy2", "Shelf2"]);
+
+      const upserted = payload<{ upserted: boolean; created: number }>(
+        await call("build_diagram", {
+          mermaid: "classDiagram\n  Shelf2 --> Copy2\n  Copy2 --> Tag2",
+          name: "LiveBuilt",
+          parentId: packageId,
+          upsert: true,
+        }),
+      );
+      expect(upserted.upserted).toBe(true);
+      expect(upserted.created).toBeGreaterThan(0);
+    });
+
+    it("lists code generators, generates Java from a class and reverses it", async () => {
+      const { generators } = payload<{ generators: { language: string; installed: boolean }[] }>(
+        await call("list_code_generators"),
+      );
+      expect(generators.find((g) => g.language === "java")?.installed).toBe(true);
+
+      const out = join(dir, "java");
+      const generated = payload<{ count: number; files: string[] }>(
+        await call("generate_code", { language: "java", baseId: ids.book, path: out }),
+      );
+      expect(generated.files).toContain("Book.java");
+      expect(existsSync(join(out, "Book.java"))).toBe(true);
+
+      const reversed = payload<{ created: number; roots: Summary[] }>(
+        await call("reverse_code", {
+          language: "java",
+          path: out,
+          options: { typeHierarchy: false, packageOverview: false, packageStructure: false },
+        }),
+      );
+      expect(reversed.created).toBeGreaterThan(0);
+      expect(JSON.stringify(reversed.roots)).toContain("_id");
+    }, 60_000);
+
+    it("exports every diagram of a selection into a directory", async () => {
+      const out = join(dir, "diagrams");
+      const exported = payload<{ count: number; files: { file: string }[] }>(
+        await call("export_diagrams", { path: out, ids: [classDiagramId] }),
+      );
+      expect(exported.count).toBe(1);
+      expect(existsSync(exported.files[0]!.file)).toBe(true);
+    }, 60_000);
+
     it("deletes the package and then reports it NOT_FOUND", async () => {
       expect(
         payload<{ models_deleted: number }>(await call("delete_element", { id: packageId }))
@@ -738,22 +849,16 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       });
     });
 
-    it("called every listed tool and every endpoint of the bundled manifest", async () => {
+    it("called every listed tool and every endpoint of the manifest", async () => {
       const { tools } = await mcp.client.listTools();
-      // A newer extension build may add endpoints; the suite covers the contract this server
-      // bundles, and reports the rest.
-      const live = new Set(catalog.current.compiled.manifest.endpoints.map((e) => e.path));
-      const endpoints = BUNDLED_MANIFEST.endpoints
-        .filter((e) => live.has(e.path))
-        .map((e) => toolName(e.path));
-      const newer = [...live].filter((p) => !BUNDLED_MANIFEST.endpoints.some((e) => e.path === p));
-      if (newer.length > 0)
-        console.info(`[live] endpoints newer than the bundle: ${newer.join(" ")}`);
+      const live = catalog.current.compiled.manifest.endpoints.map((e) => e.path);
+      // The bundled manifest is the contract this server is tested against; the running
+      // extension must be that contract.
+      expect([...live].sort()).toEqual(BUNDLED_MANIFEST.endpoints.map((e) => e.path).sort());
       const generic = ["describe_endpoints", "call_endpoint"];
-      const newerTools = newer.map((p) => toolName(p));
       expect(
-        [...tools.map((t) => t.name), ...endpoints].filter(
-          (n) => !called.has(n) && !generic.includes(n) && !newerTools.includes(n),
+        [...tools.map((t) => t.name), ...live.map((p) => toolName(p))].filter(
+          (n) => !called.has(n) && !generic.includes(n),
         ),
       ).toEqual([]);
     });

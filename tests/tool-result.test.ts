@@ -33,6 +33,49 @@ describe("toolError", () => {
     });
   });
 
+  it.each([
+    [
+      "dialog arguments",
+      { dialog: "without-args", args: ["filename"] },
+      'Details: {"dialog":"without-args","args":["filename"]}',
+    ],
+    ["a value that is not an object", ["a", "b"], 'Details: ["a","b"]'],
+    [
+      "a rolled-back batch's index",
+      { index: 2, results: [{ path: "/x", success: true }] },
+      'Details: {"index":2}',
+    ],
+  ])("shows %s as a Details line", (_, details, line) => {
+    const error = new StarUMLApiError("refused", {
+      code: "DIALOG_REQUIRED",
+      slug: "/execute_command",
+      upstream: "extension",
+      details,
+    });
+
+    const result = toolError("execute command", error);
+
+    expect((result.content[0] as { text: string }).text.split("\n").at(-1)).toBe(line);
+  });
+
+  it("keeps batch results in structuredContent only, compacted", () => {
+    const error = new StarUMLApiError("rolled back", {
+      code: "NOT_FOUND",
+      slug: "/batch",
+      upstream: "extension",
+      details: { results: [{ path: "/x", success: true, data: { _id: "A", name: null } }] },
+    });
+
+    const result = toolError("batch", error);
+
+    expect(result.content).toEqual([
+      { type: "text", text: "Failed to batch: rolled back [NOT_FOUND, /batch]" },
+    ]);
+    expect(result.structuredContent).toMatchObject({
+      error: { details: { results: [{ data: { _id: "A" } }] } },
+    });
+  });
+
   it("omits status and hint when the error has none", () => {
     const error = new StarUMLApiError("down", {
       code: ErrorCode.StarUMLUnreachable,

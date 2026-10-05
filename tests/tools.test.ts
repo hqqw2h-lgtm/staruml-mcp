@@ -85,6 +85,14 @@ const ARGS: Record<string, Record<string, unknown>> = {
   "/batch": { ops: [{ path: "/find_elements" }] },
 };
 
+/**
+ * Invalid arguments for tools that list a shorter schema than the manifest's; their schema
+ * sample would pass the listing and be refused by the check against the whole schema instead.
+ */
+const INVALID: Record<string, Record<string, unknown>> = {
+  "/build_diagram": { upsert: "yes" },
+};
+
 /** One case per manifest endpoint: required arguments only, an element summary as the answer. */
 const generated: ToolCase[] = ENDPOINTS.map((entry) => {
   const args = ARGS[entry.path] ?? sampleArgs(entry.request);
@@ -97,7 +105,7 @@ const generated: ToolCase[] = ENDPOINTS.map((entry) => {
     data: summary,
     content: textContent('{"_id":"E1","_type":"UMLClass","_parent":"P1"}'),
     action: toolName(entry.path).replaceAll("_", " "),
-    invalid: invalidArgs(listedRequestSchema(entry).schema),
+    invalid: INVALID[entry.path] ?? invalidArgs(listedRequestSchema(entry).schema),
   };
 });
 
@@ -146,7 +154,7 @@ describe("tool registry", () => {
         ...BUNDLED_MANIFEST.endpoints.map((e) => toolName(e.path)),
       ].sort(),
     );
-    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(50);
+    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(56);
   });
 
   it("lists no $schema on any input schema", async () => {
@@ -171,8 +179,9 @@ describe("tool registry", () => {
     }
   });
 
-  // batch lists a shorter schema of its own (tests/batch.test.ts).
-  it.each(ENDPOINTS.filter((e) => e.path !== "/batch"))(
+  // batch and build_diagram list shorter schemas of their own (tests/batch.test.ts,
+  // tests/build-diagram.test.ts).
+  it.each(ENDPOINTS.filter((e) => e.path !== "/batch" && e.path !== "/build_diagram"))(
     "lists $path's request schema as the manifest defines it",
     async (entry) => {
       const { tools } = await mcp.client.listTools();
@@ -204,8 +213,10 @@ describe("tool registry", () => {
       "delete_element",
       "execute_command",
       "export_diagram",
+      "export_diagrams",
       "export_html",
       "export_pdf",
+      "generate_code",
       "new_project",
       "open_project",
       "redo",
@@ -219,7 +230,7 @@ describe("tool registry", () => {
   });
 
   it("tells clients how results are shaped", () => {
-    expect(mcp.client.getInstructions()).toMatch(/null and empty fields are omitted/);
+    expect(mcp.client.getInstructions()).toMatch(/without null or empty fields/);
   });
 
   it("uses default name and version without config", async () => {

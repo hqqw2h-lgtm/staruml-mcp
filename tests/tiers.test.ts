@@ -91,7 +91,8 @@ describe("endpointGroup", () => {
       (groups[endpointGroup(toolName(e.path))] ??= []).push(toolName(e.path));
     }
     expect(groups).toEqual({
-      command: ["get_all_commands", "execute_command"],
+      command: ["get_all_commands", "describe_commands", "execute_command"],
+      code: ["list_code_generators", "generate_code", "reverse_code"],
       project: [
         "get_project_info",
         "save_project",
@@ -128,8 +129,10 @@ describe("endpointGroup", () => {
         "set_view_style",
         "set_z_order",
         "export_diagram",
+        "export_diagrams",
         "export_pdf",
         "export_html",
+        "build_diagram",
       ],
       feature: [
         "add_attribute",
@@ -153,14 +156,15 @@ describe("endpointGroup", () => {
   });
 
   it("places endpoints of a newer extension in a group", () => {
-    expect(endpointGroup("build_diagram")).toBe("diagram");
-    expect(endpointGroup("generate_code")).toBe("element");
+    expect(endpointGroup("export_sequence_diagram")).toBe("diagram");
+    expect(endpointGroup("merge_elements")).toBe("element");
     expect(ENDPOINT_GROUPS).toEqual([
       "project",
       "command",
       "meta",
       "feature",
       "editor",
+      "code",
       "diagram",
       "element",
     ]);
@@ -183,6 +187,7 @@ describe("core tier (default)", () => {
       "delete_element",
       "export_diagram",
       "batch",
+      "build_diagram",
       "introspect",
       "describe_endpoints",
       "call_endpoint",
@@ -329,6 +334,7 @@ describe("describe_endpoints", () => {
     expect(Object.keys(JSON.parse(text(result)) as object)).toEqual([
       "debug",
       "get_all_commands",
+      "describe_commands",
       "execute_command",
     ]);
   });
@@ -436,12 +442,12 @@ describe("call_endpoint", () => {
   );
 
   it("reports an unknown endpoint with UNKNOWN_ENDPOINT", async () => {
-    const result = await mcp.call("call_endpoint", { name: "build_diagram", body: {} });
+    const result = await mcp.call("call_endpoint", { name: "build_diagrams", body: {} });
 
     expect(result.structuredContent).toEqual({
       error: {
         code: "UNKNOWN_ENDPOINT",
-        message: 'No endpoint "build_diagram" in staruml-mcp-extension 0.3.0',
+        message: 'No endpoint "build_diagrams" in staruml-mcp-extension 0.3.0',
         hint: "describe_endpoints() lists the endpoints.",
       },
     });
@@ -557,7 +563,7 @@ describe("tierCheck", () => {
     expect(tierCheck(new CatalogState())).toEqual({
       name: "tier",
       status: "ok",
-      detail: `core: 7 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint`,
+      detail: `core: 8 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint`,
     });
   });
 
@@ -567,7 +573,7 @@ describe("tierCheck", () => {
     expect(tierCheck(state)).toEqual({
       name: "tier",
       status: "warn",
-      detail: `core,doctor,save_projekt: 7 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint; unknown: save_projekt`,
+      detail: `core,doctor,save_projekt: 8 extension tools listed, ${EXTENDED.length} endpoints through call_endpoint; unknown: save_projekt`,
       remedy: "Check the names against describe_endpoints() or staruml://introspect/endpoints.",
     });
   });

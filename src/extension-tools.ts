@@ -2,6 +2,7 @@ import type { McpServer, RegisteredTool } from "@modelcontextprotocol/sdk/server
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { BATCH, BATCH_DESCRIPTION, BatchInput, batchResult, checkBatch } from "./batch.js";
+import { BUILD_DIAGRAM, BUILD_DIAGRAM_DESCRIPTION, buildDiagramInput } from "./build-diagram.js";
 import { ErrorCode, ToolInputError } from "./errors.js";
 import type { Check } from "./doctor.js";
 import {
@@ -129,20 +130,37 @@ export function syncExtensionTools(
   }
 }
 
+/**
+ * Endpoints listed with a hand-written description and a shorter schema than the manifest's,
+ * whose bodies are checked against the manifest's whole request schema before they are sent.
+ */
+const SHORT_LISTED: Record<
+  string,
+  { description: string; input: (tool: GeneratedTool) => z.ZodObject }
+> = {
+  [BATCH]: { description: BATCH_DESCRIPTION, input: () => BatchInput },
+  [BUILD_DIAGRAM]: {
+    description: BUILD_DIAGRAM_DESCRIPTION,
+    input: (tool) => buildDiagramInput(tool.entry),
+  },
+};
+
 function specs(server: McpServer, client: StarUMLClient, state: CatalogState): ToolSpec[] {
-  const out: ToolSpec[] = listedTools(state).map((tool) =>
-    tool.name === BATCH
+  const out: ToolSpec[] = listedTools(state).map((tool) => {
+    const short = SHORT_LISTED[tool.name];
+    return short === undefined
       ? {
-          name: tool.name,
-          fingerprint: `batch ${tool.fingerprint}`,
-          register: () => registerBatch(server, client, state, tool),
-        }
-      : {
           name: tool.name,
           fingerprint: tool.fingerprint,
           register: () => registerGenerated(server, client, tool),
-        },
-  );
+        }
+      : {
+          name: tool.name,
+          fingerprint: `short ${tool.fingerprint}`,
+          register: () =>
+            registerShortListed(server, client, state, tool, short.description, short.input(tool)),
+        };
+  });
   const introspect = summarized(state);
   if (introspect !== undefined) {
     out.push({
@@ -197,19 +215,21 @@ function resultOf(name: string, data: unknown, input: Record<string, unknown>): 
 }
 
 /**
- * /batch with a short listed schema; the body is checked against the manifest's schemas, the
- * batch's and each op's, before it is sent.
+ * An endpoint of {@link SHORT_LISTED}; the body is checked against the manifest's schemas (for
+ * /batch the batch's and each op's) before it is sent.
  */
-function registerBatch(
+function registerShortListed(
   server: McpServer,
   client: StarUMLClient,
   state: CatalogState,
   tool: GeneratedTool,
+  description: string,
+  inputSchema: z.ZodObject,
 ): RegisteredTool {
   return server.registerTool(
     tool.name,
-    { description: BATCH_DESCRIPTION, inputSchema: BatchInput, annotations: tool.annotations },
-    async (input) =>
+    { description, inputSchema, annotations: tool.annotations },
+    async (input: Record<string, unknown>) =>
       runTool(actionOf(tool.name), async () => {
         const body = validated(state, tool, input);
         return resultOf(tool.name, await client.callExtension(tool.path, body), body);

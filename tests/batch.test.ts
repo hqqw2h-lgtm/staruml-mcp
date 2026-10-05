@@ -182,14 +182,25 @@ describe("batch tool", () => {
     );
   });
 
-  it("reports the extension's rollback of an atomic batch with its code", async () => {
+  it("reports the extension's rollback of an atomic batch with its code and details", async () => {
     extension.reply("/batch", {
       status: 404,
       body: {
         success: false,
         code: "NOT_FOUND",
         error: "ops.1 /delete_element failed, batch rolled back: Element not found: E2",
-        details: { index: 1, results: [] },
+        details: {
+          index: 1,
+          results: [
+            { path: "/delete_element", success: true, data: { deleted: "E1", note: null } },
+            {
+              path: "/delete_element",
+              success: false,
+              code: "NOT_FOUND",
+              error: "Element not found: E2",
+            },
+          ],
+        },
       },
     });
 
@@ -201,16 +212,30 @@ describe("batch tool", () => {
     });
 
     expect(result.isError).toBe(true);
+    // The results name rolled-back elements, so the text shows only the failing op's index.
     expect(text(result)).toBe(
-      "Failed to batch: ops.1 /delete_element failed, batch rolled back: Element not found: E2 [NOT_FOUND, /batch, HTTP 404]",
+      'Failed to batch: ops.1 /delete_element failed, batch rolled back: Element not found: E2 [NOT_FOUND, /batch, HTTP 404]\nDetails: {"index":1}',
     );
+    expect(result.structuredContent).toMatchObject({
+      error: {
+        code: "NOT_FOUND",
+        details: {
+          index: 1,
+          results: [
+            { data: { deleted: "E1" } },
+            { success: false, code: "NOT_FOUND", error: "Element not found: E2" },
+          ],
+        },
+      },
+    });
   });
 
-  it("accepts a reference where the schema wants another type, and $$ escapes", async () => {
+  it("accepts a reference where the schema wants another type, numeric segments, and $$ escapes", async () => {
     extension.reply("/batch", { body: { success: true, data: { results: [] } } });
     const ops = [
       { path: "/get_element_by_id", body: { id: "V1" }, as: "v" },
       { path: "/move_views", body: { ids: ["$v"], dx: "$v.left", dy: 0 } },
+      { path: "/delete_element", body: { id: "$v.model.operands.0" } },
       { path: "/set_documentation", body: { elementId: "C1", documentation: "$$5 off" } },
     ];
 
@@ -223,8 +248,8 @@ describe("batch tool", () => {
   it.each([
     [
       "an op path the manifest lacks",
-      [{ path: "/build_diagram" }],
-      "ops.0.path: no endpoint /build_diagram",
+      [{ path: "/build_diagrams" }],
+      "ops.0.path: no endpoint /build_diagrams",
       "describe_endpoints() lists the endpoints.",
     ],
     [

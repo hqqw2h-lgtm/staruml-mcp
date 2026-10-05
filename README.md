@@ -13,7 +13,7 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 ```
   AI Agent  ──MCP──►  staruml-mcp (this package)  ──HTTP──►  StarUML
                                                   :58321 (built-in, 4 tools)
-                                                  :58322 (extension 0.3.x, 50 endpoints
+                                                  :58322 (extension 0.3.x, 56 endpoints
                                                           from its manifest: core ones as
                                                           tools, the rest via call_endpoint)
 ```
@@ -21,10 +21,10 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 | Package | What it is | Where it runs |
 |---|---|---|
 | **`staruml-mcp`** (this repo) | MCP server for AI agents | your machine via `npx -y staruml-mcp` |
-| **[`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 50 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
+| **[`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 56 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
 
 - Using only Mermaid-based diagram tools? Install `staruml-mcp` only. The 4 built-in tools and `doctor` work.
-- Want the extension's 50 endpoints (project save/open, element CRUD, relationships, attributes and operations, view layout and styling, export, undo, batches, any StarUML command)? Install **both**.
+- Want the extension's 56 endpoints (whole diagrams from a spec or Mermaid in one call, project save/open, element CRUD, relationships, attributes and operations, view layout and styling, export, undo, batches, code generation, any StarUML command)? Install **both**.
 
 ## Prerequisites
 
@@ -121,8 +121,8 @@ node         ok    22.23.3
 staruml api  ok    http://localhost:58321
 extension    ok    0.3.0 at http://localhost:58322
 staruml      ok    7.1.1
-manifest     ok    50 endpoints from the live manifest
-tier         ok    core: 7 extension tools listed, 43 endpoints through call_endpoint
+manifest     ok    56 endpoints from the live manifest
+tier         ok    core: 8 extension tools listed, 48 endpoints through call_endpoint
 ```
 
 A failing check is followed by a `fix` line: start StarUML, enable `apiServer` in StarUML's
@@ -165,8 +165,8 @@ default and reaches every other extension endpoint through two generic tools:
 
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
-| `core` (default) | the 5 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `export_diagram`, and `build_diagram` once the extension has it; `describe_endpoints`, `call_endpoint` | 1,736 |
-| `all` | the 5 above and one tool per manifest endpoint | 8,412 |
+| `core` (default) | the 5 above; `introspect` (summary), `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`; `describe_endpoints`, `call_endpoint` | 1,985 |
+| `all` | the 5 above and one tool per manifest endpoint | 9,315 |
 | `core,create_diagram,…` | the 5 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
 Token counts include the server instructions (o200k_base, extension 0.3.0, `npm run
@@ -177,7 +177,7 @@ environment but no arguments; the flag wins. An agent can switch it at runtime w
 reported by the `tier` check.
 
 - **`describe_endpoints()`** returns the endpoints without a tool, grouped (`project`, `command`,
-  `meta`, `feature`, `editor`, `diagram`, `element`; grouped by name, since the manifest has none), one line
+  `meta`, `feature`, `editor`, `code`, `diagram`, `element`; grouped by name, since the manifest has none), one line
   each. `describe_endpoints({names: [...]})` or `({group})` returns their full description, `readOnly`
   / `destructive` flags and request schema as `tools/list` would show it. Named endpoints may be
   listed ones.
@@ -209,7 +209,7 @@ endpoint:
   `destructive` (stated for every writing tool, since MCP defaults it to true),
   `openWorldHint: false`.
 
-A copy of the 0.3.0 manifest is bundled (`src/extension-manifest.json`), so `tools/list` is
+A copy of the 0.3.0 manifest (56 endpoints) is bundled (`src/extension-manifest.json`), so `tools/list` is
 complete while StarUML is closed; calls then fail with `EXTENSION_UNREACHABLE` and an install hint.
 `npm run sync:manifest` refreshes the copy from a running extension (`-- --url <base>`) or from a
 recorded `/introspect` response (`-- --from <file>`). When the running extension's version is
@@ -221,7 +221,8 @@ the core tier):
 
 | Endpoint | Does |
 |---|---|
-| `get_all_commands` / `execute_command` | List command ids / run any StarUML command. |
+| `build_diagram` | A whole diagram in one call and one undo step, from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap) or from Mermaid; laid out, optionally upserted into the diagram of the same name; answers the model and view ids by node name. |
+| `get_all_commands` / `describe_commands` / `execute_command` | List command ids / their arguments and whether they open a dialog / run any StarUML command. |
 | `get_project_info` / `new_project` / `open_project` / `save_project` / `save_project_as` | Project lifecycle. |
 | `get_element_by_id` / `find_elements` | Read elements; `find_elements` pages with `limit`/`cursor`. |
 | `create_element` / `update_element` / `delete_element` | Model elements without views; `update_element` sets, adds, removes, reorders or relocates. |
@@ -232,7 +233,8 @@ the core tier):
 | `get_views_of` / `get_edge_views_of` / `get_relationships_of` / `get_refs_to` / `get_connected_node_views` | Lookups between models, views and relationships. |
 | `layout_diagram` / `move_views` / `resize_node` / `set_view_style` / `set_z_order` | Arrange and style views. |
 | `get_selection` / `set_selection` / `get_editor_state` / `set_editor_state` | Selection, current diagram, zoom and grid. |
-| `export_diagram` / `export_pdf` / `export_html` | Diagram as PNG, JPEG or SVG (inline or to a file) / PDF / HTML docs. |
+| `export_diagram` / `export_diagrams` / `export_pdf` / `export_html` | Diagram as PNG, JPEG or SVG (inline or to a file) / many diagrams into a directory / PDF / HTML docs. |
+| `list_code_generators` / `generate_code` / `reverse_code` | Installed language generators and their options / source code from a model element / a source directory into the model. |
 | `undo` / `redo` / `is_modified` | History and unsaved state. |
 | `batch` | Several calls in one request, by default one undo step that rolls back when an op fails. |
 | `introspect` / `debug` | Versions, factory ids, metamodel, toolbox and manifest (the `introspect` tool is the summary) / the raw `app` surface. |
@@ -255,12 +257,20 @@ and `find_elements` pages with `limit` and `cursor` (`nextCursor` is absent on t
 
 `batch` takes `{ops: [{path, body, as}], atomic}`. A string `"$a"` in a body stands for the id of
 the result of the op named `a`, `"$a.view"` and `"$a.model"` for those of a `{view, model}` result,
-and `"$$"` escapes a literal `$`. Before sending, the server checks every op against its endpoint's
+a numeric segment indexes a list (`"$a.model.operands.0"`), and `"$$"` escapes a literal `$`. Before sending, the server checks every op against its endpoint's
 manifest schema (a reference may stand where the schema wants another type, since its value is
 only known once the batch runs) and that each reference names an earlier op; a failure is
 `INVALID_ARGUMENT` with the op index, as in `ops.2.body.ownerId: …`. Each result comes back without
 the op's `path` and, when it succeeded, without `success: true`. An atomic batch that fails in
-StarUML is rolled back and reported with the failing op's code.
+StarUML is rolled back and reported with the failing op's code; the extension's
+`details: {index, results}` come back in `structuredContent.error.details`, the results compacted as
+above, and the text adds `Details: {"index": n}` (the results name elements the rollback removed).
+
+`build_diagram` lists a hand-written description and six parameters (`kind`, `spec`, `mermaid`,
+`name`, `upsert`, `direction`, 260 tokens); the manifest's own description of `spec` alone is ~400
+tokens, so `spec` lists a one-line grammar per kind and `describe_endpoints({names:
+["build_diagram"]})` serves the full one. The unlisted `parentId` and `autoLayout` are accepted, and
+every body is checked against the manifest's whole request schema before it is sent, as for `batch`.
 
 `export_diagram` returns a PNG or JPEG as an image content block followed by the rest of the answer
 (`width`, `height`, `bytes`) as JSON; as text, the base64 of even a small diagram costs thousands of
@@ -304,7 +314,7 @@ A failed tool call returns `isError: true` with a one-line cause, a hint where o
 | `UPSTREAM_ERROR` | HTTP 5xx without a `code` from StarUML or the extension. |
 | `INVALID_RESPONSE` | The port answered with something other than the `{ success, data, error }` envelope. |
 | `INVALID_ARGUMENT`, `UNKNOWN_ENDPOINT` | Also raised by `call_endpoint` itself, before any request, for a body the manifest schema rejects or a name it does not have; `endpoint` and `hint` say which and how to look it up. |
-| extension 0.3.0 codes | Passed through with their HTTP status: `INVALID_ARGUMENT` (400), `UNKNOWN_TYPE` (400), `NOT_FOUND` (404), `UNKNOWN_ENDPOINT` (404, with the upgrade hint), `NO_PROJECT` (409), `STARUML_ERROR` (422, StarUML refused the operation), `INTERNAL` (500). |
+| extension 0.3.0 codes | Passed through with their HTTP status: `INVALID_ARGUMENT` (400), `UNKNOWN_TYPE` (400), `NOT_FOUND` (404), `UNKNOWN_ENDPOINT` (404, with the upgrade hint), `NO_PROJECT` (409), `STARUML_ERROR` (422, StarUML refused the operation), `DIALOG_REQUIRED` (422, the command or generator would have opened a dialog; the hint points to `describe_commands` for `execute_command` and to `list_code_generators` for code generation, and `details` names the missing arguments), `INTERNAL` (500). An error body's `details` is passed through as `error.details` and, except for a rolled-back batch's results, as a `Details:` line. |
 | extension request checks | Passed through with a hint naming the setting: `UNAUTHORIZED` (401: no or wrong access token; how to set or clear it), `FORBIDDEN_ORIGIN` (403: an `Origin` header not in Allowed Origins), `PAYLOAD_TOO_LARGE` (413: Max Request Body (KiB) or Max Batch Ops), `UNSUPPORTED_MEDIA_TYPE` (415: not `application/json`), `RATE_LIMITED` (429: Commands per Minute, with the `Retry-After` seconds), `TIMEOUT` (504: Request Timeout (s); the work may still complete). A 401/403/413/415/429/504 without these codes, as from a proxy, gets the same hint. |
 
 Arguments are checked against the tool's schema before any request, so a wrong-typed field fails

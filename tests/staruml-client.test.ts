@@ -474,6 +474,49 @@ describe("StarUMLClient", () => {
       expect(error.hint).toContain(hint);
     });
 
+    it.each([
+      ["/execute_command", "describe_commands({ids: [<id>]}) names the arguments that avoid it"],
+      ["/generate_code", "list_code_generators shows the options each language takes"],
+      ["/reverse_code", "list_code_generators shows the options each language takes"],
+      ["/export_diagrams", "Pass the arguments that avoid it, or use a dedicated endpoint."],
+    ])("explains DIALOG_REQUIRED from %s and keeps its details", async (slug, hint) => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: false,
+            code: "DIALOG_REQUIRED",
+            error: "refused",
+            details: { dialog: "without-args", args: ["filename"] },
+          }),
+          { status: 422 },
+        ),
+      );
+
+      const error = await caught(new StarUMLClient().callExtension(slug, {}));
+
+      expect(error).toMatchObject({
+        code: "DIALOG_REQUIRED",
+        status: 422,
+        details: { dialog: "without-args", args: ["filename"] },
+      });
+      expect(error.hint).toMatch(/^StarUML would have opened a dialog and waited for someone/);
+      expect(error.hint).toContain(hint);
+    });
+
+    it("keeps the details of a success:false answer on HTTP 200", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ success: false, code: "NOT_FOUND", error: "x", details: { index: 0 } }),
+          { status: 200 },
+        ),
+      );
+
+      const error = await caught(new StarUMLClient().callExtension("/batch", {}));
+
+      expect(error.details).toEqual({ index: 0 });
+      expect(error.toJSON().details).toEqual({ index: 0 });
+    });
+
     it("says a token that was sent was rejected", async () => {
       refusal("UNAUTHORIZED", 401);
 

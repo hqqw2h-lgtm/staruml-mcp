@@ -42,8 +42,120 @@
       }
     },
     {
+      "path": "/describe_commands",
+      "description": "Arguments, effect and dialog behaviour of registered commands (docs/commands.md), so /execute_command can be called without opening a dialog.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Command ids; default every registered and every catalogued command."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "catalogue": {
+            "type": "string",
+            "description": "StarUML version the catalogue was read from."
+          },
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "registered": {
+                  "type": "boolean"
+                },
+                "dialog": {
+                  "type": "string",
+                  "description": "never, always, without-args, confirm, external, or unknown for a command not in the catalogue."
+                },
+                "effect": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "optional": {
+                        "type": "boolean"
+                      },
+                      "note": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "type",
+                      "optional"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "avoidWith": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "without-args: arguments that avoid the dialog."
+                },
+                "needs": {
+                  "type": "string"
+                },
+                "async": {
+                  "type": "boolean"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "registered",
+                "dialog"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "catalogue",
+          "count",
+          "commands"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
       "path": "/execute_command",
-      "description": "Run a registered StarUML command (see /get_all_commands). Commands can do anything the UI can, including deleting data.",
+      "description": "Run a registered StarUML command (see /describe_commands for arguments). Commands can do anything the UI can, including deleting data. A command that would open a dialog is refused with DIALOG_REQUIRED instead of waiting for someone at StarUML.",
       "readOnly": false,
       "destructive": true,
       "request": {
@@ -4019,6 +4131,112 @@
       }
     },
     {
+      "path": "/export_diagrams",
+      "description": "Write diagrams as image files into a directory, one per diagram named after it, as File > Export Diagrams does; /export_diagram renders one.",
+      "readOnly": false,
+      "destructive": true,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute directory to write into; created if missing. Files of the same name are overwritten."
+          },
+          "ids": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Diagram ids; default every diagram in the project."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "png",
+              "jpeg",
+              "svg"
+            ],
+            "description": "Image format; default png."
+          },
+          "scale": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 4,
+            "description": "As for /export_diagram."
+          },
+          "background": {
+            "type": "string",
+            "pattern": "^(#[0-9a-f]{3,8}|[a-z]+)$",
+            "description": "As for /export_diagram."
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "diagram": {
+                  "type": "string"
+                },
+                "file": {
+                  "type": "string",
+                  "description": "Absolute path written."
+                },
+                "width": {
+                  "type": "number"
+                },
+                "height": {
+                  "type": "number"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "diagram",
+                "file",
+                "width",
+                "height",
+                "bytes"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "path",
+          "format",
+          "count",
+          "files"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
       "path": "/export_pdf",
       "description": "Write diagrams to a PDF file, one page each, as File > Print to PDF and the CLI's pdf command do.",
       "readOnly": false,
@@ -4120,6 +4338,247 @@
         "required": [
           "path",
           "index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/list_code_generators",
+      "description": "Which code generator extensions are installed, for /generate_code and /reverse_code, with the options each takes from its preferences.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "generators": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "language": {
+                  "type": "string"
+                },
+                "extension": {
+                  "type": "string"
+                },
+                "installed": {
+                  "type": "boolean"
+                },
+                "reverse": {
+                  "type": "boolean",
+                  "description": "Whether /reverse_code supports it."
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Extension directory, if installed."
+                },
+                "generateOptions": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "reverseOptions": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "language",
+                "extension",
+                "installed",
+                "reverse"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "generators"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/generate_code",
+      "description": "Generate source code from a model element with an installed generator extension (Tools > <Language> > Generate Code) into a directory, and list the files written.",
+      "readOnly": false,
+      "destructive": true,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": "string",
+            "enum": [
+              "java",
+              "cpp",
+              "csharp",
+              "python"
+            ],
+            "description": "Generator language: java, cpp, csharp or python."
+          },
+          "baseId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Element to generate from: a package or model generates its whole tree, a class or interface one file."
+          },
+          "path": {
+            "type": "string",
+            "description": "Absolute output directory; created if missing. A package becomes a subdirectory named after it, and the Java generator fails if that already exists."
+          },
+          "options": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "Generator options by name, e.g. {indentSpaces: 2, javaDoc: false} for Java; the rest come from the generator's preferences (see /list_code_generators)."
+          }
+        },
+        "required": [
+          "language",
+          "baseId",
+          "path"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": "string"
+          },
+          "base": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Files created or rewritten, relative to path, sorted."
+          }
+        },
+        "required": [
+          "language",
+          "base",
+          "path",
+          "count",
+          "files"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/reverse_code",
+      "description": "Reverse-engineer a source directory into the open project with an installed generator extension (Tools > <Language> > Reverse Code), and summarize the elements it added.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": "string",
+            "enum": [
+              "java",
+              "cpp",
+              "csharp",
+              "python"
+            ],
+            "description": "Generator language: java, cpp, csharp or python."
+          },
+          "path": {
+            "type": "string",
+            "description": "Absolute directory whose source files are read, recursively."
+          },
+          "options": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "Analyzer options by name, e.g. {association: false, publicOnly: true} for Java; the rest come from its preferences."
+          }
+        },
+        "required": [
+          "language",
+          "path"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "created": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Elements added, views and diagrams included."
+          },
+          "roots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "_parent": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "_id",
+                "_type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "The added elements whose owner existed before, e.g. the top-level packages."
+          }
+        },
+        "required": [
+          "language",
+          "path",
+          "created",
+          "roots"
         ],
         "additionalProperties": false
       }
@@ -4241,7 +4700,7 @@
           },
           "atomic": {
             "type": "boolean",
-            "description": "Default true. Atomic batches refuse /undo, /redo, /new_project, /open_project, /save_project*, /execute_command, /export_pdf and /export_html."
+            "description": "Default true. Atomic batches refuse /undo, /redo, /new_project, /open_project, /save_project*, /execute_command, /export_pdf, /export_html, /export_diagrams, /generate_code, /reverse_code and /build_diagram."
           }
         },
         "required": [
@@ -4306,6 +4765,200 @@
           "succeeded",
           "failed",
           "results"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/build_diagram",
+      "description": "Build a whole diagram in one call from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap) or from Mermaid (classDiagram, sequenceDiagram, flowchart, erDiagram, stateDiagram; a flowchart also as activity or usecase). One undo step; laid out by Format > Layout where the kind allows. upsert updates the diagram of the same name instead of adding another. Answers the ids of what it made, not the model.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "class",
+              "sequence",
+              "usecase",
+              "activity",
+              "statemachine",
+              "erd",
+              "flowchart",
+              "mindmap"
+            ],
+            "description": "Diagram kind; required with spec. With mermaid it is read from the header, and 'activity' or 'usecase' reads a flowchart as that kind."
+          },
+          "spec": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "class: {packages, classes: [{name, kind: class|interface|enum|abstract, package, stereotype, attributes: ['+id: long'], operations: ['+total(): double'], literals}], relations: [{from, to, type: association|directed|aggregation|composition|generalization|realization|dependency, name, fromMultiplicity, toMultiplicity}]}. sequence: {participants, messages: [{from, to, text, kind: sync|async|reply|create|delete}], fragments: [{operator: alt|opt|loop|..., guard, from, to}] (message indices)}. usecase: {system, actors, useCases, relations: [{from, to, type: association|include|extend|generalization}]}. activity: {lanes, nodes: [{id, name, type: action|initial|final|flowFinal|decision|merge|fork|join|object, lane}], flows: [{from, to, guard}]}. statemachine: {states: [{id, name, type: state|initial|final|choice|fork|join}], transitions: [{from, to, trigger, guard, effect}]}. erd: {entities: [{name, columns: ['id int PK', ...]}], relationships: [{from, to, fromCardinality, toCardinality: '0..1'|'1'|'0..*'|'1..*', name, identifying}]}. flowchart: {nodes: [{id, name, shape: process|decision|terminator|data|document|predefined|alternate|database|manualInput|preparation|connector|delay|display}], flows: [{from, to, label}]}. mindmap: {root: {name, children: [...]}}. Names may contain '\\n' or '<br/>' for line breaks; edges name nodes by name, or by id where nodes have one."
+          },
+          "mermaid": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Mermaid source instead of spec. The diagram is named by 'name', else front matter 'title:' or a 'title' line."
+          },
+          "name": {
+            "type": "string",
+            "description": "Diagram name."
+          },
+          "parentId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Owner of the diagram; default the project, where StarUML adds the container the kind needs (a model, interaction, activity, state machine, data model, flowchart or mind map)."
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "TB",
+              "BT",
+              "LR",
+              "RL"
+            ],
+            "description": "Layout direction; default TB, or Mermaid's."
+          },
+          "autoLayout": {
+            "type": "boolean",
+            "description": "Default true: Format > Layout after building. Sequence diagrams, lanes and a system boundary keep the computed placement."
+          },
+          "upsert": {
+            "type": "boolean",
+            "description": "Update the diagram with this name and kind under the parent if there is one: nodes already on it (same type and name) gain missing members and changed properties, missing nodes and edges are added, nothing is removed."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagram": {
+            "type": "object",
+            "properties": {
+              "_id": {
+                "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "_type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_id",
+              "name",
+              "_type"
+            ],
+            "additionalProperties": false,
+            "description": "The diagram built or updated."
+          },
+          "kind": {
+            "type": "string"
+          },
+          "upserted": {
+            "type": "boolean",
+            "description": "An existing diagram was updated."
+          },
+          "created": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Nodes and edges added."
+          },
+          "updated": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Existing nodes given members or properties."
+          },
+          "unchanged": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Existing nodes and edges left as they were."
+          },
+          "layout": {
+            "type": "string",
+            "enum": [
+              "engine",
+              "placed"
+            ],
+            "description": "engine: Format > Layout arranged it; placed: the computed placement stands."
+          },
+          "ids": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "view": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "model",
+                "view"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Model and view ids of each node, by its name (or id) in the spec."
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "description": "'from -> to'."
+                },
+                "model": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "view": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "model",
+                "view"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "diagram",
+          "kind",
+          "upserted",
+          "created",
+          "updated",
+          "unchanged",
+          "layout",
+          "ids",
+          "edges"
         ],
         "additionalProperties": false
       }

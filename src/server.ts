@@ -39,7 +39,7 @@ export function diagramImageUri(id: string): string {
 }
 
 const INSTRUCTIONS =
-  "Results are minified JSON; null and empty fields are omitted and arguments are not echoed. " +
+  "Results are minified JSON without null or empty fields or echoed arguments. " +
   `${PROJECTION_INSTRUCTIONS} ` +
   "Endpoints without a tool: describe_endpoints, then call_endpoint. " +
   "Resources: diagram PNGs, project tree, metamodel, endpoint manifest. " +

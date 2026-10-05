@@ -1,0 +1,219 @@
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { z } from "zod";
+import { BUILD_DIAGRAM_DESCRIPTION, buildDiagramInput } from "../src/build-diagram.js";
+import { CatalogState } from "../src/extension-tools.js";
+import { BUNDLED_MANIFEST } from "../src/manifest.js";
+import { parseToolSelection } from "../src/tiers.js";
+import { UpstreamFixture } from "./support/fixture.js";
+import { connect, text, type ConnectedClient } from "./support/mcp.js";
+
+const HOST = "http://127.0.0.1";
+const builtin = new UpstreamFixture();
+const extension = new UpstreamFixture();
+let mcp: ConnectedClient;
+
+beforeAll(async () => {
+  await Promise.all([builtin.start(), extension.start()]);
+  mcp = await connect({ apiHost: HOST, apiPort: builtin.port, extPort: extension.port });
+});
+
+afterEach(() => {
+  builtin.reset();
+  extension.reset();
+});
+
+afterAll(async () => {
+  await mcp.close();
+  await Promise.all([builtin.stop(), extension.stop()]);
+});
+
+const entry = BUNDLED_MANIFEST.endpoints.find((e) => e.path === "/build_diagram")!;
+
+/** What extension 0.3.0 answers for a two-class diagram (src/handlers/build.ts). */
+const answer = {
+  diagram: { _id: "D1", _type: "UMLClassDiagram", name: "Shop" },
+  kind: "class",
+  upserted: false,
+  created: 3,
+  updated: 0,
+  unchanged: 0,
+  layout: "engine",
+  ids: { Order: { model: "C1", view: "V1" }, Line: { model: "C2", view: "V2" } },
+  edges: [{ key: "Order -> Line", model: "R1", view: "V3" }],
+};
+
+const mermaid = "---\ntitle: Shop\n---\nclassDiagram\n  Order --> Line";
+
+describe("build_diagram tool", () => {
+  it("is listed in the core tier with a terse description and a short schema", async () => {
+    const { tools } = await mcp.client.listTools();
+    const tool = tools.find((t) => t.name === "build_diagram")!;
+
+    expect(tool.description).toBe(BUILD_DIAGRAM_DESCRIPTION);
+    expect(BUILD_DIAGRAM_DESCRIPTION.length).toBeLessThanOrEqual(100);
+    expect(Object.keys(tool.inputSchema.properties!)).toEqual([
+      "kind",
+      "spec",
+      "mermaid",
+      "name",
+      "upsert",
+      "direction",
+    ]);
+    expect(tool.inputSchema.required).toBeUndefined();
+    expect(tool.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: false,
+    });
+  });
+
+  it("lists the same short schema under --tools all", async () => {
+    const all = await connect({ catalog: new CatalogState(undefined, parseToolSelection("all")) });
+    try {
+      const { tools } = await all.client.listTools();
+      expect(tools.find((t) => t.name === "build_diagram")!.description).toBe(
+        BUILD_DIAGRAM_DESCRIPTION,
+      );
+    } finally {
+      await all.close();
+    }
+  });
+
+  it("sends Mermaid in one request and returns the id map", async () => {
+    extension.reply("/build_diagram", { body: { success: true, data: answer } });
+
+    const result = await mcp.call("build_diagram", { mermaid, direction: "LR" });
+
+    expect(result.isError).toBeFalsy();
+    expect(extension.requests).toEqual([
+      { method: "POST", path: "/build_diagram", body: { mermaid, direction: "LR" } },
+    ]);
+    expect(JSON.parse(text(result))).toEqual(answer);
+  });
+
+  it("passes the unlisted parentId and autoLayout through", async () => {
+    extension.reply("/build_diagram", {
+      body: { success: true, data: { ...answer, kind: "usecase" } },
+    });
+    const body = {
+      kind: "usecase",
+      spec: {
+        actors: ["Customer"],
+        useCases: ["Pay"],
+        relations: [{ from: "Customer", to: "Pay" }],
+      },
+      name: "Checkout",
+      upsert: true,
+      parentId: "M1",
+      autoLayout: false,
+    };
+
+    const result = await mcp.call("build_diagram", body);
+
+    expect(result.isError).toBeFalsy();
+    expect(extension.requests[0]!.body).toEqual(body);
+    // kind echoes the argument and is dropped.
+    expect(text(result)).not.toContain('"kind"');
+  });
+
+  it.each([
+    ["an unknown key", { mermaid, title: "Shop" }, 'body: Unrecognized key: "title"'],
+    [
+      "a spec that is not an object",
+      { kind: "class", spec: "classes" },
+      "spec: Invalid input: expected object, received string",
+    ],
+    ["a kind it does not build", { kind: "gantt", spec: {} }, "kind: Invalid option"],
+    [
+      "a wrong-typed unlisted parameter",
+      { mermaid, autoLayout: "no" },
+      "autoLayout: Invalid input: expected boolean, received string",
+    ],
+  ])("rejects %s against the whole request schema before sending", async (_, args, message) => {
+    const result = await mcp.call("build_diagram", args);
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      error: {
+        code: "INVALID_ARGUMENT",
+        endpoint: "/build_diagram",
+        hint: 'describe_endpoints({names: ["build_diagram"]}) shows its schema.',
+      },
+    });
+    expect((result.structuredContent as { error: { message: string } }).error.message).toContain(
+      message,
+    );
+    expect(extension.requests).toEqual([]);
+  });
+
+  it("rejects a wrong-typed listed parameter through the input schema", async () => {
+    const result = await mcp.call("build_diagram", { mermaid, upsert: "yes" });
+
+    expect(text(result)).toMatch(/Input validation error/);
+    expect(extension.requests).toEqual([]);
+  });
+
+  it("reports a rolled-back build with the failing op's index", async () => {
+    extension.reply("/build_diagram", {
+      status: 404,
+      body: {
+        success: false,
+        code: "NOT_FOUND",
+        error:
+          "build_diagram: ops.3 /create_relationship failed, batch rolled back: Element not found",
+        details: { index: 3, results: [{ path: "/create_diagram", success: true, data: {} }] },
+      },
+    });
+
+    const result = await mcp.call("build_diagram", { mermaid });
+
+    expect(text(result)).toBe(
+      'Failed to build diagram: build_diagram: ops.3 /create_relationship failed, batch rolled back: Element not found [NOT_FOUND, /build_diagram, HTTP 404]\nDetails: {"index":3}',
+    );
+    expect(result.structuredContent).toMatchObject({
+      error: { details: { index: 3, results: [{}] } },
+    });
+  });
+
+  it("is described in full by describe_endpoints", async () => {
+    const result = await mcp.call("describe_endpoints", { names: ["build_diagram"] });
+
+    const described = JSON.parse(text(result)) as {
+      build_diagram: { request: { properties: Record<string, { description: string }> } };
+    };
+    expect(described.build_diagram.request.properties.spec!.description).toBe(
+      (entry.request.properties as Record<string, { description: string }>).spec!.description,
+    );
+  });
+});
+
+describe("buildDiagramInput", () => {
+  it("lists only the parameters the manifest entry has", () => {
+    const properties = entry.request.properties as Record<string, unknown>;
+    const { upsert: _upsert, direction: _direction, ...rest } = properties;
+
+    const schema = z.toJSONSchema(
+      buildDiagramInput({ ...entry, request: { ...entry.request, properties: rest } }),
+    ) as { properties: Record<string, unknown> };
+
+    expect(Object.keys(schema.properties)).toEqual(["kind", "spec", "mermaid", "name"]);
+  });
+
+  it("lists spec and kind without the types the whole schema checks", () => {
+    const schema = z.toJSONSchema(buildDiagramInput(entry)) as {
+      properties: Record<string, Record<string, unknown>>;
+    };
+
+    expect(Object.keys(schema.properties.spec!)).toEqual(["description"]);
+    expect(Object.keys(schema.properties.kind!)).toEqual(["description"]);
+    expect(schema.properties.direction!.enum).toEqual(["TB", "BT", "LR", "RL"]);
+  });
+
+  it("lists nothing for an entry without properties", () => {
+    const schema = z.toJSONSchema(buildDiagramInput({ ...entry, request: { type: "object" } })) as {
+      properties: Record<string, unknown>;
+    };
+
+    expect(schema.properties).toEqual({});
+  });
+});

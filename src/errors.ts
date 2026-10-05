@@ -26,6 +26,8 @@ export interface StarUMLApiErrorOptions {
   upstream: Upstream;
   status?: number;
   hint?: string;
+  /** The `details` of the extension's error body, such as an atomic batch's `{index, results}`. */
+  details?: unknown;
   cause?: unknown;
 }
 
@@ -37,6 +39,7 @@ export interface ErrorDetail {
   upstream?: Upstream;
   status?: number;
   hint?: string;
+  details?: unknown;
 }
 
 export class StarUMLApiError extends Error {
@@ -45,6 +48,7 @@ export class StarUMLApiError extends Error {
   readonly upstream: Upstream;
   readonly status: number | undefined;
   readonly hint: string | undefined;
+  readonly details: unknown;
 
   constructor(message: string, options: StarUMLApiErrorOptions) {
     super(message, { cause: options.cause });
@@ -54,6 +58,7 @@ export class StarUMLApiError extends Error {
     this.upstream = options.upstream;
     this.status = options.status;
     this.hint = options.hint;
+    this.details = options.details;
   }
 
   toJSON(): ErrorDetail {
@@ -64,6 +69,7 @@ export class StarUMLApiError extends Error {
       upstream: this.upstream,
       ...(this.status === undefined ? {} : { status: this.status }),
       ...(this.hint === undefined ? {} : { hint: this.hint }),
+      ...(this.details === undefined ? {} : { details: this.details }),
     };
   }
 }

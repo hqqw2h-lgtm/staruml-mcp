@@ -3,7 +3,7 @@ import {
   McpError,
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
-import { serialize } from "./compact.js";
+import { compactOpResults, prune, serialize } from "./compact.js";
 import { ErrorCode, StarUMLApiError, ToolInputError, type ErrorDetail } from "./errors.js";
 
 export function textResult(text: string): CallToolResult {
@@ -37,20 +37,46 @@ export function exportResult(data: unknown, input: Record<string, unknown>): Cal
   };
 }
 
+/**
+ * The extension's `details`, pruned; an atomic batch's (`{index, results}`, extension
+ * src/handlers/batch.ts) with its results compacted as a successful batch's are.
+ */
+function compactDetails(details: unknown): unknown {
+  const results = (details as { results?: unknown } | null)?.results;
+  if (!Array.isArray(results)) return prune(details);
+  return prune({ ...(details as object), results: compactOpResults(results) });
+}
+
+/**
+ * Details for the text block. A rolled-back batch's results name elements that no longer exist
+ * and grow with the batch (a 40-op /build_diagram), so they stay in `structuredContent`; the
+ * failing op's index and every other detail, such as the arguments a dialog needs, are shown.
+ */
+function detailsLine(details: unknown): string | undefined {
+  if (typeof details !== "object" || details === null || Array.isArray(details)) {
+    return `Details: ${JSON.stringify(details)}`;
+  }
+  const { results: _results, ...rest } = details as Record<string, unknown>;
+  return Object.keys(rest).length === 0 ? undefined : `Details: ${JSON.stringify(rest)}`;
+}
+
 function describeError(action: string, error: unknown): { text: string; detail: ErrorDetail } {
-  const detail: ErrorDetail =
+  const raw: ErrorDetail =
     error instanceof StarUMLApiError || error instanceof ToolInputError
       ? error.toJSON()
       : {
           code: ErrorCode.Unexpected,
           message: error instanceof Error ? error.message : String(error),
         };
+  const detail = raw.details === undefined ? raw : { ...raw, details: compactDetails(raw.details) };
   const status = detail.status === undefined ? "" : `, HTTP ${detail.status}`;
   const endpoint = detail.endpoint === undefined ? "" : `, ${detail.endpoint}`;
   const lines = [`Failed to ${action}: ${detail.message} [${detail.code}${endpoint}${status}]`];
   if (detail.hint !== undefined) {
     lines.push(`Hint: ${detail.hint}`);
   }
+  const details = detail.details === undefined ? undefined : detailsLine(detail.details);
+  if (details !== undefined) lines.push(details);
   return { text: lines.join("\n"), detail };
 }
 

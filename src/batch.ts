@@ -4,7 +4,7 @@
  */
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { serialize } from "./compact.js";
+import { compactOpResults, serialize } from "./compact.js";
 import { ErrorCode, ToolInputError } from "./errors.js";
 import { unstamped, type GeneratedTool } from "./manifest.js";
 import { textResult } from "./tool-result.js";
@@ -17,8 +17,11 @@ export const BATCH_DESCRIPTION =
 
 /** The extension's patterns for a path and an `as` name. */
 const OP_NAME = /^[A-Za-z_][\w-]*$/;
-/** "$name" or "$name.path"; "$$" escapes a literal "$" (batch.ts `REFERENCE`). */
-const REFERENCE = /^\$([A-Za-z_][\w-]*)((?:\.[A-Za-z_$][\w$]*)*)$/;
+/**
+ * "$name" or "$name.path", where a numeric segment indexes a list ("$frag.model.operands.0");
+ * "$$" escapes a literal "$" (batch.ts `REFERENCE`).
+ */
+const REFERENCE = /^\$([A-Za-z_][\w-]*)((?:\.(?:[A-Za-z_$][\w$]*|\d+))*)$/;
 
 /**
  * Shorter than the manifest's request schema, which repeats the refused paths and the limit
@@ -36,7 +39,7 @@ export const BatchInput = unstamped(
         }),
       )
       .min(1)
-      .describe("Calls in order; the extension takes 500 by default."),
+      .describe("Calls in order."),
     atomic: z
       .boolean()
       .optional()
@@ -116,22 +119,9 @@ function references(
   return Object.entries(value).flatMap(([key, item]) => references(item, [...at, key]));
 }
 
-interface OpResult {
-  path?: string;
-  success?: boolean;
-  [key: string]: unknown;
-}
-
-/**
- * Each result without the op's path, which the caller sent in the same position, and without
- * `success: true`; a failed op keeps `success: false` beside its code.
- */
+/** The answer with each result compacted by {@link compactOpResults}. */
 export function batchResult(data: unknown, input: Record<string, unknown>): CallToolResult {
   const results = (data as { results?: unknown } | null)?.results;
   if (!Array.isArray(results)) return textResult(serialize(data, input));
-  const compact = results.map((result: OpResult) => {
-    const { path: _path, success, ...rest } = result;
-    return success === true ? rest : { success, ...rest };
-  });
-  return textResult(serialize({ ...(data as object), results: compact }, input));
+  return textResult(serialize({ ...(data as object), results: compactOpResults(results) }, input));
 }

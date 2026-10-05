@@ -1,7 +1,7 @@
 /**
  * Which extension endpoints get a tool of their own. Every tool definition is resent with each
- * model turn: with one tool per endpoint of extension 0.3.0 (50), tools/list and the instructions
- * cost 8,412 tokens, the core tier 1,736 (o200k_base, scripts/token-benchmark.mjs). The endpoints most
+ * model turn: with one tool per endpoint of extension 0.3.0 (56), tools/list and the instructions
+ * cost 9,315 tokens, the core tier 1,985 (o200k_base, scripts/token-benchmark.mjs). The endpoints most
  * modelling sessions need are listed and the rest are reached through describe_endpoints and
  * call_endpoint.
  */
@@ -72,6 +72,8 @@ const GROUP_RULES: readonly (readonly [string, RegExp])[] = [
   ["meta", /^(introspect|debug)$/],
   ["feature", /^add_/],
   ["editor", /selection|editor|undo|redo/],
+  // Code generation and reverse engineering through StarUML's language extensions.
+  ["code", /_code/],
   ["diagram", /diagram|view|layout|export|image|style|color|font|move|resize|z_order/],
   ["element", /./],
 ];

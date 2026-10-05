@@ -61,3 +61,20 @@ export function serialize(value: unknown, input: JsonObject = {}): string {
   if (out === undefined || (isObject(out) && Object.keys(out).length === 0)) return OK;
   return JSON.stringify(out);
 }
+
+interface OpResult {
+  path?: string;
+  success?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * /batch op results without the op's path, which the caller sent in the same position, and
+ * without `success: true`; a failed op keeps `success: false` beside its code.
+ */
+export function compactOpResults(results: readonly OpResult[]): unknown[] {
+  return results.map((result) => {
+    const { path: _path, success, ...rest } = result;
+    return success === true ? rest : { success, ...rest };
+  });
+}

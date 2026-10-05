@@ -92,7 +92,7 @@ describe("diagnose", () => {
       { name: "staruml api", status: "ok", detail: `${HOST}:${builtin.port}` },
       { name: "extension", status: "ok", detail: `0.3.0 at ${HOST}:${extension.port}` },
       { name: "staruml", status: "ok", detail: "7.1.1" },
-      { name: "manifest", status: "ok", detail: "50 endpoints from the live manifest" },
+      { name: "manifest", status: "ok", detail: "56 endpoints from the live manifest" },
     ]);
     expect(catalog).toMatchObject({ source: "live", enabled: true });
     expect(extension.requests).toContainEqual({
@@ -137,7 +137,7 @@ describe("diagnose", () => {
       detail: `no answer at ${HOST}:${refused}`,
       remedy: "Start StarUML; the extension listens while StarUML runs.",
     });
-    expect(check(checks, "manifest").detail).toBe("50 endpoints from the bundled manifest");
+    expect(check(checks, "manifest").detail).toBe("56 endpoints from the bundled manifest");
     expect(catalog).toMatchObject({ source: "bundled", enabled: true });
     expect(checks.map((c) => c.name)).not.toContain("staruml");
   });
@@ -277,7 +277,7 @@ describe("diagnose", () => {
       name: "manifest",
       status: "warn",
       detail:
-        "50 endpoints from the live manifest; skipped /broken (request schema is not an object schema)",
+        "56 endpoints from the live manifest; skipped /broken (request schema is not an object schema)",
     });
   });
 });
@@ -313,7 +313,7 @@ describe("doctor tool", () => {
   it("returns the report and adopts the live manifest", async () => {
     const live = BUNDLED_MANIFEST.endpoints
       .filter((e) => e.path !== "/debug")
-      .concat({ ...BUNDLED_MANIFEST.endpoints[0]!, path: "/build_diagram", description: "Build." });
+      .concat({ ...BUNDLED_MANIFEST.endpoints[0]!, path: "/frobnicate", description: "Build." });
     serve("0.3.0", live);
     const catalog = new CatalogState(undefined, parseToolSelection("all"));
     const mcp = await connect({
@@ -330,12 +330,12 @@ describe("doctor tool", () => {
 
       expect(result.isError).toBeFalsy();
       expect(text(result)).toMatch(/^node +ok/);
-      expect(text(result)).toContain("manifest     ok    50 endpoints from the live manifest");
+      expect(text(result)).toContain("manifest     ok    56 endpoints from the live manifest");
       expect(text(result)).toContain(
-        "tier         ok    all: 50 extension tools listed, 0 endpoints through call_endpoint",
+        "tier         ok    all: 56 extension tools listed, 0 endpoints through call_endpoint",
       );
       const after = await names(mcp);
-      expect(after).toContain("build_diagram");
+      expect(after).toContain("frobnicate");
       expect(after).not.toContain("debug");
       expect(catalog.current.source).toBe("live");
       await vi.waitFor(() => expect(changed()).toBeGreaterThan(0));
@@ -406,7 +406,7 @@ describe("doctor tool", () => {
       expect(catalog.selection.label).toBe("core,create_diagram,nope");
       expect(await names(mcp)).toContain("create_diagram");
       expect(text(result)).toMatch(
-        /tier +warn +core,create_diagram,nope: 8 extension tools .*; unknown: nope\n +fix +Check the names/,
+        /tier +warn +core,create_diagram,nope: 9 extension tools .*; unknown: nope\n +fix +Check the names/,
       );
       await vi.waitFor(() => expect(changed()).toBeGreaterThan(0));
     } finally {

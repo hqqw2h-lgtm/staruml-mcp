@@ -36,6 +36,7 @@ const StarUMLResponseSchema = z.object({
   data: z.unknown().optional(),
   error: z.string().optional(),
   code: z.string().optional(),
+  details: z.unknown().optional(),
 });
 
 type StarUMLResponse = z.infer<typeof StarUMLResponseSchema>;
@@ -212,6 +213,7 @@ export class StarUMLClient {
           slug,
           upstream,
           status: res.status,
+          ...(envelope.details === undefined ? {} : { details: envelope.details }),
         },
       );
     }
@@ -257,7 +259,12 @@ export class StarUMLClient {
     envelope: StarUMLResponse | undefined,
   ): StarUMLApiError {
     const message = envelope?.error ?? `HTTP ${res.status} ${res.statusText}`.trimEnd();
-    const options = { slug, upstream, status: res.status };
+    const options = {
+      slug,
+      upstream,
+      status: res.status,
+      ...(envelope?.details === undefined ? {} : { details: envelope.details }),
+    };
     // Extension 0.3.0 names a missing endpoint UNKNOWN_ENDPOINT; older ones and StarUML answer a
     // bare 404. Either way the installed version does not match what this server expects.
     const missing =
@@ -301,11 +308,31 @@ export class StarUMLClient {
         const after = res.headers.get("Retry-After");
         return `${after === null ? "Retry later" : `Retry in ${after} s`}; ${PREFERENCES} > Commands per Minute limits ${slug} for all clients together.`;
       }
+      case "DIALOG_REQUIRED":
+        return dialogHint(slug);
       case "TIMEOUT":
         return `The extension stopped waiting after ${PREFERENCES} > Request Timeout (s), but StarUML may still finish the work; check its effect before retrying, or raise the limit.`;
       default:
         return undefined;
     }
+  }
+}
+
+/**
+ * Extension 0.3.0 refuses what would open a modal or native dialog (src/dialog-guard.ts and
+ * refuseDialog in src/handlers/commands.ts there): nobody may be at StarUML to close it, and a
+ * native file dialog blocks the renderer that serves the API.
+ */
+function dialogHint(slug: string): string {
+  const lead = "StarUML would have opened a dialog and waited for someone to close it.";
+  switch (slug) {
+    case "/execute_command":
+      return `${lead} describe_commands({ids: [<id>]}) names the arguments that avoid it; or use an endpoint instead (save_project, open_project, export_diagram, export_pdf, generate_code).`;
+    case "/generate_code":
+    case "/reverse_code":
+      return `${lead} The generator asked for something its options did not settle; list_code_generators shows the options each language takes.`;
+    default:
+      return `${lead} Pass the arguments that avoid it, or use a dedicated endpoint.`;
   }
 }
 
