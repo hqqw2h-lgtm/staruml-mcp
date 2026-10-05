@@ -63,12 +63,12 @@ jobs:
 
       # Budgets are several times looser than the README numbers (16-thread laptop) because
       # hosted runners have 4 vCPUs; they catch order-of-magnitude regressions, not noise.
+      # Hosted runs measured p99 2010 ms for the single-call path and 2479 ms for batch at
+      # concurrency 200 (runs 37293764967, 37293397377), both with 0 errors, so 2000 ms sat on the
+      # noise floor; 4000 ms still fails a 2x regression against the laptop numbers.
       - name: Load test
-        run: npm run load-test -- --requests 2000 --max-p99-ms 2000 --min-rps 100
+        run: npm run load-test -- --requests 2000 --max-p99-ms 4000 --min-rps 100
 
-      # batch and build_diagram carry 4-op bodies through schema validation per request; at
-      # concurrency 200 the first hosted run measured p99 2479 ms (run 37293397377) with 0 errors,
-      # so their budget is doubled relative to the single-call path.
       - name: Load test (batch)
         run: npm run load-test -- --batch --requests 2000 --max-p99-ms 4000 --min-rps 100
 
