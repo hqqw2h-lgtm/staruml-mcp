@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- 100% line/branch/function/statement coverage enforced through vitest thresholds, with tool-level tests over the MCP in-memory transport, HTTP transport e2e tests, a `STARUML_LIVE=1` suite and `scripts/load-test.mjs` (#1).
+- Pre-commit hook running lint-staged (#2).
+
 ### Changed
+- `src/index.ts` exports `main(argv)`; the CLI starts only when the module is the process entrypoint (#1).
+- Port flags reject non-integer values such as `8080abc` instead of truncating them (#1).
 - Tool failures carry the `error` (and `code`) from the JSON body of non-2xx responses instead of `HTTP 400 Bad Request`, plus `structuredContent.error` with a stable `code` and a hint for connectivity and version-mismatch failures (#3).
 
 ## [0.3.2] - 2026-04-20

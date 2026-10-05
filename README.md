@@ -162,12 +162,41 @@ A failed tool call returns `isError: true` with a one-line cause, a hint where o
 ```bash
 git clone https://github.com/ezrabrilliant/staruml-mcp.git
 cd staruml-mcp
-npm install
-npm run dev          # tsx watch on src/
-npm run build        # bundle to dist/
-npm test             # vitest
-npm run typecheck    # tsc --noEmit
+npm install            # also installs the pre-commit hook (lint-staged: eslint + prettier)
+npm run dev            # tsx watch on src/
+npm run build          # bundle to dist/
+npm test               # vitest: unit, tool-level and HTTP transport tests
+npm run test:coverage  # same, failing below 100% lines/branches/functions/statements
+npm run test:live      # STARUML_LIVE=1: every tool against a running StarUML + extension
+npm run load-test      # HTTP transport load test (needs npm run build)
+npm run typecheck      # tsc --noEmit for src and tests
 ```
+
+Tool-level tests drive each tool through the MCP SDK's in-memory transport against local
+`http.Server` stubs of ports 58321 and 58322. The live suite saves the open project to a temp
+file, works in a fresh project, and reopens the original file when done; unsaved changes of the
+original are kept only in that temp copy, whose path it prints.
+
+## Performance
+
+`scripts/load-test.mjs` starts `dist/index.js` with `--transport http` and sends
+`tools/call get_all_diagrams_info` at each concurrency level, with StarUML replaced by an
+in-process stub so the numbers measure this server. Every request builds a fresh `McpServer`
+(stateless mode), which dominates the cost. Any failed request makes the script exit non-zero;
+`--max-p99-ms` and `--min-rps` add budgets, and CI runs it with
+`--requests 2000 --max-p99-ms 2000 --min-rps 100`.
+
+Measured on an Intel i9-9980HK (8 cores / 16 threads), macOS, Node 22.23.3, 5000 requests per
+level after 500 warm-up requests, load generator on the same machine. Ranges span three runs on a
+machine shared with other work:
+
+| Concurrency | req/s | p50 | p99 | Errors |
+|---|---|---|---|---|
+| 50 | 460–647 | 72–96 ms | 136–351 ms | 0 |
+| 200 | 533–738 | 248–324 ms | 489–1081 ms | 0 |
+
+Against the real StarUML 7.1.1 API (`--live --requests 1000 --concurrency 50`, two runs):
+334–476 req/s, p50 102–146 ms, p99 148–227 ms, 0 errors.
 
 ## Architecture
 

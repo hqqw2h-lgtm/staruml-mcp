@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { ErrorCode, StarUMLApiError, StarUMLClient } from "../src/staruml-client.js";
 
 describe("StarUMLClient", () => {
-  let fetchSpy: ReturnType<typeof vi.spyOn<typeof globalThis, "fetch">>;
+  let fetchSpy: MockInstance<typeof fetch>;
 
   beforeEach(() => {
     fetchSpy = vi.spyOn(globalThis, "fetch");
