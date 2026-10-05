@@ -1,14 +1,16 @@
 #!/usr/bin/env node
-// Token benchmark for issue #5: replays three modelling scenarios against the current server and
-// against the baseline tool definitions of commit 56864ca (branch `phase0`), both talking to the
-// HTTP stand-ins the tests use, so it runs offline and both see identical upstream data.
+// Token benchmark: replays three modelling scenarios against the current server and against two
+// earlier servers loaded with `git show`: 56864ca (before issue #5) and 0cfc06b (issue #5, the last
+// hand-written tool set). All three talk to the HTTP stand-ins the tests use, so the benchmark runs
+// offline and every server sees identical upstream data, shaped like StarUML 7.1.1 + extension
+// 0.3.0 responses (element summaries, paged find_elements).
 //
 // Counted per scenario: the tools/list definitions (name, description, inputSchema) once, the
 // server instructions once, and the text of every tool result. Clients resend the definitions
 // with each model turn, so a single copy is the most conservative figure. Image bytes are
-// excluded: they are identical on both sides and billed as vision input, not text.
+// excluded: they are identical on all sides and billed as vision input, not text.
 // Tokens are o200k_base counts from gpt-tokenizer; other tokenizers differ by a few percent
-// but the before/after ratio is what matters.
+// but the ratios are what matters.
 //
 // Usage: node --import tsx scripts/token-benchmark.mjs   (npm run benchmark:tokens)
 
@@ -20,21 +22,34 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
 import { UpstreamFixture } from "../tests/support/fixture.ts";
 
-const BASELINE_COMMIT = "56864caa5900cba41ed87c8754ffbcc5ab44a7f9";
+const BASELINES = [
+  { label: "pre-#5", commit: "56864caa5900cba41ed87c8754ffbcc5ab44a7f9" },
+  { label: "#5", commit: "0cfc06b38df701066d49e3d79f89149f073e9efa" },
+];
 const root = fileURLToPath(new URL("..", import.meta.url));
 
-/** Writes the baseline sources inside node_modules so their SDK and zod imports resolve. */
-function loadBaselineSources() {
-  const dir = `${root}node_modules/.cache/token-benchmark/${BASELINE_COMMIT}/src`;
+/** Writes a commit's sources inside node_modules so their SDK and zod imports resolve. */
+function loadSources(commit) {
+  const dir = `${root}node_modules/.cache/token-benchmark/${commit}/src`;
   mkdirSync(dir, { recursive: true });
-  for (const file of ["server.ts", "errors.ts", "staruml-client.ts", "tool-result.ts"]) {
-    const source = execFileSync("git", ["show", `${BASELINE_COMMIT}:src/${file}`], { cwd: root });
-    writeFileSync(`${dir}/${file}`, source);
+  const files = execFileSync("git", ["ls-tree", "--name-only", commit, "src/"], { cwd: root })
+    .toString()
+    .split("\n")
+    .filter((f) => f.endsWith(".ts"));
+  for (const file of files) {
+    writeFileSync(
+      `${root}node_modules/.cache/token-benchmark/${commit}/${file}`,
+      gitShow(commit, file),
+    );
   }
   return pathToFileURL(`${dir}/server.ts`).href;
 }
 
-// --- Upstream data shaped like StarUML 7.1.1 + staruml-mcp-extension v0.2.2 responses ---------
+function gitShow(commit, file) {
+  return execFileSync("git", ["show", `${commit}:${file}`], { cwd: root });
+}
+
+// --- Upstream data shaped like StarUML 7.1.1 + staruml-mcp-extension 0.3.0 responses ----------
 
 const commands = JSON.parse(
   readFileSync(new URL("benchmark-data/commands-7.1.1.json", import.meta.url), "utf8"),
@@ -42,46 +57,16 @@ const commands = JSON.parse(
 let nextId = 0;
 /** 20-character ids in the style of StarUML's `IdGenerator`. */
 const newId = () => `AAAAAAGhCi${(nextId++).toString(36).padStart(9, "0")}=`;
-const ref = (element) => ({ _id: element._id, name: element.name });
+/** What 0.3.0's `summarize()` returns (src/serialize.ts). */
+const summary = (_type, name, parent) => ({
+  _id: newId(),
+  _type,
+  name,
+  _parent: parent?._id ?? null,
+});
 
-const project = { _id: newId(), name: "Untitled" };
-const model = { _id: newId(), name: "Model" };
-
-/** What v0.2.2's `shallow()` returns for a UMLClass created through the UI. */
-function umlClass(name, attributes = []) {
-  return {
-    _id: newId(),
-    _parent: ref(model),
-    name,
-    ownedElements: [],
-    documentation: "",
-    tags: [],
-    stereotype: null,
-    visibility: "public",
-    templateParameters: [],
-    attributes: attributes.map((a) => ({ _id: newId(), name: a })),
-    operations: [],
-    receptions: [],
-    behaviors: [],
-    isAbstract: false,
-    isFinalSpecialization: false,
-    isLeaf: false,
-    isActive: false,
-  };
-}
-
-const modelElement = {
-  _id: model._id,
-  _parent: ref(project),
-  name: model.name,
-  ownedElements: [],
-  documentation: "",
-  tags: [],
-  stereotype: null,
-  visibility: "public",
-  templateParameters: [],
-  ownedViews: [],
-};
+const project = summary("Project", "Untitled", undefined);
+const model = summary("UMLModel", "Model", project);
 
 const diagrams = [
   { id: newId(), type: "UMLClassDiagram", name: "Main", description: "" },
@@ -98,19 +83,26 @@ const classes = [
   "Cart",
   "Address",
   "Shipment",
-].map((n) => umlClass(n, ["id", "createdAt", "status"]));
+].map((n) => summary("UMLClass", n, model));
 
 const ok = (data) => ({ success: true, data });
 
 const step = (tool, args, upstream, slug, data) => ({ tool, args, upstream, slug, data });
 
-function createdWithView(name) {
-  return { view: { _id: newId() }, model: { _id: newId(), name } };
+function createdWithView(type, name, diagram) {
+  const created = summary(type, name, model);
+  return { view: summary(`${type}View`, null, diagram), model: created };
 }
 
-const useCaseDiagram = { _id: newId(), name: "Checkout", type: "UMLUseCaseDiagram" };
-const actors = ["Customer", "Clerk"].map((n) => ({ name: n, created: createdWithView(n) }));
-const useCases = ["Place order", "Pay"].map((n) => ({ name: n, created: createdWithView(n) }));
+const useCaseDiagram = summary("UMLUseCaseDiagram", "Checkout", model);
+const actors = ["Customer", "Clerk"].map((n) => ({
+  name: n,
+  created: createdWithView("UMLActor", n, useCaseDiagram),
+}));
+const useCases = ["Place order", "Pay"].map((n) => ({
+  name: n,
+  created: createdWithView("UMLUseCase", n, useCaseDiagram),
+}));
 
 const scenarios = [
   {
@@ -141,11 +133,12 @@ const scenarios = [
     steps: [
       step("get_project_info", {}, "extension", "/get_project_info", {
         filename: null,
-        project: { ...project, ownedElementsCount: 1 },
+        project,
       }),
       step("find_elements", { type: "UMLModel" }, "extension", "/find_elements", {
         count: 1,
-        elements: [modelElement],
+        elements: [model],
+        nextCursor: null,
       }),
       step(
         "create_diagram",
@@ -186,7 +179,10 @@ const scenarios = [
           },
           "extension",
           "/create_edge_with_view",
-          { view: { _id: newId() }, model: { _id: newId(), name: "" } },
+          {
+            view: summary("UMLAssociationView", null, useCaseDiagram),
+            model: summary("UMLAssociation", "", tail.created.model),
+          },
         ),
       ),
       step("save_project", { filename: "/work/checkout.mdj" }, "extension", "/save_project", {
@@ -201,6 +197,7 @@ const scenarios = [
       step("find_elements", { type: "UMLClass" }, "extension", "/find_elements", {
         count: classes.length,
         elements: classes,
+        nextCursor: null,
       }),
       step(
         "get_element_by_id",
@@ -221,7 +218,7 @@ const scenarios = [
         { id: classes[2]._id, field: "documentation", value: "Issued per order." },
         "extension",
         "/update_element",
-        { ...classes[2], name: "Bill", documentation: "Issued per order." },
+        { ...classes[2], name: "Bill" },
       ),
       step("delete_element", { id: classes[7]._id }, "extension", "/delete_element", {
         deleted: classes[7]._id,
@@ -277,7 +274,7 @@ async function measure(createServer) {
       }
       perScenario.push({ definitions, results, total: definitions + results });
     }
-    return { definitions, perScenario };
+    return { definitions, tools: tools.length, perScenario };
   } finally {
     await client.close();
     await server.close();
@@ -286,41 +283,43 @@ async function measure(createServer) {
   }
 }
 
-const baseline = await import(loadBaselineSources());
-const current = await import("../src/server.ts");
-const before = await measure(baseline.createServer);
-const after = await measure(current.createServer);
+const servers = [];
+for (const { label, commit } of BASELINES) {
+  servers.push({ label, ...(await measure((await import(loadSources(commit))).createServer)) });
+}
+servers.push({ label: "now", ...(await measure((await import("../src/server.ts")).createServer)) });
 
-const pct = (b, a) => `${(((b - a) / b) * 100).toFixed(1)}%`;
-const rows = scenarios.map((s, i) => {
-  const b = before.perScenario[i];
-  const a = after.perScenario[i];
-  return {
+const pct = (b, a) => `${(((a - b) / b) * 100).toFixed(1)}%`;
+const sum = (list, key) => list.reduce((n, x) => n + x[key], 0);
+const now = servers.at(-1);
+const rows = [
+  ...scenarios.map((s, i) => ({
     scenario: s.name,
     calls: s.steps.length,
-    "results before": b.results,
-    "results after": a.results,
-    "total before": b.total,
-    "total after": a.total,
-    reduction: pct(b.total, a.total),
-  };
-});
-const sum = (list, key) => list.reduce((n, x) => n + x[key], 0);
-const totalBefore = sum(before.perScenario, "total");
-const totalAfter = sum(after.perScenario, "total");
-rows.push({
-  scenario: "all scenarios",
-  calls: sum(rows, "calls"),
-  "results before": sum(before.perScenario, "results"),
-  "results after": sum(after.perScenario, "results"),
-  "total before": totalBefore,
-  "total after": totalAfter,
-  reduction: pct(totalBefore, totalAfter),
+    pick: (m) => m.perScenario[i],
+  })),
+  {
+    scenario: "all scenarios",
+    calls: sum(
+      scenarios.map((s) => ({ n: s.steps.length })),
+      "n",
+    ),
+    pick: (m) => ({ results: sum(m.perScenario, "results"), total: sum(m.perScenario, "total") }),
+  },
+].map(({ scenario, calls, pick }) => {
+  const row = { scenario, calls };
+  for (const m of servers) row[`results ${m.label}`] = pick(m).results;
+  for (const m of servers) row[`total ${m.label}`] = pick(m).total;
+  for (const m of servers.slice(0, -1)) {
+    row[`vs ${m.label}`] = pct(pick(m).total, pick(now).total);
+  }
+  return row;
 });
 
-console.log(`Tokenizer: o200k_base (gpt-tokenizer). Baseline: ${BASELINE_COMMIT.slice(0, 7)}.`);
 console.log(
-  `Tool definitions + instructions: ${before.definitions} -> ${after.definitions} tokens ` +
-    `(${pct(before.definitions, after.definitions)} less), counted once per scenario.`,
+  `Tokenizer: o200k_base (gpt-tokenizer). Baselines: ${BASELINES.map((b) => `${b.label} ${b.commit.slice(0, 7)}`).join(", ")}.`,
+);
+console.log(
+  `Tool definitions + instructions (tools): ${servers.map((m) => `${m.label} ${m.definitions} (${m.tools})`).join(", ")}; counted once per scenario.`,
 );
 console.table(rows);

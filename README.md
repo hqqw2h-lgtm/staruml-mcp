@@ -252,7 +252,7 @@ npm test               # vitest: unit, tool-level and HTTP transport tests
 npm run test:coverage  # same, failing below 100% lines/branches/functions/statements
 npm run test:live      # STARUML_LIVE=1: every tool against a running StarUML + extension
 npm run load-test      # HTTP transport load test (needs npm run build)
-npm run benchmark:tokens # token cost of three scenarios, current vs. 56864ca
+npm run benchmark:tokens # token cost of three scenarios, current vs. 56864ca and 0cfc06b
 npm run sync:manifest  # refresh src/extension-manifest.json from a running extension
 npm run typecheck      # tsc --noEmit for src and tests
 ```
@@ -290,28 +290,33 @@ are built once per manifest and shared by every per-request server.
 
 `scripts/token-benchmark.mjs` (`npm run benchmark:tokens`) replays three modelling scenarios
 through the MCP in-memory transport against the test stand-ins for ports 58321/58322, so it runs
-offline. Upstream responses are shaped like StarUML 7.1.1 + extension v0.2.2 output (the command
-list is the 322 ids captured from 7.1.1 in `scripts/benchmark-data/`). The baseline is the server of
-commit `56864ca` (before issue #5), loaded with `git show`. Each scenario counts the tool
-definitions a client forwards to the model (name, description, input schema) plus server
-instructions once, and the text of every result; image bytes are excluded because they are the
-same on both sides and billed as vision input. Tokenizer: `o200k_base` from `gpt-tokenizer`.
+offline. Upstream responses are shaped like StarUML 7.1.1 + extension 0.3.0 output (element
+summaries; the command list is the 322 ids captured from 7.1.1 in `scripts/benchmark-data/`). Three
+servers see the same data: `56864ca` (before issue #5), `0cfc06b` (issue #5, the last hand-written
+tool set, 21 tools) and the current one (34 tools, 29 generated from the manifest), the first two
+loaded with `git show` and run on the current dependencies (zod 4 lists schemas about 100 tokens
+shorter than zod 3 did, so #5's definitions measure 1831 here, 1930 when it was committed). Each scenario counts the tool definitions a client forwards to the model
+(name, description, input schema) plus server instructions once, and the text of every result;
+image bytes are excluded because they are the same on every side and billed as vision input.
+Tokenizer: `o200k_base` from `gpt-tokenizer`.
 
-| Scenario | Calls | Results before → after | Total before → after | Reduction |
-|---|---|---|---|---|
-| Mermaid class diagram + preview | 4 | 186 → 120 | 3290 → 2050 | 37.7% |
-| Native use-case diagram | 11 | 595 → 349 | 3699 → 2279 | 38.4% |
-| Inspect and refactor a class model | 8 | 5184 → 3377 | 8288 → 5307 | 36.0% |
-| All scenarios | 23 | 5965 → 3846 | 15277 → 9636 | 36.9% |
+| Scenario | Calls | Results pre-#5 / #5 / now | Total pre-#5 / #5 / now |
+|---|---|---|---|
+| Mermaid class diagram + preview | 4 | 186 / 120 / 120 | 3197 / 1951 / 6274 |
+| Native use-case diagram | 11 | 971 / 666 / 666 | 3982 / 2497 / 6820 |
+| Inspect and refactor a class model | 8 | 3216 / 2403 / 2403 | 6227 / 4234 / 8557 |
+| All scenarios | 23 | 4373 / 3189 / 3189 | 13406 / 8682 / 21651 |
 
-Tool definitions and instructions went from 3104 to 1930 tokens (37.8% less). They are counted
-once per scenario; clients resend them every turn, so the real saving grows with conversation
-length. 315 of the remaining 1930 tokens are the `$schema` URL the MCP SDK adds to every input
-schema.
-
-The issue's 60% target needs work on the extension side: projection (`fields`/`depth`/`summary`),
-pagination (`limit`/`cursor`), `/batch` and `build_diagram` would shrink the dominant costs, which
-are the 322-id command list and full element dumps from `find_elements`.
+Results cost the same as with the hand-written tools: the extension's summaries are what #5
+trimmed responses down to. Tool definitions and instructions grew from 1831 tokens (21 tools) to
+6154 (34 tools): every generated tool carries the extension's full request schema, and the 13 new
+ones (`create_relationship`, the `add_*` family, `set_*`, `introspect`, `debug`) are among the
+largest. Generated descriptions stay one line of at most 100 characters (a test enforces it on every
+listed tool); the remaining cost is in parameter schemas and their descriptions. Measured on
+tools/list: leaving the projection parameters out of the writing tools' listing saved 1,153 tokens and
+shortening the shared `properties` description 287; the MCP SDK's `$schema` URL costs 442, and
+cutting every parameter description to 100 characters would save about 600 more at the price of
+the semantics they carry.
 
 ## Architecture
 

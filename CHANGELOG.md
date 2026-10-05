@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - With an incompatible extension (another major version, or another minor while 0.x, e.g. 0.2.2) no extension tools are listed and the report names the version to install (#6).
 - The hand-written client methods for extension endpoints are replaced by `callExtension(path, body)`; `pingExtension` is replaced by `extensionBanner()`, and probes time out after 2 s (#4, #6).
 - zod 4 (`^4.6.5`), the version the extension's schemas are written with (#4).
+- `npm run benchmark:tokens` compares three servers on 0.3.0-shaped data: pre-#5, #5 and the current one (#5).
 - `src/index.ts` exports `main(argv)`; the CLI starts only when the module is the process entrypoint (#1).
 - Port flags reject non-integer values such as `8080abc` instead of truncating them (#1).
 - Tool descriptions are one line and each parameter is described once in its schema; the repeated extension install note is gone, since EXTENSION_UNREACHABLE carries it (#5).
