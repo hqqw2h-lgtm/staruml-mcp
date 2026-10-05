@@ -226,6 +226,33 @@ machine shared with other work:
 Against the real StarUML 7.1.1 API (`--live --requests 1000 --concurrency 50`, two runs):
 334–476 req/s, p50 102–146 ms, p99 148–227 ms, 0 errors.
 
+## Token efficiency
+
+`scripts/token-benchmark.mjs` (`npm run benchmark:tokens`) replays three modelling scenarios
+through the MCP in-memory transport against the test stand-ins for ports 58321/58322, so it runs
+offline. Upstream responses are shaped like StarUML 7.1.1 + extension v0.2.2 output (the command
+list is the 322 ids captured from 7.1.1 in `scripts/benchmark-data/`). The baseline is the server of
+commit `56864ca` (before issue #5), loaded with `git show`. Each scenario counts the tool
+definitions a client forwards to the model (name, description, input schema) plus server
+instructions once, and the text of every result; image bytes are excluded because they are the
+same on both sides and billed as vision input. Tokenizer: `o200k_base` from `gpt-tokenizer`.
+
+| Scenario | Calls | Results before → after | Total before → after | Reduction |
+|---|---|---|---|---|
+| Mermaid class diagram + preview | 4 | 186 → 120 | 3290 → 2050 | 37.7% |
+| Native use-case diagram | 11 | 595 → 349 | 3699 → 2279 | 38.4% |
+| Inspect and refactor a class model | 8 | 5184 → 3377 | 8288 → 5307 | 36.0% |
+| All scenarios | 23 | 5965 → 3846 | 15277 → 9636 | 36.9% |
+
+Tool definitions and instructions went from 3104 to 1930 tokens (37.8% less). They are counted
+once per scenario; clients resend them every turn, so the real saving grows with conversation
+length. 315 of the remaining 1930 tokens are the `$schema` URL the MCP SDK adds to every input
+schema.
+
+The issue's 60% target needs work on the extension side: projection (`fields`/`depth`/`summary`),
+pagination (`limit`/`cursor`), `/batch` and `build_diagram` would shrink the dominant costs, which
+are the 322-id command list and full element dumps from `find_elements`.
+
 ## Architecture
 
 ```
