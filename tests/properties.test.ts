@@ -1,0 +1,314 @@
+/**
+ * Property-based tests (fast-check): invariants that hold for every input, not only the examples
+ * the unit tests pick. A failure prints the shrunk counterexample and the seed to replay it with.
+ */
+import fc from "fast-check";
+import { describe, expect, it } from "vitest";
+import { checkBatch } from "../src/batch.js";
+import { OK, omitEcho, prune, serialize } from "../src/compact.js";
+import { ToolInputError } from "../src/errors.js";
+import {
+  bundledCatalog,
+  CatalogState,
+  listedTools,
+  unlistedTools,
+} from "../src/extension-tools.js";
+import { isLoopback } from "../src/index.js";
+import {
+  BUNDLED_MANIFEST,
+  MAX_DESCRIPTION_LENGTH,
+  terseDescription,
+  toolName,
+} from "../src/manifest.js";
+import { diagramImageUri, diagramTextUri } from "../src/server.js";
+import {
+  CORE_ENDPOINTS,
+  ENDPOINT_GROUPS,
+  endpointGroup,
+  parseToolSelection,
+  selects,
+} from "../src/tiers.js";
+
+const isEmpty = (v: unknown) =>
+  v === null ||
+  v === undefined ||
+  (Array.isArray(v) && v.length === 0) ||
+  (typeof v === "object" && v !== null && !Array.isArray(v) && Object.keys(v).length === 0);
+
+/** JSON as the extension sends it: any value, nulls and empty containers included. */
+const json = fc.jsonValue({ maxDepth: 4 });
+
+describe("compact.ts", () => {
+  it("prune is idempotent but for the {} it keeps for objects it emptied", () => {
+    /** `twice` is `once` without its `{}` properties, at any depth, and otherwise unchanged. */
+    const dropsOnlyEmptyObjects = (once: unknown, twice: unknown): void => {
+      if (Array.isArray(once)) {
+        expect(twice).toHaveLength(once.length);
+        once.forEach((item, i) => dropsOnlyEmptyObjects(item, (twice as unknown[])[i]));
+      } else if (typeof once === "object" && once !== null) {
+        const kept = Object.entries(once).filter(([, item]) => {
+          // The first pass left no null or [] property behind.
+          expect(item === null || (Array.isArray(item) && item.length === 0)).toBe(false);
+          return !isEmpty(item);
+        });
+        expect(Object.keys(twice as object)).toEqual(kept.map(([key]) => key));
+        for (const [key, item] of kept) {
+          dropsOnlyEmptyObjects(item, (twice as Record<string, unknown>)[key]);
+        }
+      } else {
+        expect(twice).toBe(once);
+      }
+    };
+    fc.assert(
+      fc.property(json, (value) => {
+        const once = prune(value);
+        dropsOnlyEmptyObjects(once, prune(once));
+      }),
+    );
+    // And where the first pass emptied no object, the second changes nothing.
+    fc.assert(
+      fc.property(json, (value) => {
+        const once = prune(value);
+        fc.pre(!JSON.stringify(once).includes("{}"));
+        expect(prune(once)).toEqual(once);
+      }),
+    );
+  });
+
+  it("keeps a __proto__ key as data", () => {
+    const value = JSON.parse('{"__proto__": {"a": 1}, "b": null}') as object;
+    expect(JSON.stringify(prune(value))).toBe('{"__proto__":{"a":1}}');
+    expect(JSON.stringify(omitEcho(value, {}))).toBe('{"__proto__":{"a":1},"b":null}');
+  });
+
+  it("prune keeps every non-empty property, and every array item in place", () => {
+    const keeps = (before: unknown, after: unknown): void => {
+      if (Array.isArray(before)) {
+        expect(after).toHaveLength(before.length);
+        before.forEach((item, i) => keeps(item, (after as unknown[])[i]));
+      } else if (typeof before === "object" && before !== null) {
+        for (const [key, item] of Object.entries(before)) {
+          const kept = (after as Record<string, unknown>)[key];
+          if (isEmpty(item)) expect(Object.hasOwn(after as object, key)).toBe(false);
+          else keeps(item, kept);
+        }
+      } else {
+        expect(after).toBe(before);
+      }
+    };
+    fc.assert(fc.property(json, (value) => keeps(value, prune(value))));
+  });
+
+  it("serialize writes JSON or OK, and no object in it holds a null or empty property", () => {
+    const clean = (value: unknown): void => {
+      if (Array.isArray(value)) value.forEach(clean);
+      else if (typeof value === "object" && value !== null) {
+        for (const item of Object.values(value)) {
+          expect(item === null || (Array.isArray(item) && item.length === 0)).toBe(false);
+          clean(item);
+        }
+      }
+    };
+    fc.assert(
+      fc.property(json, (value) => {
+        const text = serialize(value);
+        if (text !== OK) clean(JSON.parse(text));
+      }),
+    );
+  });
+
+  it("omitEcho drops only properties equal to a primitive argument of the same name", () => {
+    const primitive = fc.oneof(fc.string(), fc.integer(), fc.boolean());
+    fc.assert(
+      fc.property(
+        fc.dictionary(fc.string(), json),
+        fc.dictionary(fc.string(), primitive),
+        (value, input) => {
+          const out = omitEcho(value, input) as Record<string, unknown>;
+          for (const [key, item] of Object.entries(value)) {
+            expect(Object.hasOwn(out, key)).toBe(
+              !(Object.hasOwn(input, key) && input[key] === item),
+            );
+          }
+        },
+      ),
+    );
+  });
+});
+
+const NAME = fc.stringMatching(/^[a-z0-9_]{1,20}$/);
+
+describe("tiers.ts", () => {
+  it("names each core endpoint once", () => {
+    expect(new Set(CORE_ENDPOINTS).size).toBe(CORE_ENDPOINTS.length);
+  });
+
+  it("the core tier lists a subset of all, with unique names, for any manifest subset", () => {
+    const endpoints = BUNDLED_MANIFEST.endpoints;
+    fc.assert(
+      fc.property(
+        fc.subarray(endpoints),
+        fc.subarray(endpoints.map((e) => toolName(e.path))),
+        (subset, extra) => {
+          const catalog = bundledCatalog();
+          const compiled = {
+            ...catalog.compiled,
+            tools: catalog.compiled.tools.filter((t) => subset.includes(t.entry)),
+          };
+          const at = (tools: string) =>
+            new CatalogState({ ...catalog, compiled }, parseToolSelection(tools));
+          const core = listedTools(at(["core", ...extra].join(","))).map((t) => t.name);
+          const all = listedTools(at("all")).map((t) => t.name);
+          expect(new Set(core).size).toBe(core.length);
+          expect(new Set(all).size).toBe(all.length);
+          for (const name of core) expect(all).toContain(name);
+          // Every endpoint is listed or reachable through call_endpoint, never both.
+          const state = at(["core", ...extra].join(","));
+          const unlisted = unlistedTools(state).map((t) => t.name);
+          for (const name of core) expect(unlisted).not.toContain(name);
+        },
+      ),
+      { numRuns: 50 },
+    );
+  });
+
+  it("a selection selects exactly its names, core expanded, and all selects everything", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.oneof(NAME, fc.constant("core")), { minLength: 1 }),
+        NAME,
+        (tokens, probe) => {
+          const selection = parseToolSelection(tokens.join(","));
+          const expected = new Set(tokens.flatMap((t) => (t === "core" ? CORE_ENDPOINTS : [t])));
+          expect(selection.names).toEqual(expected);
+          expect(selects(selection, probe)).toBe(expected.has("all") || expected.has(probe));
+          expect(selects(parseToolSelection(`all,${tokens.join(",")}`), probe)).toBe(true);
+        },
+      ),
+    );
+  });
+
+  it("puts every name in exactly one known group", () => {
+    fc.assert(
+      fc.property(fc.string(), (name) => {
+        expect(ENDPOINT_GROUPS).toContain(endpointGroup(name));
+      }),
+    );
+  });
+});
+
+const OP_NAME = fc.stringMatching(/^[A-Za-z_][\w-]{0,8}$/);
+/** Path segments the extension resolves: attribute names and list indexes. */
+const SEGMENTS = fc.array(
+  fc.oneof(fc.stringMatching(/^[A-Za-z_$][\w$]{0,6}$/), fc.nat(20).map(String)),
+  {
+    maxLength: 3,
+  },
+);
+const ref = (name: string, segments: string[]) => [`$${name}`, ...segments].join(".");
+const tools = bundledCatalog().compiled.tools;
+
+function rejection(ops: Parameters<typeof checkBatch>[1]): string | undefined {
+  try {
+    checkBatch(tools, ops);
+    return undefined;
+  } catch (error) {
+    expect(error).toBeInstanceOf(ToolInputError);
+    return (error as ToolInputError).message;
+  }
+}
+
+describe("batch references", () => {
+  it("rejects a reference to the op itself or a later one", () => {
+    fc.assert(
+      fc.property(
+        fc.uniqueArray(OP_NAME, { minLength: 1, maxLength: 5 }),
+        fc.nat(),
+        SEGMENTS,
+        (names, pick, segments) => {
+          const at = pick % names.length;
+          const ops = names.map((name, i) => ({
+            path: "/get_element_by_id",
+            as: name,
+            body: { id: i === at ? ref(names[at + (pick % (names.length - at))]!, segments) : "X" },
+          }));
+          expect(rejection(ops)).toMatch(
+            new RegExp(`^ops\\.${at}\\.body\\.id: .* names no earlier op$`),
+          );
+        },
+      ),
+    );
+  });
+
+  it("accepts a reference with any path to an earlier op, wherever it sits in the body", () => {
+    fc.assert(
+      fc.property(
+        fc.uniqueArray(OP_NAME, { minLength: 2, maxLength: 5 }),
+        SEGMENTS,
+        (names, segments) => {
+          const last = names.length - 1;
+          const ops = names.map((name, i) => ({
+            path: "/set_documentation",
+            as: name,
+            body: { elementId: i === last ? ref(names[0]!, segments) : "X", documentation: "d" },
+          }));
+          expect(rejection(ops)).toBeUndefined();
+        },
+      ),
+    );
+  });
+
+  it("never reads a $$-escaped string as a reference, and leaves the ops unchanged", () => {
+    fc.assert(
+      fc.property(fc.string(), fc.string(), (id, text) => {
+        const ops = [
+          {
+            path: "/set_documentation",
+            body: { elementId: `$$${id}`, documentation: `$$${text}` },
+          },
+        ];
+        const before = structuredClone(ops);
+        expect(rejection(ops)).toBeUndefined();
+        expect(ops).toEqual(before);
+      }),
+    );
+  });
+});
+
+describe("paths and URIs", () => {
+  it("diagram resource URIs carry any id through percent-encoding and back", () => {
+    fc.assert(
+      fc.property(fc.string({ minLength: 1 }), (id) => {
+        for (const [uri, ext] of [
+          [diagramImageUri(id), "png"],
+          [diagramTextUri(id, "mermaid"), "mmd"],
+          [diagramTextUri(id, "plantuml"), "puml"],
+        ] as const) {
+          const match = new RegExp(`^staruml://diagram/([^/]+)\\.${ext}$`).exec(uri);
+          expect(match).not.toBeNull();
+          expect(decodeURIComponent(match![1]!)).toBe(id);
+        }
+      }),
+    );
+  });
+
+  it("terseDescription is one line of at most 100 characters, and a fixed point", () => {
+    fc.assert(
+      fc.property(fc.string({ maxLength: 400 }), (text) => {
+        const short = terseDescription(text);
+        expect(short.length).toBeLessThanOrEqual(MAX_DESCRIPTION_LENGTH);
+        expect(short).not.toMatch(/\n/);
+      }),
+    );
+  });
+
+  it("isLoopback accepts every 127/8 address and no name with a suffix", () => {
+    const octet = fc.nat(255);
+    fc.assert(
+      fc.property(octet, octet, octet, fc.domain(), (a, b, c, domain) => {
+        expect(isLoopback(`127.${a}.${b}.${c}`)).toBe(true);
+        expect(isLoopback(`localhost.${domain}`)).toBe(false);
+      }),
+    );
+  });
+});

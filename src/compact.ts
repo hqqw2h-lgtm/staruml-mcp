@@ -21,16 +21,20 @@ function isEmpty(value: unknown): boolean {
 /**
  * Drops null, undefined, `[]` and `{}` properties from every object. Emptiness is judged on the
  * upstream value, so an object whose own properties were all pruned is kept as `{}` rather than
- * disappearing from its parent. Array items are never removed: their position can carry meaning.
+ * disappearing from its parent: `{owner: {stereotype: null}}` says there is an owner. That makes
+ * prune idempotent except for those `{}`, which a second pass would drop
+ * (tests/properties.test.ts). Array items are never removed: their position can carry meaning.
  */
 export function prune(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(prune);
   if (!isObject(value)) return value;
-  const out: JsonObject = {};
-  for (const [key, item] of Object.entries(value)) {
-    if (!isEmpty(item)) out[key] = prune(item);
-  }
-  return out;
+  // fromEntries defines own properties; `out[key] =` would turn a "__proto__" key from JSON.parse
+  // into the object's prototype and drop it from the result.
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, item]) => !isEmpty(item))
+      .map(([key, item]) => [key, prune(item)]),
+  );
 }
 
 /**
@@ -40,15 +44,14 @@ export function prune(value: unknown): unknown {
  */
 export function omitEcho(value: unknown, input: JsonObject): unknown {
   if (!isObject(value)) return value;
-  const out: JsonObject = {};
-  for (const [key, item] of Object.entries(value)) {
-    const sent = input[key];
-    const primitive =
-      typeof sent === "string" || typeof sent === "number" || typeof sent === "boolean";
-    const echoed = primitive && sent === item;
-    if (!echoed) out[key] = item;
-  }
-  return out;
+  return Object.fromEntries(
+    Object.entries(value).filter(([key, item]) => {
+      const sent = input[key];
+      const primitive =
+        typeof sent === "string" || typeof sent === "number" || typeof sent === "boolean";
+      return !(primitive && sent === item);
+    }),
+  );
 }
 
 /**

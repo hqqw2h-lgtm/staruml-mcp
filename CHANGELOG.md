@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Stateful HTTP sessions: `initialize` over `--transport http` opens a session (`Mcp-Session-Id`, SDK `sessionIdGenerator`) whose requests all reach one McpServer, so `view_diagram` shows the inline viewer to HTTP clients that render MCP Apps or read the viewer, and `notifications/tools/list_changed` reaches every live session when `doctor` reloads the manifest or switches the tier. `--session-timeout` (default `30m`) closes a session with no request in flight, `--max-sessions` (default 64) closes the least recently used beyond the cap and `0` turns sessions off. A request without a session id is still served statelessly; the loopback `Host`/`Origin` check runs before both. `scripts/load-test.mjs --session` drives one session (#14).
 - Caches: tools compiled from manifest entries are kept by the entry's JSON (bundled manifest 37 ms cold, 1 ms cached), and `/introspect` answers (the `introspect` tool, `staruml://introspect/metamodel`) and `describe_endpoints` answers are kept until `doctor` reloads the catalog or switches the tier. Failed reads are not cached (#14).
+- Verification layers, listed with how to run each in `docs/verification.md`: property-based tests with fast-check (`tests/properties.test.ts`: compaction, tiers, batch references and escapes, resource URIs, descriptions, loopback names), fuzz tests of `call_endpoint` and `batch` with random JSON (`tests/fuzz.test.ts`), Stryker mutation testing of `src/` with an 85% break threshold (`npm run test:mutation`, weekly in `.github/workflows/mutation.yml`; 92.89% of 2,477 mutants killed or timed out), and `npm run soak-test` (2,000 calls over stdio, RSS, live heap and p99 within 25%), run with the live suite and live load tests by `.github/workflows/live.yml` on a self-hosted StarUML runner (#14).
+
+### Fixed
+- `describe_endpoints` grouping no longer throws for an empty name: the catch-all group matched only names of one character or more. Found by the property tests (#14).
+- Compact results keep a `__proto__` key of an upstream answer as data; assigning it made it the result object's prototype, so it vanished from the JSON. Found by the property tests (#14).
 
 ## [0.4.0] - 2026-10-05
 

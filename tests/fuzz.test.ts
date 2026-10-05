@@ -1,0 +1,139 @@
+/**
+ * Fuzz tests: random JSON as call_endpoint and batch arguments, through the in-memory transport
+ * as a client sends them. Whatever arrives, the call resolves to a result, never a thrown error or
+ * a JSON-RPC failure, and a refusal carries a stable error code for the model to act on.
+ */
+import fc from "fast-check";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ErrorCode } from "../src/errors.js";
+import { BUNDLED_MANIFEST, toolName } from "../src/manifest.js";
+import { UpstreamFixture } from "./support/fixture.js";
+import { connect, type ConnectedClient } from "./support/mcp.js";
+
+const builtin = new UpstreamFixture();
+const extension = new UpstreamFixture();
+let mcp: ConnectedClient;
+
+/** Codes this server or the fixture's 404 envelope produce; the SDK's own refusal has none. */
+const CODES = new Set<string>([
+  ErrorCode.InvalidArgument,
+  ErrorCode.UnknownEndpoint,
+  ErrorCode.EndpointNotFound,
+]);
+
+beforeAll(async () => {
+  await Promise.all([builtin.start(), extension.start()]);
+  // Every endpoint answers, so a body that passes the checks shows up as a success.
+  for (const { path } of BUNDLED_MANIFEST.endpoints) {
+    extension.reply(path, { body: { success: true, data: { path } } });
+  }
+  mcp = await connect({
+    apiHost: "http://127.0.0.1",
+    apiPort: builtin.port,
+    extPort: extension.port,
+  });
+});
+
+afterAll(async () => {
+  await mcp.close();
+  await Promise.all([builtin.stop(), extension.stop()]);
+});
+
+/** Outcomes seen, so a test can show the inputs reached past the first check. */
+const seen = new Map<string, number>();
+const saw = (outcome: string) => seen.set(outcome, (seen.get(outcome) ?? 0) + 1);
+
+/** Resolves to a result; an error result names a known code, or is the SDK's argument check. */
+function structured(result: CallToolResult): void {
+  if (!result.isError) {
+    saw("ok");
+    return;
+  }
+  const error = (
+    result.structuredContent as { error?: { code: string; message: string } } | undefined
+  )?.error;
+  if (error === undefined) {
+    saw("sdk validation");
+    // McpServer's own input validation (SDK 1.29) answers in text: "Input validation error".
+    expect(result.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("validation"),
+    });
+    return;
+  }
+  saw(error.code);
+  expect(CODES).toContain(error.code);
+  expect(error.message.length).toBeGreaterThan(0);
+}
+
+const names = BUNDLED_MANIFEST.endpoints.map((e) => toolName(e.path));
+const json = fc.jsonValue({ maxDepth: 3 });
+/** Scalars an endpoint often accepts, so some random bodies get past the schema check. */
+const plausible = fc.oneof(
+  fc.string({ minLength: 1, maxLength: 8 }),
+  fc.nat(50),
+  fc.boolean(),
+  json,
+);
+/** The entry's parameter names, and one it does not have. */
+const parameters = (entry: (typeof BUNDLED_MANIFEST.endpoints)[number]) => [
+  ...Object.keys((entry.request.properties ?? {}) as object),
+  "unknown",
+];
+/** An endpoint and a body over its own parameter names, or anything at all. */
+const call = fc.oneof(
+  fc
+    .constantFrom(...BUNDLED_MANIFEST.endpoints)
+    .chain((entry) =>
+      fc.tuple(
+        fc.constant(toolName(entry.path)),
+        fc.dictionary(fc.constantFrom(...parameters(entry)), plausible),
+      ),
+    ),
+  fc.tuple(fc.oneof(fc.constantFrom(...names), fc.string()), json),
+  fc.tuple(fc.string(), fc.dictionary(fc.string(), json)),
+);
+
+describe("fuzz", () => {
+  afterAll(() => {
+    console.info(`[fuzz] outcomes: ${JSON.stringify(Object.fromEntries(seen))}`);
+    // Inputs got past every check, and were refused at each of them.
+    for (const outcome of [
+      "ok",
+      "sdk validation",
+      ErrorCode.InvalidArgument,
+      ErrorCode.UnknownEndpoint,
+    ]) {
+      expect(seen.get(outcome), outcome).toBeGreaterThan(0);
+    }
+  });
+
+  it("call_endpoint answers every name and body with a result", async () => {
+    await fc.assert(
+      fc.asyncProperty(call, async ([name, sent]) => {
+        structured(await mcp.call("call_endpoint", { name, body: sent }));
+      }),
+      { numRuns: 300 },
+    );
+  }, 60_000);
+
+  it("batch answers every ops list with a result", async () => {
+    const op = fc
+      .tuple(call, fc.option(fc.oneof(fc.stringMatching(/^[a-z]{1,2}$/), fc.string())))
+      .map(([[name, body], as]) => ({ path: `/${name}`, body, ...(as === null ? {} : { as }) }));
+    await fc.assert(
+      fc.asyncProperty(
+        fc.oneof(
+          { weight: 4, arbitrary: fc.array(op, { minLength: 1, maxLength: 4 }) },
+          { weight: 1, arbitrary: json },
+        ),
+        fc.option(json),
+        async (ops, atomic) => {
+          structured(await mcp.call("batch", { ops, ...(atomic === null ? {} : { atomic }) }));
+        },
+      ),
+      { numRuns: 300 },
+    );
+  }, 60_000);
+});

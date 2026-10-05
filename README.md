@@ -511,15 +511,20 @@ cd staruml-mcp
 npm install            # also installs the pre-commit hook (lint-staged: eslint + prettier)
 npm run dev            # tsx watch on src/
 npm run build          # bundle to dist/
-npm test               # vitest: unit, tool-level and HTTP transport tests
+npm test               # vitest: unit, tool-level, HTTP transport, property and fuzz tests
 npm run test:coverage  # same, failing below 100% lines/branches/functions/statements
 npm run test:live      # STARUML_LIVE=1: every tool and endpoint against a running StarUML + extension
 npm run load-test      # HTTP transport load test (needs npm run build)
+npm run soak-test      # 2000 calls over stdio: RSS, live heap and p99 must not grow (needs npm run build)
+npm run test:mutation  # Stryker over src/, fails below 85% of mutants killed (92.89% now)
 npm run benchmark:tokens # four scenarios under two accountings vs. 56864ca, 0cfc06b, 45bedd4; reading a diagram five ways
 npm run sync:manifest  # refresh src/extension-manifest.json from a running extension
 node scripts/capture-read-diagram.mjs # re-record the read-a-diagram benchmark data from StarUML
 npm run typecheck      # tsc --noEmit for src and tests
 ```
+
+[docs/verification.md](docs/verification.md) lists every verification layer (unit, property,
+fuzz, contract, mutation, live, load, soak, skill-example replay), what it proves and how to run it.
 
 Tool-level tests drive each tool through the MCP SDK's in-memory transport against local
 `http.Server` stubs of ports 58321 and 58322; the generated tools are tested one per manifest
@@ -626,6 +631,28 @@ Two caches, both shared by every session of a process:
 `tests/cache.test.ts` shows repeated calls answering from the cache (one `/introspect` request for
 repeated tool calls, resource reads from two sessions and the matching tool call) and each
 invalidation path.
+
+### Soak
+
+`scripts/soak-test.mjs` starts `dist/index.js` over stdio against the stub, makes 2,000 warm-up
+calls, then 2,000 measured calls rotating `get_all_diagrams_info`, `call_endpoint`, a two-op `batch`
+and `build_diagram`, and fails when the mean RSS, the live heap after a full GC or the p99 latency
+of the last 200 calls exceeds the first 200 by more than 25%, or any call fails; a p99 increase must
+also exceed 2 ms to count, since the p99 of 200 calls of about 1 ms is their second slowest and
+doubles on one scheduler stall. The live workflow runs it.
+
+Three runs on the machine above (load average 21–27), 0 errors:
+
+| Window | RSS | Live heap after GC | p50 | p99 |
+|---|---|---|---|---|
+| first 200 | 150.0–156.6 MB | 21.4–21.6 MB | 0.66–0.94 ms | 1.34–1.61 ms |
+| last 200 | 159.9–162.8 MB | 22.2–22.3 MB | 0.54–0.68 ms | 1.14–1.35 ms |
+| growth | 3.9–8.3% | 2.8–4.0% | | −14 to −18% |
+
+Without warm-up (`--warmup 0`) RSS grows 51% (104 to 157 MB) over the first 2,000 calls while the
+live heap grows 5% (20.5 to 21.6 MB); over 20,000 calls the heap after GC stays at 19–22 MB and RSS
+levels off near 200 MB after about 8,000. The growth is V8 sizing its heap spaces, not retained
+objects, which is why the measured windows follow a warm-up.
 
 ## Token efficiency
 

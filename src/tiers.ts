@@ -82,7 +82,8 @@ const GROUP_RULES: readonly (readonly [string, RegExp])[] = [
   // Code generation and reverse engineering through StarUML's language extensions.
   ["code", /_code/],
   ["diagram", /diagram|view|layout|route|export|image|style|color|font|move|resize|z_order/],
-  ["element", /./],
+  // Matches the empty string too, so every name has a group (found by tests/properties.test.ts).
+  ["element", /^/],
 ];
 
 export const ENDPOINT_GROUPS = GROUP_RULES.map(([group]) => group) as [string, ...string[]];

@@ -147,7 +147,7 @@ describe("parseArgs", () => {
     expect(sessions.idleTimeoutMs).toBe(ms);
   });
 
-  it.each(["30", "0m", "1.5h", "m", "-1s"])("rejects --session-timeout %s", (value) => {
+  it.each(["30", "0m", "1.5h", "m", "-1s", "5mx"])("rejects --session-timeout %s", (value) => {
     expect(() => parseArgs([...ARGV0, "--session-timeout", value], {})).toThrow(
       `Invalid --session-timeout: "${value}". Use a positive number with ms, s, m or h, e.g. 30m.`,
     );
@@ -196,6 +196,17 @@ describe("main", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("closes its sessions and stops listening on close", async () => {
+    const server = await main([...OFFLINE, "--transport", "http", "--port", "0"]);
+    const base = `http://127.0.0.1:${server.port}`;
+    const init = await rpc(base, 1, "initialize", INITIALIZE_PARAMS);
+    expect(init.status).toBe(200);
+
+    await server.close();
+
+    await expect(fetch(`${base}/`)).rejects.toThrow();
   });
 
   it("binds the HTTP transport to loopback by default", async () => {

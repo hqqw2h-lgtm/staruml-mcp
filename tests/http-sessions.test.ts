@@ -267,7 +267,7 @@ describe("sessions", () => {
     const idle = await initialize(base);
     const streaming = await client(base);
     try {
-      clock += 59_999;
+      clock += 60_000;
       expect(await handler.sessions.sweep()).toBe(0);
       expect((await toolsList(base, idle)).status).toBe(200);
 
@@ -307,6 +307,16 @@ describe("sessions", () => {
 });
 
 describe("SessionStore", () => {
+  it("ends every session on close", async () => {
+    const { base, handler } = await listen();
+    const id = await initialize(base);
+
+    await handler.close();
+
+    expect(handler.sessions.size).toBe(0);
+    expect((await toolsList(base, id)).status).toBe(404);
+  });
+
   it("sweeps on a timer no slower than once a minute", () => {
     vi.useFakeTimers();
     const store = new SessionStore({ idleTimeoutMs: 3_600_000, maxSessions: 1 });
