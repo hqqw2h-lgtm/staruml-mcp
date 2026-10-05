@@ -166,6 +166,9 @@ function startMcp(port) {
       "http://127.0.0.1",
       "--api-port",
       String(port),
+      // Stub runs take the bundled manifest (nothing listens on port 1), so a StarUML running on
+      // the same machine does not change what is measured; --live reads the real one.
+      ...(args.live ? [] : ["--ext-port", "1"]),
     ],
     { stdio: ["ignore", "ignore", "pipe"] },
   );

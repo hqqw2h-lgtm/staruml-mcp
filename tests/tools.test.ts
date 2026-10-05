@@ -1,7 +1,10 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { HAND_WRITTEN_TOOLS } from "../src/extension-tools.js";
+import { BUNDLED_MANIFEST, listedRequestSchema, toolName } from "../src/manifest.js";
 import { createServer } from "../src/server.js";
 import { closedPort, UpstreamFixture } from "./support/fixture.js";
 import { connect, text, type ConnectedClient } from "./support/mcp.js";
+import { invalidArgs, sampleArgs, withExplicitDefaults } from "./support/schema.js";
 
 type Upstream = "builtin" | "extension";
 
@@ -21,7 +24,8 @@ interface ToolCase {
 const json = (value: unknown): string => JSON.stringify(value);
 const ok = [{ type: "text", text: "ok" }];
 const textContent = (value: string) => [{ type: "text", text: value }];
-const element = { _id: "E1", _type: "UMLClass", name: "User" };
+/** An element summary as extension 0.3.0 returns it; null fields are pruned from results. */
+const summary = { _id: "E1", _type: "UMLClass", name: null, _parent: "P1" };
 
 const cases: ToolCase[] = [
   {
@@ -66,223 +70,25 @@ const cases: ToolCase[] = [
     action: "get diagram image",
     invalid: {},
   },
-  {
-    tool: "get_all_commands",
-    upstream: "extension",
-    args: {},
-    slug: "/get_all_commands",
-    body: {},
-    data: ["project:save"],
-    content: textContent(json(["project:save"])),
-    action: "get commands",
-  },
-  {
-    tool: "execute_command",
-    upstream: "extension",
-    args: { id: "view:fit-to-window" },
-    slug: "/execute_command",
-    body: { id: "view:fit-to-window", args: [] },
-    data: { id: "view:fit-to-window", result: null },
-    content: ok,
-    action: "execute command",
-    invalid: { id: 7 },
-  },
-  {
-    tool: "get_project_info",
-    upstream: "extension",
-    args: {},
-    slug: "/get_project_info",
-    body: {},
-    data: { filename: "/tmp/a.mdj" },
-    content: textContent(json({ filename: "/tmp/a.mdj" })),
-    action: "get project info",
-  },
-  {
-    tool: "save_project",
-    upstream: "extension",
-    args: { filename: "/tmp/a.mdj" },
-    slug: "/save_project",
-    body: { filename: "/tmp/a.mdj" },
-    data: { filename: "/tmp/a.mdj" },
-    content: ok,
-    action: "save project",
-    invalid: { filename: 1 },
-  },
-  {
-    tool: "save_project_as",
-    upstream: "extension",
-    args: { filename: "/tmp/b.mdj" },
-    slug: "/save_project_as",
-    body: { filename: "/tmp/b.mdj" },
-    data: { filename: "/tmp/b.mdj" },
-    content: ok,
-    action: "save project as",
-    invalid: { filename: "" },
-  },
-  {
-    tool: "new_project",
-    upstream: "extension",
-    args: {},
-    slug: "/new_project",
-    body: {},
-    data: null,
-    content: ok,
-    action: "create new project",
-  },
-  {
-    tool: "open_project",
-    upstream: "extension",
-    args: { filename: "/tmp/c.mdj" },
-    slug: "/open_project",
-    body: { filename: "/tmp/c.mdj" },
-    data: { filename: "/tmp/c.mdj" },
-    content: ok,
-    action: "open project",
-    invalid: {},
-  },
-  {
-    tool: "get_element_by_id",
-    upstream: "extension",
-    args: { id: "E1" },
-    slug: "/get_element_by_id",
-    body: { id: "E1" },
-    data: element,
-    content: textContent(json(element)),
-    action: "get element",
-    invalid: { id: "" },
-  },
-  {
-    tool: "find_elements",
-    upstream: "extension",
-    args: { type: "UMLClass", name: "User" },
-    slug: "/find_elements",
-    body: { type: "UMLClass", name: "User" },
-    data: { count: 1, elements: [element] },
-    content: textContent(json({ count: 1, elements: [element] })),
-    action: "find elements",
-    invalid: { type: 3 },
-  },
-  {
-    tool: "create_element",
-    upstream: "extension",
-    args: { type: "UMLClass", parentId: "M1", name: "User" },
-    slug: "/create_element",
-    body: { type: "UMLClass", parentId: "M1", name: "User" },
-    data: element,
-    content: textContent(json({ _id: "E1", _type: "UMLClass" })),
-    action: "create element",
-    invalid: { type: "UMLClass" },
-  },
-  {
-    tool: "create_element_with_view",
-    upstream: "extension",
-    args: {
-      type: "UMLActor",
-      parentId: "M1",
-      diagramId: "D1",
-      name: "A",
-      x: 1,
-      y: 2,
-      x2: 3,
-      y2: 4,
-    },
-    slug: "/create_element_with_view",
-    body: {
-      type: "UMLActor",
-      parentId: "M1",
-      diagramId: "D1",
-      name: "A",
-      x: 1,
-      y: 2,
-      x2: 3,
-      y2: 4,
-    },
-    data: { view: { _id: "V1" }, model: { _id: "E2" } },
-    content: textContent(json({ view: { _id: "V1" }, model: { _id: "E2" } })),
-    action: "create element with view",
-    invalid: { type: "UMLActor", parentId: "M1", diagramId: "D1", x: "left" },
-  },
-  {
-    tool: "create_edge_with_view",
-    upstream: "extension",
-    args: {
-      type: "UMLAssociation",
-      parentId: "M1",
-      diagramId: "D1",
-      tailViewId: "V1",
-      headViewId: "V2",
-      y: 120,
-    },
-    slug: "/create_edge_with_view",
-    body: {
-      type: "UMLAssociation",
-      parentId: "M1",
-      diagramId: "D1",
-      tailViewId: "V1",
-      headViewId: "V2",
-      y: 120,
-    },
-    data: { view: { _id: "V3" } },
-    content: textContent(json({ view: { _id: "V3" } })),
-    action: "create edge",
-    invalid: { type: "UMLAssociation", parentId: "M1", diagramId: "D1", tailViewId: "V1" },
-  },
-  {
-    tool: "update_element",
-    upstream: "extension",
-    args: { id: "E1", field: "name", value: "Account" },
-    slug: "/update_element",
-    body: { id: "E1", field: "name", value: "Account" },
-    data: { ...element, name: "Account" },
-    content: textContent(json({ ...element, name: "Account" })),
-    action: "update element",
-    invalid: { id: "E1", field: "" },
-  },
-  {
-    tool: "delete_element",
-    upstream: "extension",
-    args: { id: "E1" },
-    slug: "/delete_element",
-    body: { id: "E1" },
-    data: { deleted: "E1", models_deleted: 1, views_deleted: 0 },
-    content: textContent(json({ deleted: "E1", models_deleted: 1, views_deleted: 0 })),
-    action: "delete element",
-    invalid: {},
-  },
-  {
-    tool: "create_diagram",
-    upstream: "extension",
-    args: { type: "UMLClassDiagram", parentId: "M1", name: "Domain" },
-    slug: "/create_diagram",
-    body: { type: "UMLClassDiagram", parentId: "M1", name: "Domain" },
-    data: { _id: "D2", name: "Domain", type: "UMLClassDiagram" },
-    content: textContent(json({ _id: "D2" })),
-    action: "create diagram",
-    invalid: { type: "UMLClassDiagram" },
-  },
-  {
-    tool: "switch_diagram",
-    upstream: "extension",
-    args: { id: "D1" },
-    slug: "/switch_diagram",
-    body: { id: "D1" },
-    data: { _id: "D1" },
-    content: textContent(json({ _id: "D1" })),
-    action: "switch diagram",
-    invalid: { id: "" },
-  },
-  {
-    tool: "close_diagram",
-    upstream: "extension",
-    args: { id: "D1" },
-    slug: "/close_diagram",
-    body: { id: "D1" },
-    data: { closed: "D1" },
-    content: textContent(json({ closed: "D1" })),
-    action: "close diagram",
-    invalid: {},
-  },
 ];
+
+/** One case per manifest endpoint: required arguments only, an element summary as the answer. */
+const generated: ToolCase[] = BUNDLED_MANIFEST.endpoints.map((entry) => {
+  const args = sampleArgs(entry.request);
+  return {
+    tool: toolName(entry.path),
+    upstream: "extension",
+    args,
+    slug: entry.path,
+    body: args,
+    data: summary,
+    content: textContent('{"_id":"E1","_type":"UMLClass","_parent":"P1"}'),
+    action: toolName(entry.path).replaceAll("_", " "),
+    invalid: invalidArgs(listedRequestSchema(entry).schema),
+  };
+});
+
+const all = [...cases, ...generated];
 
 const HOST = "http://127.0.0.1";
 const builtin = new UpstreamFixture();
@@ -309,23 +115,68 @@ afterAll(async () => {
 });
 
 describe("tool registry", () => {
-  it("registers exactly the documented tools", async () => {
+  it("registers the hand-written tools and one tool per manifest endpoint", async () => {
     const { tools } = await mcp.client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(cases.map((c) => c.tool).sort());
+    expect(tools.map((t) => t.name).sort()).toEqual(
+      [...HAND_WRITTEN_TOOLS, ...BUNDLED_MANIFEST.endpoints.map((e) => toolName(e.path))].sort(),
+    );
+    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(29);
   });
 
-  it("describes every tool and parameter in one short line", async () => {
+  it("describes every tool, generated ones included, in one line of at most 100 characters", async () => {
     const { tools } = await mcp.client.listTools();
     for (const tool of tools) {
-      expect(tool.description, tool.name).toMatch(/^[^\n]{1,90}$/);
+      expect(tool.description, tool.name).toMatch(/^[^\n]{1,100}$/);
       const properties = (tool.inputSchema.properties ?? {}) as Record<
         string,
         { description?: string }
       >;
       for (const [name, schema] of Object.entries(properties)) {
-        expect(schema.description, `${tool.name}.${name}`).toMatch(/^[^\n]{1,130}$/);
+        expect(schema.description, `${tool.name}.${name}`).toMatch(/^[^\n]+$/);
       }
     }
+  });
+
+  it.each(BUNDLED_MANIFEST.endpoints)(
+    "lists $path's request schema as the manifest defines it",
+    async (entry) => {
+      const { tools } = await mcp.client.listTools();
+      const tool = tools.find((t) => t.name === toolName(entry.path))!;
+
+      // The SDK stamps draft-07; the manifest's 2020-12 subset means the same in both drafts.
+      const { $schema, ...listed } = tool.inputSchema as Record<string, unknown>;
+      expect($schema).toBe("http://json-schema.org/draft-07/schema#");
+      const { schema, passthrough } = listedRequestSchema(entry);
+      const expected = withExplicitDefaults(schema) as Record<string, unknown>;
+      expect(listed).toEqual(passthrough ? { ...expected, additionalProperties: {} } : expected);
+    },
+  );
+
+  it.each(BUNDLED_MANIFEST.endpoints)("annotates $path from its manifest flags", async (entry) => {
+    const { tools } = await mcp.client.listTools();
+    const tool = tools.find((t) => t.name === toolName(entry.path))!;
+
+    expect(tool.annotations).toEqual(
+      entry.readOnly
+        ? { readOnlyHint: true, openWorldHint: false }
+        : { readOnlyHint: false, destructiveHint: entry.destructive, openWorldHint: false },
+    );
+  });
+
+  it("marks the destructive endpoints of extension 0.3.0", async () => {
+    const { tools } = await mcp.client.listTools();
+    const destructive = tools.filter((t) => t.annotations?.destructiveHint).map((t) => t.name);
+    expect(destructive.sort()).toEqual([
+      "delete_element",
+      "execute_command",
+      "new_project",
+      "open_project",
+      "save_project",
+      "save_project_as",
+      "set_documentation",
+      "set_stereotype",
+      "update_element",
+    ]);
   });
 
   it("tells clients how results are shaped", () => {
@@ -339,7 +190,7 @@ describe("tool registry", () => {
   });
 });
 
-describe.each(cases)("$tool", (c) => {
+describe.each(all)("$tool", (c) => {
   it("posts the expected body and returns the expected content", async () => {
     fixtureFor(c.upstream).reply(c.slug, { body: { success: true, data: c.data } });
 
@@ -389,7 +240,7 @@ describe.each(cases)("$tool", (c) => {
   });
 });
 
-describe.each(cases.filter((c) => c.invalid !== undefined))("$tool input schema", (c) => {
+describe.each(all.filter((c) => c.invalid !== undefined))("$tool input schema", (c) => {
   it("rejects invalid arguments without calling StarUML", async () => {
     const result = await mcp.call(c.tool, c.invalid);
 
@@ -397,6 +248,156 @@ describe.each(cases.filter((c) => c.invalid !== undefined))("$tool input schema"
     expect(text(result)).toMatch(/Input validation error/);
     expect(builtin.requests).toEqual([]);
     expect(extension.requests).toEqual([]);
+  });
+});
+
+describe("extension 0.3.0 contract", () => {
+  it("find_elements passes paging and projection through and keeps the page compact", async () => {
+    extension.reply("/find_elements", {
+      body: {
+        success: true,
+        data: {
+          count: 3,
+          elements: [
+            { _id: "C1", _type: "UMLClass", name: "A", _parent: "M1", attributes: [] },
+            { _id: "C2", _type: "UMLClass", name: "B", _parent: "M1", attributes: [] },
+          ],
+          nextCursor: "2",
+        },
+      },
+    });
+    const args = {
+      type: "UMLClass",
+      limit: 2,
+      cursor: "0",
+      fields: ["name", "attributes"],
+      depth: 1,
+      summary: false,
+    };
+
+    const result = await mcp.call("find_elements", args);
+
+    expect(extension.requests[0]!.body).toEqual(args);
+    expect(text(result)).toBe(
+      '{"count":3,"elements":[{"_id":"C1","_type":"UMLClass","name":"A","_parent":"M1"},{"_id":"C2","_type":"UMLClass","name":"B","_parent":"M1"}],"nextCursor":"2"}',
+    );
+  });
+
+  it("find_elements drops the null nextCursor and empty list of a miss", async () => {
+    extension.reply("/find_elements", {
+      body: { success: true, data: { count: 0, elements: [], nextCursor: null } },
+    });
+
+    expect(text(await mcp.call("find_elements", { name: "Nope" }))).toBe('{"count":0}');
+  });
+
+  it("create_element_with_view returns the view and model summaries", async () => {
+    extension.reply("/create_element_with_view", {
+      body: {
+        success: true,
+        data: {
+          view: { _id: "V1", _type: "UMLClassView", name: null, _parent: "D1" },
+          model: { _id: "C1", _type: "UMLClass", name: "Order", _parent: "M1" },
+        },
+      },
+    });
+
+    const result = await mcp.call("create_element_with_view", {
+      type: "UMLClass",
+      diagramId: "D1",
+      name: "Order",
+      x: 10,
+      y: 20,
+    });
+
+    expect(text(result)).toBe(
+      '{"view":{"_id":"V1","_type":"UMLClassView","_parent":"D1"},"model":{"_id":"C1","_type":"UMLClass","name":"Order","_parent":"M1"}}',
+    );
+  });
+
+  it("drops arguments the manifest does not define before calling the extension", async () => {
+    extension.reply("/get_element_by_id", { body: { success: true, data: summary } });
+
+    await mcp.call("get_element_by_id", { id: "E1", bogus: true });
+
+    expect(extension.requests[0]!.body).toEqual({ id: "E1" });
+  });
+
+  it("forwards the unlisted projection of a writing tool", async () => {
+    extension.reply("/set_documentation", { body: { success: true, data: summary } });
+    const args = { elementId: "E1", documentation: "Doc.", fields: ["documentation"], depth: 0 };
+
+    await mcp.call("set_documentation", args);
+
+    expect(extension.requests[0]!.body).toEqual(args);
+  });
+
+  it("lists the projection only on read-only tools", async () => {
+    const { tools } = await mcp.client.listTools();
+    const withProjection = tools
+      .filter((t) => (t.inputSchema.properties ?? {})["fields"] !== undefined)
+      .map((t) => t.name);
+    expect(withProjection.sort()).toEqual([
+      "find_elements",
+      "get_element_by_id",
+      "get_project_info",
+    ]);
+  });
+
+  it("rejects a wrong-typed field before the extension sees it", async () => {
+    const result = await mcp.call("find_elements", { limit: "10" });
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toMatch(/Input validation error/);
+    expect(extension.requests).toEqual([]);
+  });
+
+  it.each([
+    ["NOT_FOUND", 404, "Element not found: X"],
+    ["NO_PROJECT", 409, "No project is open"],
+    ["STARUML_ERROR", 422, "Invalid connection (UMLGeneralization)"],
+    ["INVALID_ARGUMENT", 400, "id: Invalid input: expected string, received number"],
+  ])("surfaces %s (HTTP %d) with its code and status", async (code, status, error) => {
+    extension.reply("/create_relationship", { status, body: { success: false, code, error } });
+
+    const result = await mcp.call("create_relationship", {
+      type: "UMLGeneralization",
+      tailId: "A",
+      headId: "B",
+    });
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toBe(
+      `Failed to create relationship: ${error} [${code}, /create_relationship, HTTP ${status}]`,
+    );
+    expect(result.structuredContent).toEqual({
+      error: {
+        code,
+        message: error,
+        endpoint: "/create_relationship",
+        upstream: "extension",
+        status,
+      },
+    });
+  });
+
+  it("reports UNKNOWN_ENDPOINT with an upgrade hint", async () => {
+    extension.reply("/add_tag", {
+      status: 404,
+      body: { success: false, code: "UNKNOWN_ENDPOINT", error: "No handler for /add_tag" },
+    });
+
+    const result = await mcp.call("add_tag", {
+      elementId: "E1",
+      name: "n",
+      kind: "string",
+      value: "v",
+    });
+
+    expect(result.structuredContent).toMatchObject({ error: { code: "UNKNOWN_ENDPOINT" } });
+    expect(text(result)).toContain(
+      "Hint: The installed staruml-mcp-extension does not provide /add_tag",
+    );
   });
 });
 
@@ -492,7 +493,7 @@ describe("connectivity failures", () => {
     await extOnly.close();
   });
 
-  it.each(cases)("$tool reports STARUML_UNREACHABLE when StarUML is not running", async (c) => {
+  it.each(all)("$tool reports STARUML_UNREACHABLE when StarUML is not running", async (c) => {
     const result = await both.call(c.tool, c.args);
 
     expect(result.isError).toBe(true);
@@ -502,7 +503,7 @@ describe("connectivity failures", () => {
     expect(text(result)).toMatch(/\nHint: Start StarUML 7\.0\.0\+ with its API server enabled/);
   });
 
-  it.each(cases.filter((c) => c.upstream === "extension"))(
+  it.each(generated)(
     "$tool reports EXTENSION_UNREACHABLE when only the extension is missing",
     async (c) => {
       const result = await extOnly.call(c.tool, c.args);

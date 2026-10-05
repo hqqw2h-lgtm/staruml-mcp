@@ -61,6 +61,11 @@ describe("resources/list", () => {
         mimeType: "application/json",
       }),
       expect.objectContaining({
+        uri: "staruml://project/tree",
+        name: "project-tree",
+        mimeType: "application/json",
+      }),
+      expect.objectContaining({
         uri: "staruml://diagram/AAAAAAGhCh%2F2wd1CFIY%3D.png",
         name: "Main",
         mimeType: "image/png",
@@ -77,7 +82,11 @@ describe("resources/list", () => {
     const down = await connect({ apiHost: HOST, apiPort: await closedPort() });
     try {
       const { resources } = await down.client.listResources();
-      expect(resources.map((r) => r.uri)).toEqual(["staruml://diagrams", "staruml://project"]);
+      expect(resources.map((r) => r.uri)).toEqual([
+        "staruml://diagrams",
+        "staruml://project",
+        "staruml://project/tree",
+      ]);
     } finally {
       await down.close();
     }
@@ -139,7 +148,10 @@ describe("staruml://project", () => {
     extension.reply("/get_project_info", {
       body: {
         success: true,
-        data: { filename: null, project: { _id: "P1", name: "Untitled", ownedElementsCount: 0 } },
+        data: {
+          filename: null,
+          project: { _id: "P1", _type: "Project", name: "Untitled", _parent: null },
+        },
       },
     });
 
@@ -149,7 +161,7 @@ describe("staruml://project", () => {
       {
         uri: "staruml://project",
         mimeType: "application/json",
-        text: '{"project":{"_id":"P1","name":"Untitled","ownedElementsCount":0}}',
+        text: '{"project":{"_id":"P1","_type":"Project","name":"Untitled"}}',
       },
     ]);
   });
@@ -170,6 +182,96 @@ describe("staruml://project", () => {
     } finally {
       await noExt.close();
     }
+  });
+});
+
+describe("staruml://project/tree", () => {
+  const summary = (_id: string, _type: string, name: string | null, _parent: string | null) => ({
+    _id,
+    _type,
+    name,
+    _parent,
+  });
+
+  it("nests every model element under its owner, reading all pages", async () => {
+    const pages = [
+      {
+        count: 4,
+        elements: [
+          summary("P1", "Project", "Shop", null),
+          summary("M1", "UMLModel", "Model", "P1"),
+        ],
+        nextCursor: "2",
+      },
+      {
+        count: 4,
+        elements: [
+          summary("C1", "UMLClass", "Order", "M1"),
+          summary("D1", "UMLClassDiagram", "", "M1"),
+        ],
+        nextCursor: null,
+      },
+    ];
+    extension.reply(
+      "/find_elements",
+      { body: { success: true, data: pages[0] } },
+      { body: { success: true, data: pages[1] } },
+    );
+
+    const { contents } = await mcp.client.readResource({ uri: "staruml://project/tree" });
+
+    expect(extension.requests.map((r) => r.body)).toEqual([
+      { type: "Model", limit: 1000 },
+      { type: "Model", limit: 1000, cursor: "2" },
+    ]);
+    expect(JSON.parse((contents[0] as { text: string }).text)).toEqual([
+      {
+        _id: "P1",
+        _type: "Project",
+        name: "Shop",
+        children: [
+          {
+            _id: "M1",
+            _type: "UMLModel",
+            name: "Model",
+            children: [
+              { _id: "C1", _type: "UMLClass", name: "Order" },
+              { _id: "D1", _type: "UMLClassDiagram" },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("treats elements whose owner was not returned as roots", async () => {
+    extension.reply("/find_elements", {
+      body: {
+        success: true,
+        data: {
+          count: 1,
+          elements: [summary("C1", "UMLClass", "Orphan", "gone")],
+          nextCursor: null,
+        },
+      },
+    });
+
+    const { contents } = await mcp.client.readResource({ uri: "staruml://project/tree" });
+
+    expect((contents[0] as { text: string }).text).toBe(
+      '[{"_id":"C1","_type":"UMLClass","name":"Orphan"}]',
+    );
+  });
+
+  it("fails with the extension's error", async () => {
+    extension.reply("/find_elements", {
+      status: 409,
+      body: { success: false, code: "NO_PROJECT", error: "No project is open" },
+    });
+
+    const error = await readError("staruml://project/tree");
+
+    expect(error.data).toMatchObject({ error: { code: "NO_PROJECT", status: 409 } });
   });
 });
 

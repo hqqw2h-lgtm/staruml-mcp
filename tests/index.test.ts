@@ -4,12 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { isEntrypoint, main, parseArgs, run } from "../src/index.js";
 import packageJson from "../package.json" with { type: "json" };
-import { INITIALIZE_PARAMS } from "./support/sse.js";
+import { BUNDLED_MANIFEST } from "../src/manifest.js";
+import { closedPort, UpstreamFixture } from "./support/fixture.js";
+import { INITIALIZE_PARAMS, rpc } from "./support/sse.js";
 
 const ARGV0 = ["node", "staruml-mcp"];
+/** Default ports would reach a StarUML running on the developer's machine. */
+let OFFLINE: string[];
+
+beforeAll(async () => {
+  const refused = String(await closedPort());
+  OFFLINE = [...ARGV0, "--api-port", refused, "--ext-port", refused];
+});
 const INDEX_PATH = fileURLToPath(new URL("../src/index.ts", import.meta.url));
 
 beforeEach(() => {
@@ -77,7 +86,7 @@ describe("parseArgs", () => {
 
 describe("main", () => {
   it("serves the HTTP transport on the requested port", async () => {
-    const server = await main([...ARGV0, "--transport", "http", "--port", "0"]);
+    const server = await main([...OFFLINE, "--transport", "http", "--port", "0"]);
     try {
       expect(server.port).toBeGreaterThan(0);
       const res = await fetch(`http://127.0.0.1:${server.port}/`);
@@ -94,10 +103,10 @@ describe("main", () => {
   });
 
   it("fails when the HTTP port is taken", async () => {
-    const first = await main([...ARGV0, "--transport", "http", "--port", "0"]);
+    const first = await main([...OFFLINE, "--transport", "http", "--port", "0"]);
     try {
       await expect(
-        main([...ARGV0, "--transport", "http", "--port", String(first.port)]),
+        main([...OFFLINE, "--transport", "http", "--port", String(first.port)]),
       ).rejects.toMatchObject({ code: "EADDRINUSE" });
     } finally {
       await first.close();
@@ -107,7 +116,7 @@ describe("main", () => {
   it("speaks MCP over the given stdio streams", async () => {
     const stdin = new PassThrough();
     const stdout = new PassThrough();
-    const server = await main(ARGV0, { stdin, stdout });
+    const server = await main(OFFLINE, { stdin, stdout });
     try {
       expect(server.port).toBeUndefined();
       const line = new Promise<string>((resolve) =>
@@ -123,6 +132,66 @@ describe("main", () => {
     } finally {
       await server.close();
     }
+  });
+});
+
+describe("startup manifest", () => {
+  const builtin = new UpstreamFixture();
+  const extension = new UpstreamFixture();
+  let upstream: string[];
+
+  beforeAll(async () => {
+    await Promise.all([builtin.start(), extension.start()]);
+    upstream = [
+      ...ARGV0,
+      "--api-host",
+      "http://127.0.0.1",
+      "--api-port",
+      String(builtin.port),
+      "--ext-port",
+      String(extension.port),
+    ];
+  });
+
+  afterEach(() => {
+    builtin.reset();
+    extension.reset();
+  });
+
+  afterAll(async () => {
+    await Promise.all([builtin.stop(), extension.stop()]);
+  });
+
+  function serveManifest(endpoints: typeof BUNDLED_MANIFEST.endpoints): void {
+    extension.banner = { name: "staruml-mcp-extension", version: "0.3.0" };
+    extension.reply("/introspect", {
+      body: { success: true, data: { ...BUNDLED_MANIFEST, endpoints } },
+    });
+  }
+
+  it("offers the tools of the live manifest and logs where they came from", async () => {
+    serveManifest(BUNDLED_MANIFEST.endpoints.filter((e) => e.path === "/get_element_by_id"));
+    const server = await main([...upstream, "--transport", "http", "--port", "0"]);
+    try {
+      const { message } = await rpc(`http://127.0.0.1:${server.port}`, 1, "tools/list");
+      const names = (message.result!.tools as { name: string }[]).map((t) => t.name);
+      expect(names).toContain("get_element_by_id");
+      expect(names).not.toContain("find_elements");
+      expect(console.error).toHaveBeenCalledWith(
+        "[staruml-mcp] 1 extension tools from the live manifest",
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("falls back to the bundled manifest when the extension is unreachable", async () => {
+    const server = await main([...OFFLINE, "--transport", "http", "--port", "0"]);
+    await server.close();
+
+    expect(console.error).toHaveBeenCalledWith(
+      `[staruml-mcp] ${BUNDLED_MANIFEST.endpoints.length} extension tools from the bundled manifest`,
+    );
   });
 });
 
@@ -167,7 +236,7 @@ describe("run", () => {
       throw "stdin unavailable";
     });
 
-    await run(ARGV0);
+    await run(OFFLINE);
 
     expect(listen).toHaveBeenCalled();
     expect(console.error).toHaveBeenCalledWith("[staruml-mcp] fatal:", "stdin unavailable");
@@ -179,7 +248,7 @@ describe("run", () => {
     });
     const signals = new EventEmitter();
 
-    await run([...ARGV0, "--transport", "http", "--port", "0"], signals);
+    await run([...OFFLINE, "--transport", "http", "--port", "0"], signals);
     signals.emit(signal);
 
     await expect(exited).resolves.toBe(0);

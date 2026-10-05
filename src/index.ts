@@ -11,7 +11,9 @@ import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { CatalogState, loadCatalog } from "./extension-tools.js";
 import { createServer, type ServerConfig } from "./server.js";
+import { StarUMLClient } from "./staruml-client.js";
 import packageJson from "../package.json" with { type: "json" };
 
 const TRANSPORTS = ["stdio", "http"] as const;
@@ -79,12 +81,23 @@ export async function main(
   stdio: Stdio = { stdin: process.stdin, stdout: process.stdout },
 ): Promise<RunningServer> {
   const options = parseArgs(argv);
+  const client = new StarUMLClient({
+    host: options.apiHost,
+    port: options.apiPort,
+    extPort: options.extPort,
+  });
+  const catalog = await loadCatalog(client);
+  // stdout carries the stdio transport, so this goes to stderr.
+  console.error(
+    `[staruml-mcp] ${catalog.compiled.tools.length} extension tools from the ${catalog.source} manifest`,
+  );
   const serverConfig: ServerConfig = {
     apiHost: options.apiHost,
     apiPort: options.apiPort,
     extPort: options.extPort,
     name: packageJson.name,
     version: packageJson.version,
+    catalog: new CatalogState(catalog),
   };
 
   if (options.transport === "stdio") {

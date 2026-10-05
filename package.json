@@ -51,6 +51,7 @@
     "test:live": "STARUML_LIVE=1 vitest run tests/live",
     "load-test": "node scripts/load-test.mjs",
     "benchmark:tokens": "node --import tsx scripts/token-benchmark.mjs",
+    "sync:manifest": "node scripts/sync-manifest.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "lint": "eslint src tests scripts",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.mjs\"",
@@ -61,7 +62,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "commander": "^12.1.0",
-    "zod": "^3.23.8"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

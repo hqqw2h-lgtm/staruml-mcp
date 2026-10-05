@@ -6,6 +6,11 @@ export { ErrorCode, StarUMLApiError } from "./errors.js";
 const DEFAULT_HOST = "http://localhost";
 const DEFAULT_API_PORT = 58321;
 const DEFAULT_EXT_PORT = 58322;
+/** Both servers answer on loopback in under 50 ms when up (measured on 7.1.1). */
+const PROBE_TIMEOUT_MS = 2_000;
+
+/** Extension 0.3.0's code for a path it has no handler for (src/http-server.ts). */
+const UNKNOWN_ENDPOINT = "UNKNOWN_ENDPOINT";
 
 const StarUMLResponseSchema = z.object({
   success: z.boolean(),
@@ -61,115 +66,40 @@ export class StarUMLClient {
     return result;
   }
 
+  /** True when the built-in API server answers `GET /`. */
   async ping(): Promise<boolean> {
-    try {
-      const res = await fetch(this.baseUrl, { method: "GET" });
-      return res.ok;
-    } catch {
-      return false;
-    }
+    return (await this.probe(this.baseUrl)) !== undefined;
   }
 
   // === Extension API (port 58322, requires staruml-mcp-extension installed) ===
 
-  async pingExtension(): Promise<boolean> {
-    try {
-      const res = await fetch(this.extUrl, { method: "GET" });
-      return res.ok;
-    } catch {
-      return false;
-    }
+  /** Versions and the endpoint manifest only; the metamodel section alone is ~250 KB. */
+  async introspectManifest(): Promise<unknown> {
+    return this.callExt("/introspect", { include: ["endpoints"] });
   }
 
-  async getAllCommands(): Promise<unknown> {
-    return this.callExt("/get_all_commands", {});
-  }
-
-  async executeCommand(id: string, args?: unknown[]): Promise<unknown> {
-    return this.callExt("/execute_command", { id, args: args ?? [] });
-  }
-
-  async getProjectInfo(): Promise<unknown> {
-    return this.callExt("/get_project_info", {});
-  }
-
-  async saveProject(filename?: string): Promise<unknown> {
-    return this.callExt("/save_project", filename ? { filename } : {});
-  }
-
-  async saveProjectAs(filename: string): Promise<unknown> {
-    return this.callExt("/save_project_as", { filename });
-  }
-
-  async newProject(): Promise<unknown> {
-    return this.callExt("/new_project", {});
-  }
-
-  async openProject(filename: string): Promise<unknown> {
-    return this.callExt("/open_project", { filename });
-  }
-
-  async getElementById(id: string): Promise<unknown> {
-    return this.callExt("/get_element_by_id", { id });
-  }
-
-  async findElements(filter: { type?: string; name?: string } = {}): Promise<unknown> {
-    return this.callExt("/find_elements", filter);
-  }
-
-  async createElement(input: { type: string; parentId: string; name?: string }): Promise<unknown> {
-    return this.callExt("/create_element", input);
-  }
-
-  async createElementWithView(input: {
-    type: string;
-    parentId: string;
-    diagramId: string;
-    name?: string;
-    x?: number;
-    y?: number;
-    x2?: number;
-    y2?: number;
-  }): Promise<unknown> {
-    return this.callExt("/create_element_with_view", input);
-  }
-
-  async createEdgeWithView(input: {
-    type: string;
-    parentId: string;
-    diagramId: string;
-    tailViewId: string;
-    headViewId: string;
-    name?: string;
-    x?: number;
-    y?: number;
-    x2?: number;
-    y2?: number;
-  }): Promise<unknown> {
-    return this.callExt("/create_edge_with_view", input);
-  }
-
-  async updateElement(input: { id: string; field: string; value: unknown }): Promise<unknown> {
-    return this.callExt("/update_element", input);
-  }
-
-  async deleteElement(id: string): Promise<unknown> {
-    return this.callExt("/delete_element", { id });
-  }
-
-  async createDiagram(input: { type: string; parentId: string; name?: string }): Promise<unknown> {
-    return this.callExt("/create_diagram", input);
-  }
-
-  async switchDiagram(id: string): Promise<unknown> {
-    return this.callExt("/switch_diagram", { id });
-  }
-
-  async closeDiagram(id: string): Promise<unknown> {
-    return this.callExt("/close_diagram", { id });
+  /** POSTs `body` to an extension endpoint named by the manifest. */
+  async callExtension(path: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.callExt(path, body);
   }
 
   // === Internal ===
+
+  /**
+   * GET `url` with a deadline: a port held by a hung process would otherwise stall the caller
+   * until the OS gives up on the connection. Undefined unless the answer is 2xx.
+   */
+  private async probe(url: string): Promise<Response | undefined> {
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      });
+      return res.ok ? res : undefined;
+    } catch {
+      return undefined;
+    }
+  }
 
   private callBase(slug: string, body: Record<string, unknown>): Promise<unknown> {
     return this.post("builtin", slug, body);
@@ -267,18 +197,22 @@ export class StarUMLClient {
   ): StarUMLApiError {
     const message = envelope?.error ?? `HTTP ${res.status} ${res.statusText}`.trimEnd();
     const options = { slug, upstream, status: res.status };
-    if (envelope?.code !== undefined) {
-      return new StarUMLApiError(message, { ...options, code: envelope.code });
-    }
-    if (res.status === 404) {
+    // Extension 0.3.0 names a missing endpoint UNKNOWN_ENDPOINT; older ones and StarUML answer a
+    // bare 404. Either way the installed version does not match what this server expects.
+    const missing =
+      envelope?.code === UNKNOWN_ENDPOINT || (envelope?.code === undefined && res.status === 404);
+    if (missing) {
       return new StarUMLApiError(message, {
         ...options,
-        code: ErrorCode.EndpointNotFound,
+        code: envelope?.code ?? ErrorCode.EndpointNotFound,
         hint:
           upstream === "builtin"
             ? `This StarUML build has no ${slug} API endpoint; it needs StarUML 7.0.0+.`
             : `The installed staruml-mcp-extension does not provide ${slug}, so its version does not match this server. GET ${this.extUrl}/ lists the endpoints it supports; upgrade from ${EXTENSION_REPOSITORY}.`,
       });
+    }
+    if (envelope?.code !== undefined) {
+      return new StarUMLApiError(message, { ...options, code: envelope.code });
     }
     return new StarUMLApiError(message, {
       ...options,

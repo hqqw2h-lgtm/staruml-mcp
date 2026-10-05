@@ -18,12 +18,15 @@ export interface RecordedRequest {
  */
 export class UpstreamFixture {
   readonly requests: RecordedRequest[] = [];
-  private readonly routes = new Map<string, Reply>();
+  private readonly routes = new Map<string, Reply[]>();
+  /** Body of `GET /`; StarUML answers plain text, the extension a JSON banner. */
+  banner: unknown = "Hello from fixture";
   private server: Server | undefined;
   port = 0;
 
-  reply(path: string, reply: Reply): this {
-    this.routes.set(path, reply);
+  /** Each request to `path` takes the next reply; the last one repeats. */
+  reply(path: string, ...replies: [Reply, ...Reply[]]): this {
+    this.routes.set(path, replies);
     return this;
   }
 
@@ -38,10 +41,12 @@ export class UpstreamFixture {
       const body = await readJson(req);
       this.requests.push({ method: req.method!, path, body });
       if (req.method === "GET" && path === "/") {
-        res.writeHead(200, { "Content-Type": "text/plain" }).end("Hello from fixture");
+        const text = typeof this.banner === "string" ? this.banner : JSON.stringify(this.banner);
+        res.writeHead(200, { "Content-Type": "text/plain" }).end(text);
         return;
       }
-      const reply = this.routes.get(path) ?? {
+      const queue = this.routes.get(path);
+      const reply = (queue && queue.length > 1 ? queue.shift() : queue?.[0]) ?? {
         status: 404,
         body: { success: false, error: `No handler for ${path}` },
       };

@@ -47,7 +47,7 @@ describe("StarUMLClient", () => {
       mockJsonResponse({ success: true });
       await client.generateDiagram("flowchart LR\n  A --> B");
       expect(lastRequest().url).toBe("http://localhost:58321/generate_diagram");
-      await client.getProjectInfo();
+      await client.callExtension("/get_project_info", {});
       expect(lastRequest().url).toBe("http://localhost:58322/get_project_info");
     });
 
@@ -57,7 +57,7 @@ describe("StarUMLClient", () => {
       mockJsonResponse({ success: true });
       await client.generateDiagram("x");
       expect(lastRequest().url).toBe("http://example.com:1234/generate_diagram");
-      await client.newProject();
+      await client.callExtension("/new_project", {});
       expect(lastRequest().url).toBe("http://example.com:4321/new_project");
     });
   });
@@ -80,83 +80,18 @@ describe("StarUMLClient", () => {
     const cases: [string, (c: StarUMLClient) => Promise<unknown>, string, unknown][] = [
       ["getAllDiagramsInfo", (c) => c.getAllDiagramsInfo(), "/get_all_diagrams_info", {}],
       ["getCurrentDiagramInfo", (c) => c.getCurrentDiagramInfo(), "/get_current_diagram_info", {}],
-      ["getAllCommands", (c) => c.getAllCommands(), "/get_all_commands", {}],
       [
-        "executeCommand without args",
-        (c) => c.executeCommand("project:save"),
-        "/execute_command",
-        { id: "project:save", args: [] },
-      ],
-      [
-        "executeCommand with args",
-        (c) => c.executeCommand("x", [1, "a"]),
-        "/execute_command",
-        { id: "x", args: [1, "a"] },
-      ],
-      ["getProjectInfo", (c) => c.getProjectInfo(), "/get_project_info", {}],
-      ["saveProject without filename", (c) => c.saveProject(), "/save_project", {}],
-      [
-        "saveProject with filename",
-        (c) => c.saveProject("/a.mdj"),
-        "/save_project",
-        { filename: "/a.mdj" },
-      ],
-      [
-        "saveProjectAs",
-        (c) => c.saveProjectAs("/b.mdj"),
-        "/save_project_as",
-        { filename: "/b.mdj" },
-      ],
-      ["newProject", (c) => c.newProject(), "/new_project", {}],
-      ["openProject", (c) => c.openProject("/c.mdj"), "/open_project", { filename: "/c.mdj" }],
-      ["getElementById", (c) => c.getElementById("e1"), "/get_element_by_id", { id: "e1" }],
-      ["findElements default", (c) => c.findElements(), "/find_elements", {}],
-      [
-        "findElements filtered",
-        (c) => c.findElements({ type: "UMLClass", name: "User" }),
+        "callExtension",
+        (c) => c.callExtension("/find_elements", { type: "UMLClass", limit: 5 }),
         "/find_elements",
-        { type: "UMLClass", name: "User" },
+        { type: "UMLClass", limit: 5 },
       ],
       [
-        "createElement",
-        (c) => c.createElement({ type: "UMLClass", parentId: "p" }),
-        "/create_element",
-        { type: "UMLClass", parentId: "p" },
+        "introspectManifest",
+        (c) => c.introspectManifest(),
+        "/introspect",
+        { include: ["endpoints"] },
       ],
-      [
-        "createElementWithView",
-        (c) => c.createElementWithView({ type: "UMLActor", parentId: "p", diagramId: "d", x: 1 }),
-        "/create_element_with_view",
-        { type: "UMLActor", parentId: "p", diagramId: "d", x: 1 },
-      ],
-      [
-        "createEdgeWithView",
-        (c) =>
-          c.createEdgeWithView({
-            type: "UMLAssociation",
-            parentId: "p",
-            diagramId: "d",
-            tailViewId: "t",
-            headViewId: "h",
-          }),
-        "/create_edge_with_view",
-        { type: "UMLAssociation", parentId: "p", diagramId: "d", tailViewId: "t", headViewId: "h" },
-      ],
-      [
-        "updateElement",
-        (c) => c.updateElement({ id: "e", field: "name", value: "N" }),
-        "/update_element",
-        { id: "e", field: "name", value: "N" },
-      ],
-      ["deleteElement", (c) => c.deleteElement("e"), "/delete_element", { id: "e" }],
-      [
-        "createDiagram",
-        (c) => c.createDiagram({ type: "UMLClassDiagram", parentId: "p", name: "D" }),
-        "/create_diagram",
-        { type: "UMLClassDiagram", parentId: "p", name: "D" },
-      ],
-      ["switchDiagram", (c) => c.switchDiagram("d"), "/switch_diagram", { id: "d" }],
-      ["closeDiagram", (c) => c.closeDiagram("d"), "/close_diagram", { id: "d" }],
     ];
 
     it.each(cases)(
@@ -228,7 +163,7 @@ describe("StarUMLClient", () => {
       fetchSpy.mockRejectedValueOnce(new TypeError("fetch failed"));
       fetchSpy.mockRejectedValueOnce(new TypeError("fetch failed"));
 
-      const error = await caught(client.getProjectInfo());
+      const error = await caught(client.callExtension("/get_project_info", {}));
 
       expect(error.code).toBe(ErrorCode.StarUMLUnreachable);
       expect(error.upstream).toBe("extension");
@@ -241,7 +176,7 @@ describe("StarUMLClient", () => {
       fetchSpy.mockRejectedValueOnce(new TypeError("fetch failed"));
       mockTextResponse("Hello from StarUML API Server!", 200);
 
-      const error = await caught(client.getProjectInfo());
+      const error = await caught(client.callExtension("/get_project_info", {}));
 
       expect(error.code).toBe(ErrorCode.ExtensionUnreachable);
       expect(error.message).toBe(
@@ -261,7 +196,7 @@ describe("StarUMLClient", () => {
       );
 
       const error = await caught(
-        client.createElementWithView({ type: "T", parentId: "p", diagramId: "d" }),
+        client.callExtension("/create_element_with_view", { type: "T", diagramId: "d" }),
       );
 
       expect(error.toJSON()).toEqual({
@@ -277,7 +212,7 @@ describe("StarUMLClient", () => {
       const client = new StarUMLClient();
       mockJsonResponse({ success: false, error: "Element not found: e", code: "NOT_FOUND" }, 404);
 
-      const error = await caught(client.getElementById("e"));
+      const error = await caught(client.callExtension("/get_element_by_id", { id: "e" }));
 
       expect(error.code).toBe("NOT_FOUND");
       expect(error.hint).toBeUndefined();
@@ -287,11 +222,44 @@ describe("StarUMLClient", () => {
       const client = new StarUMLClient();
       mockJsonResponse({ success: false, error: "No handler for /close_diagram" }, 404);
 
-      const error = await caught(client.closeDiagram("d"));
+      const error = await caught(client.callExtension("/close_diagram", { id: "d" }));
 
       expect(error.code).toBe(ErrorCode.EndpointNotFound);
       expect(error.message).toBe("No handler for /close_diagram");
       expect(error.hint).toContain("GET http://localhost:58322/ lists the endpoints");
+    });
+
+    it("keeps extension 0.3.0's UNKNOWN_ENDPOINT code and adds the version hint", async () => {
+      const client = new StarUMLClient();
+      mockJsonResponse(
+        { success: false, code: "UNKNOWN_ENDPOINT", error: "No handler for /batch" },
+        404,
+      );
+
+      const error = await caught(client.callExtension("/batch", {}));
+
+      expect(error).toMatchObject({ code: "UNKNOWN_ENDPOINT", status: 404 });
+      expect(error.hint).toContain("does not provide /batch");
+    });
+
+    it.each([
+      ["INVALID_ARGUMENT", 400],
+      ["NO_PROJECT", 409],
+      ["STARUML_ERROR", 422],
+      ["INTERNAL", 500],
+    ])("passes extension 0.3.0's %s (HTTP %d) through without a hint", async (code, status) => {
+      const client = new StarUMLClient();
+      mockJsonResponse({ success: false, code, error: "why" }, status);
+
+      const error = await caught(client.callExtension("/create_element", {}));
+
+      expect(error.toJSON()).toEqual({
+        code,
+        message: "why",
+        endpoint: "/create_element",
+        upstream: "extension",
+        status,
+      });
     });
 
     it("maps a built-in 404 HTML page to ENDPOINT_NOT_FOUND with the status line", async () => {
@@ -347,7 +315,7 @@ describe("StarUMLClient", () => {
       const client = new StarUMLClient();
       mockJsonResponse({ success: false, code: "BUSY" });
 
-      const error = await caught(client.getAllCommands());
+      const error = await caught(client.callExtension("/get_all_commands", {}));
 
       expect(error.code).toBe("BUSY");
       expect(error.message).toBe(
@@ -369,7 +337,7 @@ describe("StarUMLClient", () => {
       const client = new StarUMLClient();
       mockJsonResponse({ hello: "world" });
 
-      const error = await caught(client.getProjectInfo());
+      const error = await caught(client.callExtension("/get_project_info", {}));
 
       expect(error.code).toBe(ErrorCode.InvalidResponse);
       expect(error.hint).toContain("is staruml-mcp-extension");
@@ -393,16 +361,22 @@ describe("StarUMLClient", () => {
     });
   });
 
-  describe("pingExtension", () => {
-    it("returns true when HTTP 200", async () => {
-      fetchSpy.mockResolvedValueOnce(new Response("{}", { status: 200 }));
-      await expect(new StarUMLClient().pingExtension()).resolves.toBe(true);
-      expect(fetchSpy.mock.calls[0]![0]).toBe("http://localhost:58322");
-    });
-
-    it("returns false when fetch throws", async () => {
-      fetchSpy.mockRejectedValueOnce(new Error("network down"));
-      await expect(new StarUMLClient().pingExtension()).resolves.toBe(false);
+  describe("ping deadline", () => {
+    it("gives up on a port that does not answer within the probe deadline", async () => {
+      fetchSpy.mockImplementationOnce(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason));
+          }),
+      );
+      vi.useFakeTimers();
+      try {
+        const up = new StarUMLClient().ping();
+        await vi.advanceTimersByTimeAsync(2_000);
+        await expect(up).resolves.toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

@@ -6,29 +6,30 @@
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-compatible-blue.svg)](https://modelcontextprotocol.io/)
 
-Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI agents (Claude Code, Cursor, VS Code Copilot, Codex) drive StarUML programmatically — generate UML diagrams from Mermaid, execute any built-in command, CRUD elements, save projects, and more.
+Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI agents (Claude Code, Cursor, VS Code Copilot, Codex) drive StarUML programmatically — generate UML diagrams from Mermaid, build native models and diagrams element by element, execute any built-in command, save projects, and more.
 
 ## How it fits together
 
 ```
   AI Agent  ──MCP──►  staruml-mcp (this package)  ──HTTP──►  StarUML
                                                   :58321 (built-in, 4 tools)
-                                                  :58322 (extension, 15 tools)
+                                                  :58322 (extension 0.3.x, 29 tools
+                                                          generated from its manifest)
 ```
 
 | Package | What it is | Where it runs |
 |---|---|---|
 | **`staruml-mcp`** (this repo) | MCP server for AI agents | your machine via `npx -y staruml-mcp` |
-| **[`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension)** | StarUML plugin adding 15 HTTP endpoints | inside StarUML (install once via Extension Manager) |
+| **[`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 29 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
 
 - Using only Mermaid-based diagram tools? Install `staruml-mcp` only. The 4 built-in tools work.
-- Want the full 19 tools (project save/open, element CRUD, execute any StarUML command)? Install **both**.
+- Want the full 33 tools (project save/open, element CRUD, relationships, attributes and operations, any StarUML command)? Install **both**.
 
 ## Prerequisites
 
 - **StarUML v7.0.0+** with API Server enabled (see below)
 - **Node.js 20+** on the machine running the AI agent
-- **(Optional)** [`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension) installed in StarUML — required for 15 of the 19 tools
+- **(Optional)** [`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension) 0.3.x installed in StarUML — required for 29 of the 33 tools
 
 ### Enable StarUML API Server
 
@@ -119,17 +120,42 @@ staruml-mcp [options]
 | `get_current_diagram_info` | Get metadata of the currently focused diagram. |
 | `get_diagram_image_by_id` | Export a diagram as PNG by its ID. |
 
-### Extension tools (require [`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension), port 58322)
 
-| Tool | Description |
+### Extension tools (require [`staruml-mcp-extension`](https://github.com/ezrabrilliant/staruml-mcp-extension) 0.3.x, port 58322)
+
+These tools are not written by hand. The extension publishes a manifest from `POST /introspect`:
+each endpoint's name, description, read-only and destructive flags, and JSON Schemas for request
+and response. On start the server reads it and registers one tool per endpoint:
+
+- **name** is the path without `/` (`/find_elements` → `find_elements`);
+- **description** is the endpoint description cut to the sentences that fit in 100 characters,
+  on one line;
+- **input schema** is the endpoint's request schema converted with zod's `fromJSONSchema` and
+  listed back by the MCP SDK unchanged, except that the projection parameters (`summary`,
+  `fields`, `depth`) and the shared `properties` description are shortened, and tools that write
+  accept the projection without listing it (the instructions explain it once);
+- **annotations**: `readOnlyHint` from the manifest's `readOnly`, `destructiveHint` from
+  `destructive` (stated for every writing tool, since MCP defaults it to true),
+  `openWorldHint: false`.
+
+A copy of the 0.3.0 manifest is bundled (`src/extension-manifest.json`), so `tools/list` is
+complete while StarUML is closed; calls then fail with `EXTENSION_UNREACHABLE` and an install hint.
+`npm run sync:manifest` refreshes the copy from a running extension (`-- --url <base>`) or from a
+recorded `/introspect` response (`-- --from <file>`).
+
+With extension 0.3.0:
+
+| Tool | Does |
 |---|---|
-| `get_all_commands` | List all 138+ built-in StarUML command IDs. |
-| `execute_command` | Execute any built-in command (e.g. `project:save`, `view:fit-to-window`). |
-| `get_project_info` | Current project's filename + top-level elements. |
-| `save_project` / `save_project_as` / `new_project` / `open_project` | Project file lifecycle. |
-| `get_element_by_id` / `find_elements` | Query model elements. |
-| `create_element` / `update_element` / `delete_element` | Element CRUD. |
-| `create_diagram` (typed native) / `switch_diagram` / `close_diagram` | Diagram management. |
+| `get_all_commands` / `execute_command` | List command ids / run any StarUML command. |
+| `get_project_info` / `new_project` / `open_project` / `save_project` / `save_project_as` | Project lifecycle. |
+| `get_element_by_id` / `find_elements` | Read elements; `find_elements` pages with `limit`/`cursor`. |
+| `create_element` / `update_element` / `delete_element` | Model elements without views; `update_element` sets, adds, removes, reorders or relocates. |
+| `create_element_with_view` / `create_edge_with_view` / `create_relationship` | Elements and relationships drawn on a diagram; `create_relationship` also sets association ends. |
+| `add_attribute` / `add_operation` / `add_parameter` / `add_enumeration_literal` / `add_template_parameter` / `add_slot` / `add_tag` | Features of classifiers and instances. |
+| `set_stereotype` / `set_documentation` | Common element properties. |
+| `create_diagram` / `switch_diagram` / `close_diagram` | Diagrams. |
+| `introspect` / `debug` | Versions, factory ids, metamodel, toolbox and manifest / the raw `app` surface. |
 
 To enable extension tools: install `staruml-mcp-extension` in StarUML (Tools → Extension Manager → Install From URL → `https://github.com/ezrabrilliant/staruml-mcp-extension`).
 
@@ -141,6 +167,12 @@ object, top-level properties that repeat an argument (such as the `filename` pas
 property therefore means null or empty. `get_current_diagram_info` returns `null` when no diagram
 is active.
 
+Elements come back as the extension's summaries, `{_id, _type, name, _parent}`; references and
+owned elements are `{$ref: id}`. Every tool that returns elements accepts `fields` (attribute
+names), `summary: false` (every saved attribute) and `depth` (levels of owned elements to expand),
+and `find_elements` pages with `limit` and `cursor` (`nextCursor` is absent on the last page). The
+`/create_*_with_view` and `/create_relationship` tools return `{view, model}`.
+
 ### Resources
 
 Clients that support MCP resources can read these instead of calling the matching tool, which keeps
@@ -150,10 +182,11 @@ diagram PNGs out of tool results:
 |---|---|---|
 | `staruml://diagrams` | `application/json` list of diagrams | `get_all_diagrams_info` |
 | `staruml://project` | `application/json` project info (needs the extension) | `get_project_info` |
+| `staruml://project/tree` | `application/json` ownership tree of every model element and diagram, `[{_id, _type, name, children}]`, built from paged `find_elements` summaries (needs the extension) | `find_elements` with `type: "Model"` |
 | `staruml://diagram/{id}.png` | `image/png` blob; `{id}` is percent-encoded, since ids can contain `/`, `+` and `=` | `get_diagram_image_by_id` |
 
 `resources/list` enumerates one `staruml://diagram/{id}.png` per diagram; when StarUML is not
-reachable it lists only the two static resources. A failed read is a JSON-RPC error whose `data`
+reachable it lists only the three static resources. A failed read is a JSON-RPC error whose `data`
 holds the same `error` object a failed tool call returns.
 
 StarUML 7.1.1's `/get_diagram_image_by_id` ignores every field except `diagramId` (`scale`,
@@ -172,10 +205,13 @@ A failed tool call returns `isError: true` with a one-line cause, a hint where o
 | `STARUML_UNREACHABLE` | Nothing answers on the built-in API port: StarUML is closed or `apiServer` is off. |
 | `EXTENSION_UNREACHABLE` | StarUML answers but the extension port does not: the extension is not installed or listens elsewhere. |
 | `ENDPOINT_NOT_FOUND` | HTTP 404 for the endpoint: the installed StarUML or extension version does not provide it. |
-| `REQUEST_REJECTED` | HTTP 4xx or `success: false`: the arguments were rejected; read `message`. |
-| `UPSTREAM_ERROR` | HTTP 5xx from StarUML or the extension. |
+| `REQUEST_REJECTED` | HTTP 4xx or `success: false` without a `code`: the arguments were rejected; read `message`. |
+| `UPSTREAM_ERROR` | HTTP 5xx without a `code` from StarUML or the extension. |
 | `INVALID_RESPONSE` | The port answered with something other than the `{ success, data, error }` envelope. |
-| other | A `code` sent by the extension, passed through unchanged. |
+| extension 0.3.0 codes | Passed through with their HTTP status: `INVALID_ARGUMENT` (400), `UNKNOWN_TYPE` (400), `NOT_FOUND` (404), `UNKNOWN_ENDPOINT` (404, with the upgrade hint), `NO_PROJECT` (409), `STARUML_ERROR` (422, StarUML refused the operation), `INTERNAL` (500). |
+
+Arguments are checked against the tool's schema before any request, so a wrong-typed field fails
+with an MCP input validation error and the extension never sees it.
 
 ## Example Prompts
 
@@ -197,11 +233,13 @@ npm run test:coverage  # same, failing below 100% lines/branches/functions/state
 npm run test:live      # STARUML_LIVE=1: every tool against a running StarUML + extension
 npm run load-test      # HTTP transport load test (needs npm run build)
 npm run benchmark:tokens # token cost of three scenarios, current vs. 56864ca
+npm run sync:manifest  # refresh src/extension-manifest.json from a running extension
 npm run typecheck      # tsc --noEmit for src and tests
 ```
 
 Tool-level tests drive each tool through the MCP SDK's in-memory transport against local
-`http.Server` stubs of ports 58321 and 58322. The live suite saves the open project to a temp
+`http.Server` stubs of ports 58321 and 58322; the generated tools are tested one per manifest
+endpoint, including that each listed input schema round-trips the manifest's JSON Schema. The live suite saves the open project to a temp
 file, works in a fresh project, and reopens the original file when done; unsaved changes of the
 original are kept only in that temp copy, whose path it prints.
 
@@ -215,16 +253,18 @@ in-process stub so the numbers measure this server. Every request builds a fresh
 `--requests 2000 --max-p99-ms 2000 --min-rps 100`.
 
 Measured on an Intel i9-9980HK (8 cores / 16 threads), macOS, Node 22.23.3, 5000 requests per
-level after 500 warm-up requests, load generator on the same machine. Ranges span three runs on a
-machine shared with other work:
+level after 500 warm-up requests, load generator on the same machine, with the 33 tools of the
+bundled 0.3.0 manifest registered per request (stub runs pass `--ext-port 1` so a local StarUML does
+not change what is measured). Ranges span three runs on a machine shared with other work:
 
 | Concurrency | req/s | p50 | p99 | Errors |
 |---|---|---|---|---|
-| 50 | 460–647 | 72–96 ms | 136–351 ms | 0 |
-| 200 | 533–738 | 248–324 ms | 489–1081 ms | 0 |
+| 50 | 940–1024 | 44–49 ms | 84–93 ms | 0 |
+| 200 | 957–1169 | 160–178 ms | 283–482 ms | 0 |
 
-Against the real StarUML 7.1.1 API (`--live --requests 1000 --concurrency 50`, two runs):
-334–476 req/s, p50 102–146 ms, p99 148–227 ms, 0 errors.
+Against the real StarUML 7.1.1 API with extension 0.3.0 (`--live --requests 1000 --concurrency 50`,
+two runs): 813–817 req/s, p50 60–61 ms, p99 74–76 ms, 0 errors. The generated tools' zod schemas
+are built once per manifest and shared by every per-request server.
 
 ## Token efficiency
 
@@ -262,12 +302,14 @@ AI Agent (Claude Code / Cursor / VS Code / …)
         ▼
   staruml-mcp  (this package)
         │
-        │  HTTP JSON-RPC
-        ▼
-StarUML API Server (port 58321)
-        │
-        ▼
-  StarUML Application (v7+)
+        │  HTTP JSON (POST /<endpoint>)
+        ├──────────────────────────────┐
+        ▼                              ▼
+StarUML API Server (58321)     staruml-mcp-extension (58322)
+  4 hand-written tools           POST /introspect → manifest → 29 generated tools
+        │                              │   (bundled snapshot when unreachable)
+        ▼                              ▼
+           StarUML Application (v7+)
 ```
 
 ## Acknowledgments

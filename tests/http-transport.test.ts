@@ -4,6 +4,8 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createHttpHandler } from "../src/index.js";
 import { createServer, type ServerConfig } from "../src/server.js";
+import { HAND_WRITTEN_TOOLS } from "../src/extension-tools.js";
+import { BUNDLED_MANIFEST } from "../src/manifest.js";
 import { UpstreamFixture } from "./support/fixture.js";
 import { INITIALIZE_PARAMS, MCP_HEADERS, rpc } from "./support/sse.js";
 
@@ -61,7 +63,7 @@ describe("POST /mcp", () => {
     const { message } = await rpc(server, 2, "tools/list");
 
     const tools = message.result!.tools as { name: string }[];
-    expect(tools).toHaveLength(21);
+    expect(tools).toHaveLength(HAND_WRITTEN_TOOLS.size + BUNDLED_MANIFEST.endpoints.length);
     expect(tools.map((t) => t.name)).toContain("generate_diagram");
   });
 
