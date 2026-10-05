@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { diagnose, formatReport, healthy, type Check } from "../src/doctor.js";
 import { CatalogState } from "../src/extension-tools.js";
 import { BUNDLED_MANIFEST, type ManifestEntry } from "../src/manifest.js";
-import { StarUMLClient } from "../src/staruml-client.js";
+import { StarUMLApiError, StarUMLClient, TOKEN_HELP } from "../src/staruml-client.js";
 import { parseToolSelection } from "../src/tiers.js";
 import { closedPort, UpstreamFixture } from "./support/fixture.js";
 import { connect, text } from "./support/mcp.js";
@@ -57,6 +57,31 @@ function check(checks: Check[], name: string): Check {
 const NODE = "22.23.3";
 
 describe("diagnose", () => {
+  it("names the URL and the token remedy for a refusal without the extension's codes", async () => {
+    const proxied = Object.assign(Object.create(StarUMLClient.prototype) as StarUMLClient, {
+      ping: async () => true,
+      extensionBanner: async () => {
+        throw new StarUMLApiError("Forbidden", {
+          code: "REQUEST_REJECTED",
+          slug: "/",
+          upstream: "extension",
+          status: 403,
+        });
+      },
+    });
+    Object.defineProperty(proxied, "extensionUrl", { value: "http://proxy:1" });
+    Object.defineProperty(proxied, "builtinUrl", { value: "http://proxy:2" });
+
+    const { checks } = await diagnose(proxied, { nodeVersion: NODE });
+
+    expect(check(checks, "extension")).toEqual({
+      name: "extension",
+      status: "fail",
+      detail: "http://proxy:1 refused the request: Forbidden [REQUEST_REJECTED]",
+      remedy: `Check what answers at http://proxy:1. ${TOKEN_HELP}`,
+    });
+  });
+
   it("reports every check ok and the live manifest when everything is installed", async () => {
     serve();
 

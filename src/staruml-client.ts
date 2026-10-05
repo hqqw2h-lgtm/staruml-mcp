@@ -12,6 +12,25 @@ const PROBE_TIMEOUT_MS = 2_000;
 /** Extension 0.3.0's code for a path it has no handler for (src/http-server.ts). */
 const UNKNOWN_ENDPOINT = "UNKNOWN_ENDPOINT";
 
+/**
+ * Where the extension's settings live in StarUML: its preference panel ("id": "mcp-ext", "name":
+ * "MCP Extension" in preferences/preference.json) and its Tools menu (menus/menu.json).
+ */
+const PREFERENCES = "Preferences > MCP Extension";
+export const TOKEN_HELP =
+  "In StarUML, Tools > MCP Extension > Server Info says whether a token is required and Generate Access Token... creates one; " +
+  `pass it with --ext-token <token> or STARUML_EXT_TOKEN. To turn the check off, clear ${PREFERENCES} > Access Token.`;
+
+/** The refusals of extension 0.3.0's request checks (src/http-server.ts), by code. */
+const REFUSAL_STATUS: Record<number, string> = {
+  401: "UNAUTHORIZED",
+  403: "FORBIDDEN_ORIGIN",
+  413: "PAYLOAD_TOO_LARGE",
+  415: "UNSUPPORTED_MEDIA_TYPE",
+  429: "RATE_LIMITED",
+  504: "TIMEOUT",
+};
+
 const StarUMLResponseSchema = z.object({
   success: z.boolean(),
   data: z.unknown().optional(),
@@ -25,12 +44,19 @@ export interface StarUMLClientOptions {
   host?: string;
   port?: number;
   extPort?: number;
+  /**
+   * Sent as `Authorization: Bearer` with every extension request, `GET /` included, for an
+   * extension whose `mcp-ext.token` preference is set. Never sent to the built-in API.
+   */
+  extToken?: string;
 }
 
 export class StarUMLClient {
   private readonly host: string;
   private readonly baseUrl: string;
   private readonly extUrl: string;
+  private readonly extHeaders: Record<string, string>;
+  readonly hasExtToken: boolean;
 
   constructor(options: StarUMLClientOptions = {}) {
     this.host = options.host ?? DEFAULT_HOST;
@@ -38,6 +64,8 @@ export class StarUMLClient {
     const extPort = options.extPort ?? DEFAULT_EXT_PORT;
     this.baseUrl = `${this.host}:${port}`;
     this.extUrl = `${this.host}:${extPort}`;
+    this.hasExtToken = options.extToken !== undefined && options.extToken !== "";
+    this.extHeaders = this.hasExtToken ? { Authorization: `Bearer ${options.extToken}` } : {};
   }
 
   // === Built-in StarUML API (port 58321) ===
@@ -68,7 +96,7 @@ export class StarUMLClient {
 
   /** True when the built-in API server answers `GET /`. */
   async ping(): Promise<boolean> {
-    return (await this.probe(this.baseUrl)) !== undefined;
+    return (await this.probe(this.baseUrl, {}))?.ok === true;
   }
 
   get builtinUrl(): string {
@@ -82,14 +110,21 @@ export class StarUMLClient {
   // === Extension API (port 58322, requires staruml-mcp-extension installed) ===
 
   /**
-   * The extension's `GET /` banner, `{name, version, endpoints}`; undefined when nothing answers.
-   * Versions before 0.3.0 have no `/introspect`, so this is how the doctor tells them apart.
+   * The extension's `GET /` banner, `{name, version, endpoints}`; undefined when nothing answers
+   * or the answer is another error. Versions before 0.3.0 have no `/introspect`, so this is how
+   * the doctor tells them apart. Throws {@link StarUMLApiError} when the extension refuses the
+   * request (401 for the access token, 403 for an Origin): it is running, but every call would fail.
    */
   async extensionBanner(): Promise<unknown> {
-    const res = await this.probe(this.extUrl);
+    const res = await this.probe(this.extUrl, this.extHeaders);
     if (res === undefined) return undefined;
+    const text = await res.text();
+    if (res.status === 401 || res.status === 403) {
+      throw this.httpError("extension", "/", res, parseEnvelope(text));
+    }
+    if (!res.ok) return undefined;
     try {
-      return JSON.parse(await res.text()) as unknown;
+      return JSON.parse(text) as unknown;
     } catch {
       return null;
     }
@@ -109,15 +144,15 @@ export class StarUMLClient {
 
   /**
    * GET `url` with a deadline: a port held by a hung process would otherwise stall the startup
-   * check until the OS gives up on the connection. Undefined unless the answer is 2xx.
+   * check until the OS gives up on the connection. Undefined when nothing answers in time.
    */
-  private async probe(url: string): Promise<Response | undefined> {
+  private async probe(url: string, headers: Record<string, string>): Promise<Response | undefined> {
     try {
-      const res = await fetch(url, {
+      return await fetch(url, {
         method: "GET",
+        headers,
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       });
-      return res.ok ? res : undefined;
     } catch {
       return undefined;
     }
@@ -141,7 +176,11 @@ export class StarUMLClient {
     try {
       res = await fetch(`${baseUrl}${slug}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // Extension 0.3.0 answers 415 to a POST without this type.
+        headers: {
+          "Content-Type": "application/json",
+          ...(upstream === "extension" ? this.extHeaders : {}),
+        },
         body: JSON.stringify(body),
       });
     } catch (cause) {
@@ -233,13 +272,40 @@ export class StarUMLClient {
             : `The installed staruml-mcp-extension does not provide ${slug}, so its version does not match this server. GET ${this.extUrl}/ lists the endpoints it supports; upgrade from ${EXTENSION_REPOSITORY}.`,
       });
     }
-    if (envelope?.code !== undefined) {
-      return new StarUMLApiError(message, { ...options, code: envelope.code });
-    }
+    const hint =
+      upstream === "extension"
+        ? this.refusalHint(envelope?.code ?? REFUSAL_STATUS[res.status], slug, res)
+        : undefined;
     return new StarUMLApiError(message, {
       ...options,
-      code: res.status < 500 ? ErrorCode.RequestRejected : ErrorCode.UpstreamError,
+      code:
+        envelope?.code ?? (res.status < 500 ? ErrorCode.RequestRejected : ErrorCode.UpstreamError),
+      ...(hint === undefined ? {} : { hint }),
     });
+  }
+
+  /** What to do about a refusal by the extension's request checks or limits. */
+  private refusalHint(code: string | undefined, slug: string, res: Response): string | undefined {
+    switch (code) {
+      case "UNAUTHORIZED":
+        return this.hasExtToken
+          ? `The extension rejected the access token this server sent. ${TOKEN_HELP}`
+          : `The extension requires an access token. ${TOKEN_HELP}`;
+      case "FORBIDDEN_ORIGIN":
+        return `The extension refuses requests whose Origin header is not in ${PREFERENCES} > Allowed Origins. This server sends none, so a proxy or browser between it and StarUML added one.`;
+      case "PAYLOAD_TOO_LARGE":
+        return `The request exceeds ${PREFERENCES} > Max Request Body (KiB) or, for /batch, Max Batch Ops; split it or raise the limit.`;
+      case "UNSUPPORTED_MEDIA_TYPE":
+        return "The extension takes only Content-Type: application/json, which this server sends; check for a proxy rewriting requests.";
+      case "RATE_LIMITED": {
+        const after = res.headers.get("Retry-After");
+        return `${after === null ? "Retry later" : `Retry in ${after} s`}; ${PREFERENCES} > Commands per Minute limits ${slug} for all clients together.`;
+      }
+      case "TIMEOUT":
+        return `The extension stopped waiting after ${PREFERENCES} > Request Timeout (s), but StarUML may still finish the work; check its effect before retrying, or raise the limit.`;
+      default:
+        return undefined;
+    }
   }
 }
 

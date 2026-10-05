@@ -105,6 +105,7 @@ staruml-mcp [options]
   -p, --port <number>      HTTP listen port          (default: 58323)
       --api-port <number>  StarUML built-in API port (default: 58321)
       --ext-port <number>  staruml-mcp-extension port(default: 58322)
+      --ext-token <token>  extension access token    (env STARUML_EXT_TOKEN)
       --api-host <url>     StarUML API host prefix   (default: http://localhost)
       --doctor             Check the setup, print a report and exit (1 on failure)
       --tools <tiers>      core | all | comma list   (default: core; env STARUML_MCP_TOOLS)
@@ -127,6 +128,23 @@ tier         ok    core: 7 extension tools listed, 43 endpoints through call_end
 A failing check is followed by a `fix` line: start StarUML, enable `apiServer` in StarUML's
 `settings.json`, install the extension from its URL, or restart StarUML. The `doctor` tool runs the
 same check for an agent; `doctor({tools: "all"})` also switches the listed tier.
+
+### Access token
+
+When the extension's `mcp-ext.token` preference is set, it answers `401 UNAUTHORIZED` to every
+request without `Authorization: Bearer <token>`, `GET /` included. In StarUML,
+Tools > MCP Extension > Server Info says whether a token is required, and Generate Access Token...
+creates one and shows it once (it is stored in Preferences > MCP Extension > Access Token). Give it to this server with
+`STARUML_EXT_TOKEN` (preferred: command-line arguments are visible to every local user) or
+`--ext-token`; the flag wins, and an empty value means none. The token goes with every request to
+the extension, the startup check and `doctor` included, and never to StarUML's built-in API. Clearing
+the preference turns the check off; a token the extension does not require is ignored. Without the
+right token the startup report says so:
+
+```
+extension    fail  http://localhost:58322 refused the request: Missing or wrong bearer token [UNAUTHORIZED]
+             fix   The extension requires an access token. In StarUML, Tools > MCP Extension > Server Info says whether a token is required and Generate Access Token... creates one; pass it with --ext-token <token> or STARUML_EXT_TOKEN. To turn the check off, clear Preferences > MCP Extension > Access Token.
+```
 
 ## Tools Exposed
 
@@ -287,6 +305,7 @@ A failed tool call returns `isError: true` with a one-line cause, a hint where o
 | `INVALID_RESPONSE` | The port answered with something other than the `{ success, data, error }` envelope. |
 | `INVALID_ARGUMENT`, `UNKNOWN_ENDPOINT` | Also raised by `call_endpoint` itself, before any request, for a body the manifest schema rejects or a name it does not have; `endpoint` and `hint` say which and how to look it up. |
 | extension 0.3.0 codes | Passed through with their HTTP status: `INVALID_ARGUMENT` (400), `UNKNOWN_TYPE` (400), `NOT_FOUND` (404), `UNKNOWN_ENDPOINT` (404, with the upgrade hint), `NO_PROJECT` (409), `STARUML_ERROR` (422, StarUML refused the operation), `INTERNAL` (500). |
+| extension request checks | Passed through with a hint naming the setting: `UNAUTHORIZED` (401: no or wrong access token; how to set or clear it), `FORBIDDEN_ORIGIN` (403: an `Origin` header not in Allowed Origins), `PAYLOAD_TOO_LARGE` (413: Max Request Body (KiB) or Max Batch Ops), `UNSUPPORTED_MEDIA_TYPE` (415: not `application/json`), `RATE_LIMITED` (429: Commands per Minute, with the `Retry-After` seconds), `TIMEOUT` (504: Request Timeout (s); the work may still complete). A 401/403/413/415/429/504 without these codes, as from a proxy, gets the same hint. |
 
 Arguments are checked against the tool's schema before any request, so a wrong-typed field fails
 with an MCP input validation error and the extension never sees it.

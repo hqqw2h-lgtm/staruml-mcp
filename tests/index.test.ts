@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { isEntrypoint, main, parseArgs, run, TOOLS_ENV } from "../src/index.js";
+import { EXT_TOKEN_ENV, isEntrypoint, main, parseArgs, run, TOOLS_ENV } from "../src/index.js";
 import { CORE_ENDPOINTS, parseToolSelection } from "../src/tiers.js";
 import packageJson from "../package.json" with { type: "json" };
 import { BUNDLED_MANIFEST } from "../src/manifest.js";
@@ -40,7 +40,19 @@ describe("parseArgs", () => {
       apiHost: "http://localhost",
       doctor: false,
       tools: { all: false, names: new Set(CORE_ENDPOINTS), label: "core" },
+      extToken: undefined,
     });
+  });
+
+  it.each([
+    ["no token when neither is set", undefined, undefined, undefined],
+    ["no token when the variable is empty", undefined, "", undefined],
+    [EXT_TOKEN_ENV, undefined, "from-env", "from-env"],
+    ["--ext-token over the environment", "from-flag", "from-env", "from-flag"],
+    ["no token for an empty --ext-token", "", "from-env", undefined],
+  ])("reads %s", (_, flag, env, token) => {
+    const argv = flag === undefined ? ARGV0 : [...ARGV0, "--ext-token", flag];
+    expect(parseArgs(argv, { [EXT_TOKEN_ENV]: env }).extToken).toBe(token);
   });
 
   it("reads the process environment by default", () => {
@@ -89,6 +101,8 @@ describe("parseArgs", () => {
         "--doctor",
         "--tools",
         "all",
+        "--ext-token",
+        "s3cret",
       ]),
     ).toEqual({
       transport: "http",
@@ -98,6 +112,7 @@ describe("parseArgs", () => {
       apiHost: "http://10.0.0.2",
       doctor: true,
       tools: parseToolSelection("all"),
+      extToken: "s3cret",
     });
   });
 
@@ -262,6 +277,27 @@ describe("startup check", () => {
     expect(printed).toMatch(/^node +ok/);
     expect(printed).toContain("extension    ok    0.3.0 at http://127.0.0.1:");
     expect(process.exitCode).toBeUndefined();
+  });
+
+  it("--doctor sends --ext-token to the extension and reports a missing one", async () => {
+    serveManifest(BUNDLED_MANIFEST.endpoints);
+    extension.token = "s3cret";
+    const run = async (...extra: string[]) => {
+      const stdout = new PassThrough();
+      let printed = "";
+      stdout.on("data", (chunk: Buffer) => (printed += chunk.toString("utf8")));
+      await main([...upstream, "--doctor", ...extra], { stdin: new PassThrough(), stdout });
+      return printed;
+    };
+
+    expect(await run("--ext-token", "s3cret")).toContain("(access token sent)");
+    expect(new Set(extension.authorizations)).toEqual(new Set(["Bearer s3cret"]));
+    expect(process.exitCode).toBeUndefined();
+
+    const refused = await run();
+    expect(refused).toMatch(/extension +fail +http:\/\/127\.0\.0\.1:\d+ refused the request/);
+    expect(refused).toContain("Generate Access Token...");
+    expect(process.exitCode).toBe(1);
   });
 
   it("--doctor sets exit code 1 when a check fails", async () => {

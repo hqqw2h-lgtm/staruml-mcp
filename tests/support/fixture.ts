@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 export interface Reply {
   status?: number;
   body: unknown;
+  headers?: Record<string, string>;
 }
 
 export interface RecordedRequest {
@@ -12,12 +13,23 @@ export interface RecordedRequest {
   body: unknown;
 }
 
+/** Extension 0.3.0's answer to a request without the right bearer token (src/http-server.ts). */
+const UNAUTHORIZED = {
+  success: false,
+  code: "UNAUTHORIZED",
+  error: "Missing or wrong bearer token",
+};
+
 /**
  * Stand-in for StarUML's built-in API (58321) or staruml-mcp-extension (58322). Routes reply
  * with a fixed status and body; unknown POST paths get the extension's 404 envelope.
  */
 export class UpstreamFixture {
   readonly requests: RecordedRequest[] = [];
+  /** The Authorization header of each request, in the order of `requests`. */
+  readonly authorizations: (string | undefined)[] = [];
+  /** When set, requests without `Authorization: Bearer <token>` get the extension's 401. */
+  token: string | undefined;
   private readonly routes = new Map<string, Reply[]>();
   /** Body of `GET /`; StarUML answers plain text, the extension a JSON banner. */
   banner: unknown = "Hello from fixture";
@@ -33,6 +45,8 @@ export class UpstreamFixture {
   reset(): void {
     this.routes.clear();
     this.requests.length = 0;
+    this.authorizations.length = 0;
+    this.token = undefined;
   }
 
   async start(): Promise<this> {
@@ -40,6 +54,16 @@ export class UpstreamFixture {
       const path = req.url!;
       const body = await readJson(req);
       this.requests.push({ method: req.method!, path, body });
+      this.authorizations.push(req.headers.authorization);
+      if (this.token !== undefined && req.headers.authorization !== `Bearer ${this.token}`) {
+        res
+          .writeHead(401, {
+            "Content-Type": "application/json",
+            "WWW-Authenticate": 'Bearer realm="staruml"',
+          })
+          .end(JSON.stringify(UNAUTHORIZED));
+        return;
+      }
       if (req.method === "GET" && path === "/") {
         const text = typeof this.banner === "string" ? this.banner : JSON.stringify(this.banner);
         res.writeHead(200, { "Content-Type": "text/plain" }).end(text);
@@ -51,7 +75,9 @@ export class UpstreamFixture {
         body: { success: false, error: `No handler for ${path}` },
       };
       const payload = typeof reply.body === "string" ? reply.body : JSON.stringify(reply.body);
-      res.writeHead(reply.status ?? 200, { "Content-Type": "application/json" }).end(payload);
+      res
+        .writeHead(reply.status ?? 200, { "Content-Type": "application/json", ...reply.headers })
+        .end(payload);
     });
     await new Promise<void>((resolve) => this.server!.listen(0, "127.0.0.1", resolve));
     this.port = (this.server.address() as AddressInfo).port;

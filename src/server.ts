@@ -49,6 +49,8 @@ export interface ServerConfig {
   apiPort?: number;
   apiHost?: string;
   extPort?: number;
+  /** staruml-mcp-extension's access token (`--ext-token`). */
+  extToken?: string;
   name?: string;
   version?: string;
   /** Extension catalog and tool selection; the bundled manifest and the core tier when absent. */
@@ -84,6 +86,7 @@ export function createServer(config: ServerConfig = {}): McpServer {
     host: config.apiHost,
     port: config.apiPort,
     extPort: config.extPort,
+    extToken: config.extToken,
   });
 
   const server = new McpServer(

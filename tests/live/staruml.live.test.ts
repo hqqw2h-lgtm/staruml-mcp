@@ -16,7 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { diagnose, healthy } from "../../src/doctor.js";
 import { CatalogState } from "../../src/extension-tools.js";
 import { main, type RunningServer } from "../../src/index.js";
-import { toolName } from "../../src/manifest.js";
+import { BUNDLED_MANIFEST, toolName } from "../../src/manifest.js";
 import { diagramImageUri, ENDPOINTS_URI, METAMODEL_URI } from "../../src/server.js";
 import { StarUMLClient } from "../../src/staruml-client.js";
 import { CORE_ENDPOINTS, parseToolSelection } from "../../src/tiers.js";
@@ -76,6 +76,22 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     payload<{ elements: Summary[] }>(await call("get_views_of", { id }))
       .elements.filter((v) => v._type === "UMLClassView")
       .map((v) => v._id);
+
+  /**
+   * execute_command through `target`, waiting out RATE_LIMITED: the extension allows 60 commands a
+   * minute from all clients together, and other clients of the same StarUML count too.
+   */
+  const command = async (target: ConnectedClient, body: Record<string, unknown>) => {
+    called.add("execute_command");
+    for (let attempt = 0; ; attempt++) {
+      const result = await target.call("call_endpoint", { name: "execute_command", body });
+      const error = (result.structuredContent as { error?: { code: string } } | undefined)?.error;
+      if (error?.code !== "RATE_LIMITED" || attempt === 3) return result;
+      const wait = Number(/Retry in (\d+) s/.exec(text(result))?.[1] ?? 10);
+      console.info(`[live] execute_command rate limited; retrying in ${wait} s`);
+      await new Promise((resolve) => setTimeout(resolve, wait * 1000));
+    }
+  };
 
   /** The tool of that name, or call_endpoint for an endpoint without one. */
   const call = async (name: string, args: Record<string, unknown> = {}) => {
@@ -271,14 +287,14 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     });
 
     it("executes a registered command and rejects an unknown one with NOT_FOUND", async () => {
-      expect(ok(await call("execute_command", { id: "view:fit-to-window" }))).toBe("ok");
+      expect(ok(await command(mcp, { id: "view:fit-to-window" }))).toBe("ok");
 
-      expect(failure(await call("execute_command", { id: "nope:nope" }))).toMatchObject({
+      expect(failure(await command(mcp, { id: "nope:nope" }))).toMatchObject({
         code: "NOT_FOUND",
         status: 404,
         message: "Command not registered: nope:nope",
       });
-    });
+    }, 150_000);
 
     it("finds or creates a model", async () => {
       const found = payload<{ count: number; elements?: Summary[] }>(
@@ -719,9 +735,17 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       });
     });
 
-    it("called every listed tool and every endpoint", async () => {
+    it("called every listed tool and every endpoint of the bundled manifest", async () => {
       const { tools } = await mcp.client.listTools();
-      const endpoints = catalog.current.compiled.manifest.endpoints.map((e) => toolName(e.path));
+      // A newer extension build may add endpoints; the suite covers the contract this server
+      // bundles, and reports the rest.
+      const live = new Set(catalog.current.compiled.manifest.endpoints.map((e) => e.path));
+      const endpoints = BUNDLED_MANIFEST.endpoints
+        .filter((e) => live.has(e.path))
+        .map((e) => toolName(e.path));
+      const newer = [...live].filter((p) => !BUNDLED_MANIFEST.endpoints.some((e) => e.path === p));
+      if (newer.length > 0)
+        console.info(`[live] endpoints newer than the bundle: ${newer.join(" ")}`);
       const generic = ["describe_endpoints", "call_endpoint"];
       expect(
         [...tools.map((t) => t.name), ...endpoints].filter(
@@ -766,6 +790,58 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         catalog.current.compiled.manifest,
       );
     });
+  });
+
+  describe("access token", () => {
+    it("is required once set through mcp-ext:set-token, sent with --ext-token, then cleared", async () => {
+      const token = `live-${Date.now().toString(36)}`;
+      const withToken = await connect({
+        catalog: new CatalogState(catalog.current),
+        extToken: token,
+      });
+      try {
+        expect(
+          payload<{ result: string }>(
+            await command(mcp, { id: "mcp-ext:set-token", args: [token] }),
+          ).result,
+        ).toBe("set");
+
+        const refused = failure(await mcp.call("find_elements", { type: "Project" }));
+        expect(refused).toMatchObject({ code: "UNAUTHORIZED", status: 401 });
+        expect(text(await mcp.call("find_elements", { type: "Project" }))).toContain(
+          "Hint: The extension requires an access token. In StarUML, Tools > MCP Extension > Server Info",
+        );
+        expect(ok(await mcp.call("doctor"))).toMatch(
+          /extension +fail +http:\/\/localhost:58322 refused the request: Missing or wrong bearer token \[UNAUTHORIZED\]\n +fix +The extension requires an access token\./,
+        );
+
+        expect(
+          payload<{ count: number }>(await withToken.call("find_elements", { type: "Project" }))
+            .count,
+        ).toBe(1);
+        expect(ok(await withToken.call("doctor"))).toMatch(
+          /extension +ok +0\.3\.\d+ at http:\/\/localhost:58322 \(access token sent\)/,
+        );
+        const wrong = await connect({ extToken: "wrong" });
+        try {
+          expect(text(await wrong.call("find_elements", { type: "Project" }))).toContain(
+            "Hint: The extension rejected the access token this server sent.",
+          );
+        } finally {
+          await wrong.close();
+        }
+      } finally {
+        expect(
+          payload<{ result: string }>(
+            await command(withToken, { id: "mcp-ext:set-token", args: [""] }),
+          ).result,
+        ).toBe("cleared");
+        await withToken.close();
+      }
+      // The doctor run above swapped the shared catalog for the bundled one; read the live one back.
+      expect(ok(await mcp.call("doctor"))).toMatch(/extension +ok/);
+      expect(catalog.current.source).toBe("live");
+    }, 300_000);
   });
 
   describe("connectivity", () => {

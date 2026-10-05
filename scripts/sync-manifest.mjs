@@ -5,6 +5,8 @@
 // endpoint manifest are kept; the metamodel and toolbox sections are not used by this server.
 //
 // Usage: npm run sync:manifest [-- --url http://localhost:58322 | --from <introspect.json>]
+// The extension's access token, when its mcp-ext.token preference is set, is read from
+// STARUML_EXT_TOKEN, the variable the server reads.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
@@ -19,7 +21,12 @@ const { values: args } = parseArgs({
 async function fetchIntrospection(url) {
   const res = await fetch(`${url}/introspect`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(process.env.STARUML_EXT_TOKEN
+        ? { Authorization: `Bearer ${process.env.STARUML_EXT_TOKEN}` }
+        : {}),
+    },
     body: JSON.stringify({ include: ["endpoints"] }),
   });
   const body = await res.json();

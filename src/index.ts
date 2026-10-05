@@ -29,10 +29,17 @@ export interface CliOptions {
   apiHost: string;
   doctor: boolean;
   tools: ToolSelection;
+  /** The extension's access token; undefined when none is configured. */
+  extToken: string | undefined;
 }
 
 /** Read when `--tools` is absent, for clients that pass environment but no arguments. */
 export const TOOLS_ENV = "STARUML_MCP_TOOLS";
+/**
+ * Read when `--ext-token` is absent. The variable keeps the token out of the process list, where
+ * any local user can read command-line arguments.
+ */
+export const EXT_TOKEN_ENV = "STARUML_EXT_TOKEN";
 
 export interface Stdio {
   stdin: Readable;
@@ -68,6 +75,10 @@ export function parseArgs(
     )
     .option("--doctor", "Check the StarUML setup, print a report and exit (1 on failure)", false)
     .option(
+      "--ext-token <token>",
+      `Access token staruml-mcp-extension requires (env ${EXT_TOKEN_ENV}); sent as Authorization: Bearer`,
+    )
+    .option(
       "--tools <tiers>",
       `Extension tools to list: core, all or comma-separated names (env ${TOOLS_ENV}; default ${DEFAULT_TOOLS})`,
     )
@@ -81,6 +92,7 @@ export function parseArgs(
     apiHost: string;
     doctor: boolean;
     tools?: string;
+    extToken?: string;
   }>();
   const fromEnv = env[TOOLS_ENV];
 
@@ -96,6 +108,8 @@ export function parseArgs(
       raw.tools !== undefined
         ? parseToolSelection(raw.tools)
         : parseToolSelection(fromEnv || DEFAULT_TOOLS, TOOLS_ENV),
+    // An empty value means no token, as an empty mcp-ext.token preference does in the extension.
+    extToken: (raw.extToken ?? env[EXT_TOKEN_ENV]) || undefined,
   };
 }
 
@@ -108,6 +122,7 @@ export async function main(
     host: options.apiHost,
     port: options.apiPort,
     extPort: options.extPort,
+    extToken: options.extToken,
   });
   const { checks, catalog } = await diagnose(client);
   const state = new CatalogState(catalog, options.tools);
@@ -125,6 +140,7 @@ export async function main(
     apiHost: options.apiHost,
     apiPort: options.apiPort,
     extPort: options.extPort,
+    extToken: options.extToken,
     name: packageJson.name,
     version: packageJson.version,
     catalog: state,

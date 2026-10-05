@@ -402,4 +402,122 @@ describe("StarUMLClient", () => {
       }
     });
   });
+
+  describe("access token", () => {
+    const headersOf = (call: number): Headers =>
+      new Headers(fetchSpy.mock.calls[call]![1]?.headers as Record<string, string>);
+
+    it("sends Authorization: Bearer to the extension only", async () => {
+      const client = new StarUMLClient({ extToken: "s3cret" });
+      mockJsonResponse({ success: true });
+      mockJsonResponse({ success: true });
+      fetchSpy.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+      fetchSpy.mockResolvedValueOnce(new Response("OK", { status: 200 }));
+
+      await client.callExtension("/is_modified", {});
+      await client.getAllDiagramsInfo();
+      await client.extensionBanner();
+      await client.ping();
+
+      expect(headersOf(0).get("Authorization")).toBe("Bearer s3cret");
+      expect(headersOf(0).get("Content-Type")).toBe("application/json");
+      expect(headersOf(1).get("Authorization")).toBeNull();
+      expect(headersOf(2).get("Authorization")).toBe("Bearer s3cret");
+      expect(headersOf(3).get("Authorization")).toBeNull();
+      expect(client.hasExtToken).toBe(true);
+    });
+
+    it.each([undefined, ""])("sends no Authorization for the token %j", async (extToken) => {
+      const client = new StarUMLClient({ extToken });
+      mockJsonResponse({ success: true });
+
+      await client.callExtension("/is_modified", {});
+
+      expect(headersOf(0).get("Authorization")).toBeNull();
+      expect(client.hasExtToken).toBe(false);
+    });
+  });
+
+  describe("extension refusals", () => {
+    const refusal = (code: string, status: number, headers: Record<string, string> = {}) =>
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: false, code, error: `refused: ${code}` }), {
+          status,
+          headers,
+        }),
+      );
+
+    it.each([
+      [
+        "UNAUTHORIZED",
+        401,
+        {},
+        "The extension requires an access token. In StarUML, Tools > MCP Extension > Server Info",
+      ],
+      ["FORBIDDEN_ORIGIN", 403, {}, "Preferences > MCP Extension > Allowed Origins"],
+      ["PAYLOAD_TOO_LARGE", 413, {}, "Max Request Body (KiB) or, for /batch, Max Batch Ops"],
+      ["UNSUPPORTED_MEDIA_TYPE", 415, {}, "Content-Type: application/json"],
+      [
+        "RATE_LIMITED",
+        429,
+        { "Retry-After": "12" },
+        "Retry in 12 s; Preferences > MCP Extension > Commands per Minute limits /execute_command",
+      ],
+      ["RATE_LIMITED", 429, {}, "Retry later; "],
+      ["TIMEOUT", 504, {}, "Request Timeout (s), but StarUML may still finish the work"],
+    ])("explains %s (HTTP %d)", async (code, status, headers, hint) => {
+      refusal(code, status, headers);
+
+      const error = await caught(new StarUMLClient().callExtension("/execute_command", {}));
+
+      expect(error).toMatchObject({ code, status, message: `refused: ${code}` });
+      expect(error.hint).toContain(hint);
+    });
+
+    it("says a token that was sent was rejected", async () => {
+      refusal("UNAUTHORIZED", 401);
+
+      const error = await caught(
+        new StarUMLClient({ extToken: "old" }).callExtension("/is_modified", {}),
+      );
+
+      expect(error.hint).toMatch(/^The extension rejected the access token this server sent\./);
+      expect(error.hint).toContain("clear Preferences > MCP Extension > Access Token");
+    });
+
+    it("explains a refusal by status when a proxy answered without a code", async () => {
+      mockTextResponse("Gateway Timeout", 504, "Gateway Timeout");
+
+      const error = await caught(new StarUMLClient().callExtension("/export_pdf", {}));
+
+      expect(error.code).toBe(ErrorCode.UpstreamError);
+      expect(error.hint).toContain("Request Timeout (s)");
+    });
+
+    it("gives no extension hint for the built-in API", async () => {
+      mockTextResponse("Unauthorized", 401);
+
+      const error = await caught(new StarUMLClient().getAllDiagramsInfo());
+
+      expect(error.code).toBe(ErrorCode.RequestRejected);
+      expect(error.hint).toBeUndefined();
+    });
+
+    it.each([
+      ["UNAUTHORIZED", 401],
+      ["FORBIDDEN_ORIGIN", 403],
+    ])("makes the banner probe throw %s, since every call would fail", async (code, status) => {
+      refusal(code, status);
+
+      const error = await caught(new StarUMLClient().extensionBanner());
+
+      expect(error).toMatchObject({ code, status, slug: "/", upstream: "extension" });
+    });
+
+    it("treats another error status on GET / as no banner", async () => {
+      mockTextResponse("oops", 500);
+
+      await expect(new StarUMLClient().extensionBanner()).resolves.toBeUndefined();
+    });
+  });
 });

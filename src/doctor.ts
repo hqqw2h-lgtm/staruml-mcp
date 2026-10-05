@@ -11,7 +11,7 @@ import {
   isCompatibleVersion,
   parseManifest,
 } from "./manifest.js";
-import type { StarUMLClient } from "./staruml-client.js";
+import { TOKEN_HELP, type StarUMLClient } from "./staruml-client.js";
 
 export type CheckStatus = "ok" | "warn" | "fail";
 
@@ -45,8 +45,9 @@ export async function diagnose(
   options: DiagnoseOptions = {},
 ): Promise<Diagnosis> {
   const checks: Check[] = [nodeCheck(options.nodeVersion ?? process.versions.node)];
-  const [builtinUp, banner] = await Promise.all([client.ping(), client.extensionBanner()]);
-  const extensionUp = banner !== undefined;
+  const [builtinUp, probe] = await Promise.all([client.ping(), readBanner(client)]);
+  const { banner, refusal } = probe;
+  const extensionUp = banner !== undefined || refusal !== undefined;
 
   checks.push(
     builtinUp
@@ -74,10 +75,35 @@ export async function diagnose(
     return finish(checks, bundledCatalog());
   }
 
+  if (refusal !== undefined) {
+    // The extension runs but refuses every request; the tools stay listed so their calls carry
+    // the same hint.
+    checks.push({
+      name: "extension",
+      status: "fail",
+      detail: `${client.extensionUrl} refused the request: ${refusal.message} [${refusal.code}]`,
+      // A 401 or 403 without the extension's codes came from something in between.
+      remedy: refusal.hint ?? `Check what answers at ${client.extensionUrl}. ${TOKEN_HELP}`,
+    });
+    return finish(checks, bundledCatalog());
+  }
+
   const { catalog, extensionCheck, staruml } = await readManifest(client, banner);
   checks.push(extensionCheck);
   if (staruml !== undefined) checks.push(starumlCheck(staruml));
   return finish(checks, catalog);
+}
+
+/** The banner, or why the extension refused to give it. */
+async function readBanner(
+  client: StarUMLClient,
+): Promise<{ banner?: unknown; refusal?: StarUMLApiError }> {
+  try {
+    return { banner: await client.extensionBanner() };
+  } catch (error) {
+    // extensionBanner throws nothing else; a failed connection is an undefined banner.
+    return { refusal: error as StarUMLApiError };
+  }
 }
 
 async function readManifest(
@@ -126,7 +152,11 @@ async function readManifest(
       source: "live",
       enabled: true,
     },
-    extensionCheck: { name: "extension", status: "ok", detail: `${version} at ${at}` },
+    extensionCheck: {
+      name: "extension",
+      status: "ok",
+      detail: `${version} at ${at}${client.hasExtToken ? " (access token sent)" : ""}`,
+    },
     staruml: manifest.staruml.version,
   };
 }
