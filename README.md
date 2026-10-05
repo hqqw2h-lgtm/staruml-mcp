@@ -96,6 +96,39 @@ Restart Claude Desktop.
 
 Point your MCP client at `npx -y staruml-mcp` (stdio) or `http://localhost:58323/mcp` (HTTP).
 
+### Agent skill and plugins
+
+`plugins/` packages a `staruml` agent skill that teaches the workflow: `doctor` first, the
+`build_diagram` spec of each diagram kind with an example, when Mermaid goes where, `batch` and its
+`$name` references, `describe_endpoints` / `call_endpoint`, viewing and exporting, keeping tokens
+down, and the access token. The Claude Code plugin also registers this server over stdio
+(`npx -y staruml-mcp`, passing `STARUML_EXT_TOKEN` through when it is set).
+
+```bash
+# Claude Code
+claude plugin marketplace add ezrabrilliant/staruml-mcp
+claude plugin install staruml@staruml
+# or from a clone: claude --plugin-dir ./plugins/claude-code
+
+# Codex CLI (skill only; add the MCP server as above)
+codex plugin marketplace add ezrabrilliant/staruml-mcp
+codex plugin add staruml@staruml
+
+# GitHub Copilot CLI (skill only)
+copilot plugin marketplace add ezrabrilliant/staruml-mcp
+copilot plugin install staruml@staruml
+```
+
+The marketplaces are `.claude-plugin/marketplace.json`, `.agents/plugins/marketplace.json` and
+`.github/plugin/marketplace.json`. `plugins/claude-code/skills/staruml/SKILL.md` is the one copy
+edited by hand; `npm run sync:skills` writes the Codex and Copilot copies, and the test suite fails
+when they are stale. Every `json <tool>` block in the skill is a tool call that
+`tests/skill.test.ts` runs through the in-memory transport against the HTTP stand-ins, and the live
+suite runs again against StarUML, so an example that stops working fails the build.
+
+[docs/comparison-drawio.md](docs/comparison-drawio.md) compares this server with jgraph/drawio-mcp
+feature by feature, including what each lacks.
+
 ## CLI
 
 ```

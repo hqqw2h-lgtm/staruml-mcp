@@ -24,6 +24,7 @@ import { CORE_ENDPOINTS, parseToolSelection } from "../../src/tiers.js";
 import { closedPort } from "../support/fixture.js";
 import { decodePng, differingRows } from "../support/png.js";
 import { connect, text, UI_CAPABILITIES, type ConnectedClient } from "../support/mcp.js";
+import { skillExamples } from "../support/skill.js";
 import { loadViewer } from "../support/viewer.js";
 import { rpc } from "../support/sse.js";
 
@@ -1113,6 +1114,28 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         "ok",
       );
       expect(await diagramNames()).toContain("Class Diagram by Mermaid");
+    });
+  });
+
+  /**
+   * Every tool call of the agent skill against the real StarUML, in the order the skill gives
+   * them: the offline run only proves the server accepts them, this one that the extension builds
+   * what each spec describes (#12).
+   */
+  describe("skill examples (#12)", () => {
+    it.each(skillExamples())("SKILL.md line $line: $tool", async ({ tool, args }) => {
+      const result = await mcp.call(tool, args);
+      expect(result.isError, text(result)).toBeFalsy();
+      if (tool === "build_diagram") {
+        const built = JSON.parse(text(result)) as { diagram: Summary; ids: object };
+        expect(built.diagram._id).toEqual(expect.any(String));
+        expect(Object.keys(built.ids).length).toBeGreaterThan(0);
+      }
+      if (tool === "batch") {
+        expect(JSON.parse(text(result))).toMatchObject({
+          succeeded: (args.ops as unknown[]).length,
+        });
+      }
     });
   });
 
