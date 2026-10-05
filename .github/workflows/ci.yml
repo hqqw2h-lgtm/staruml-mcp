@@ -65,3 +65,6 @@ jobs:
       # hosted runners have 4 vCPUs; they catch order-of-magnitude regressions, not noise.
       - name: Load test
         run: npm run load-test -- --requests 2000 --max-p99-ms 2000 --min-rps 100
+
+      - name: Load test (batch)
+        run: npm run load-test -- --batch --requests 2000 --max-p99-ms 2000 --min-rps 100

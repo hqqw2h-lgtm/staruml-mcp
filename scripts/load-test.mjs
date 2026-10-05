@@ -3,13 +3,15 @@
 //
 // Starts the built server (dist/index.js) as a child process and drives tools/call
 // get_all_diagrams_info at each concurrency level, or with --call-endpoint call_endpoint
-// find_elements, which adds the manifest schema check and the extension port. By default StarUML
+// find_elements, which adds the manifest schema check and the extension port, or with --batch a
+// batch of four read-only ops, one with a "$name" reference, which adds the per-op schema checks. By default StarUML
 // is replaced by an in-process stub so the numbers measure this server, not StarUML; --live
 // targets the real StarUML on 58321 and the extension on 58322 instead.
 //
 // Usage: npm run build && node scripts/load-test.mjs
 //          [--concurrency 50,200] [--requests 5000] [--warmup 500]
-//          [--max-p99-ms N] [--min-rps N] [--live] [--call-endpoint]
+//          [--max-p99-ms N] [--min-rps N] [--live] [--call-endpoint | --batch]
+// STARUML_EXT_TOKEN reaches the server, so --live works with an extension that requires a token.
 // Exits non-zero on any failed request or a breached budget.
 
 import { spawn } from "node:child_process";
@@ -27,16 +29,31 @@ const { values: args } = parseArgs({
     "min-rps": { type: "string" },
     live: { type: "boolean", default: false },
     "call-endpoint": { type: "boolean", default: false },
+    batch: { type: "boolean", default: false },
   },
 });
 
 const callEndpoint = args["call-endpoint"];
-const params = callEndpoint
-  ? {
-      name: "call_endpoint",
-      arguments: { name: "find_elements", body: { type: "UMLClass", limit: 10 } },
-    }
-  : { name: "get_all_diagrams_info", arguments: {} };
+/** Read-only, so a --live run leaves the open project as it was. */
+const BATCH_OPS = [
+  { path: "/get_project_info", as: "p" },
+  { path: "/get_element_by_id", body: { id: "$p.project" } },
+  { path: "/find_elements", body: { type: "UMLClass", limit: 10 } },
+  { path: "/is_modified" },
+];
+const params = args.batch
+  ? { name: "batch", arguments: { ops: BATCH_OPS } }
+  : callEndpoint
+    ? {
+        name: "call_endpoint",
+        arguments: { name: "find_elements", body: { type: "UMLClass", limit: 10 } },
+      }
+    : { name: "get_all_diagrams_info", arguments: {} };
+const label = args.batch
+  ? `batch of ${BATCH_OPS.length} ops`
+  : callEndpoint
+    ? "call_endpoint find_elements"
+    : params.name;
 
 const levels = args.concurrency.split(",").map(Number);
 const requestsPerLevel = Number(args.requests);
@@ -58,7 +75,7 @@ let failed = false;
 try {
   await runLevel(Math.min(50, levels[0]), warmup);
   console.log(
-    `target: ${args.live ? "live StarUML" : "stub upstream"}, tool: ${callEndpoint ? "call_endpoint find_elements" : params.name}, node ${process.version}, ${requestsPerLevel} requests per level`,
+    `target: ${args.live ? "live StarUML" : "stub upstream"}, tool: ${label}, node ${process.version}, ${requestsPerLevel} requests per level`,
   );
   console.log("concurrency  requests   req/s    p50 ms   p90 ms   p99 ms   max ms  errors");
   for (const concurrency of levels) {
@@ -158,17 +175,27 @@ async function startStub() {
   const manifest = JSON.parse(
     readFileSync(new URL("../src/extension-manifest.json", import.meta.url), "utf8"),
   );
+  const element = { _id: "AAAAAAFF+qBtyKM79qY=", _type: "UMLClass", name: "Order", _parent: "M" };
+  const project = { _id: "AAAAAAFF+qBtyKM79qZ=", _type: "Project", name: "Untitled" };
+  const page = { count: 1, elements: [element], nextCursor: null };
   const replies = {
     "GET /": JSON.stringify(manifest.extension),
-    "POST /introspect": JSON.stringify({ success: true, data: manifest }),
-    "POST /find_elements": JSON.stringify({
+    "POST /batch": JSON.stringify({
       success: true,
       data: {
-        count: 1,
-        elements: [{ _id: "AAAAAAFF+qBtyKM79qY=", _type: "UMLClass", name: "Order", _parent: "M" }],
-        nextCursor: null,
+        atomic: true,
+        succeeded: 4,
+        failed: 0,
+        results: [
+          { path: "/get_project_info", as: "p", success: true, data: { project } },
+          { path: "/get_element_by_id", success: true, data: project },
+          { path: "/find_elements", success: true, data: page },
+          { path: "/is_modified", success: true, data: { modified: false } },
+        ],
       },
     }),
+    "POST /introspect": JSON.stringify({ success: true, data: manifest }),
+    "POST /find_elements": JSON.stringify({ success: true, data: page }),
   };
   const diagrams = JSON.stringify({
     success: true,

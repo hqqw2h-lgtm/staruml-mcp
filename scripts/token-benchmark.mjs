@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Token benchmark: replays three modelling scenarios against the current server and against three
+// Token benchmark: replays four modelling scenarios against the current server and against three
 // earlier servers loaded with `git show`: 56864ca (before issue #5), 0cfc06b (issue #5, the last
 // hand-written tool set) and 45bedd4 (phase 2a: one tool per manifest endpoint). All talk to the
 // HTTP stand-ins the tests use, so the benchmark runs offline and every server sees identical
@@ -14,6 +14,11 @@
 // A step whose tool a server does not list goes through call_endpoint, and the scenario first
 // asks describe_endpoints for every such endpoint it uses, in one call whose result is counted:
 // a model has to read a schema before it can fill a body.
+//
+// The two native-diagram scenarios have a second plan for a server that lists the batch tool:
+// every creation in one /batch call, and /export_diagram instead of the built-in image endpoint.
+// Endpoints used inside the batch count as used for describe_endpoints, since each op body
+// follows its endpoint's schema.
 // Tokens are o200k_base counts from gpt-tokenizer; other tokenizers differ by a few percent
 // but the ratios are what matters.
 //
@@ -100,16 +105,143 @@ function createdWithView(type, name, diagram) {
   return { view: summary(`${type}View`, null, diagram), model: created };
 }
 
-const useCaseDiagram = summary("UMLUseCaseDiagram", "Checkout", model);
-const actors = ["Customer", "Clerk"].map((n) => ({
-  name: n,
-  created: createdWithView("UMLActor", n, useCaseDiagram),
-}));
-const useCases = ["Place order", "Pay"].map((n) => ({
-  name: n,
-  created: createdWithView("UMLUseCase", n, useCaseDiagram),
-}));
+/**
+ * A native diagram built from `nodes` and `edges`, as the two ways a server offers: one call per
+ * element (`steps`), or one /batch call whose ops name earlier results with "$name" references
+ * (`batch`), answered the way extension 0.3.0 answers it (src/handlers/batch.ts).
+ */
+function nativeDiagram(type, name, nodes, edges) {
+  const diagram = summary(type, name, model);
+  const created = nodes.map((n) => ({ ...n, data: createdWithView(n.type, n.name, diagram) }));
+  const edgeData = edges.map(([tail]) => ({
+    view: summary("UMLAssociationView", null, diagram),
+    model: summary("UMLAssociation", "", created[tail].data.model),
+  }));
+  const nodeArgs = (n, diagramId) => ({
+    type: n.type,
+    parentId: model._id,
+    diagramId,
+    name: n.name,
+    x: n.x,
+    y: n.y,
+  });
+  const edgeArgs = (tailViewId, headViewId, diagramId) => ({
+    type: "UMLAssociation",
+    parentId: model._id,
+    diagramId,
+    tailViewId,
+    headViewId,
+  });
+  const steps = [
+    step(
+      "create_diagram",
+      { type, parentId: model._id, name },
+      "extension",
+      "/create_diagram",
+      diagram,
+    ),
+    ...created.map((n) =>
+      step(
+        "create_element_with_view",
+        nodeArgs(n, diagram._id),
+        "extension",
+        "/create_element_with_view",
+        n.data,
+      ),
+    ),
+    ...edges.map(([tail, head], i) =>
+      step(
+        "create_edge_with_view",
+        edgeArgs(created[tail].data.view._id, created[head].data.view._id, diagram._id),
+        "extension",
+        "/create_edge_with_view",
+        edgeData[i],
+      ),
+    ),
+  ];
+  const ops = [
+    { path: "/create_diagram", body: { type, parentId: model._id, name }, as: "d" },
+    ...created.map((n, i) => ({
+      path: "/create_element_with_view",
+      body: nodeArgs(n, "$d"),
+      as: `n${i}`,
+    })),
+    ...edges.map(([tail, head]) => ({
+      path: "/create_edge_with_view",
+      body: edgeArgs(`$n${tail}.view`, `$n${head}.view`, "$d"),
+    })),
+  ];
+  const datas = [diagram, ...created.map((n) => n.data), ...edgeData];
+  const answer = {
+    atomic: true,
+    succeeded: ops.length,
+    failed: 0,
+    results: ops.map((op, i) => ({
+      path: op.path,
+      ...(op.as === undefined ? {} : { as: op.as }),
+      success: true,
+      data: datas[i],
+    })),
+  };
+  return { diagram, steps, batch: step("batch", { ops }, "extension", "/batch", answer) };
+}
 
+const useCase = nativeDiagram(
+  "UMLUseCaseDiagram",
+  "Checkout",
+  [
+    { type: "UMLActor", name: "Customer" },
+    { type: "UMLActor", name: "Clerk" },
+    { type: "UMLUseCase", name: "Place order" },
+    { type: "UMLUseCase", name: "Pay" },
+  ].map((n, i) => ({ ...n, x: 100 + 200 * i, y: 100 })),
+  [
+    [0, 2],
+    [0, 3],
+    [1, 3],
+  ],
+);
+
+const shop = nativeDiagram(
+  "UMLClassDiagram",
+  "Shop",
+  ["Customer", "Order", "OrderLine", "Product"].map((name, i) => ({
+    type: "UMLClass",
+    name,
+    x: 60 + 220 * i,
+    y: 120,
+  })),
+  [
+    [0, 1],
+    [1, 2],
+    [2, 3],
+  ],
+);
+
+const findModel = step("find_elements", { type: "UMLModel" }, "extension", "/find_elements", {
+  count: 1,
+  elements: [model],
+  nextCursor: null,
+});
+
+const saveAs = (filename) =>
+  step("save_project", { filename }, "extension", "/save_project", { filename });
+
+/** What /export_diagram answers for a PNG; the image itself is the same stub as the built-in's. */
+const exported = {
+  diagram: shop.diagram._id,
+  format: "png",
+  mimeType: "image/png",
+  width: 1012,
+  height: 236,
+  bytes: 21540,
+  base64: "iVBORw0KGgo=",
+};
+
+/**
+ * `steps` is what every server can replay; `batched` is the same work for a server that lists
+ * the batch tool: one /batch for the creations and /export_diagram for the preview.
+ */
 const scenarios = [
   {
     name: "Mermaid class diagram + preview",
@@ -141,60 +273,11 @@ const scenarios = [
         filename: null,
         project,
       }),
-      step("find_elements", { type: "UMLModel" }, "extension", "/find_elements", {
-        count: 1,
-        elements: [model],
-        nextCursor: null,
-      }),
-      step(
-        "create_diagram",
-        { type: "UMLUseCaseDiagram", parentId: model._id, name: "Checkout" },
-        "extension",
-        "/create_diagram",
-        useCaseDiagram,
-      ),
-      ...[...actors, ...useCases].map((e, i) =>
-        step(
-          "create_element_with_view",
-          {
-            type: i < actors.length ? "UMLActor" : "UMLUseCase",
-            parentId: model._id,
-            diagramId: useCaseDiagram._id,
-            name: e.name,
-            x: 100 + 200 * i,
-            y: 100,
-          },
-          "extension",
-          "/create_element_with_view",
-          e.created,
-        ),
-      ),
-      ...[
-        [actors[0], useCases[0]],
-        [actors[0], useCases[1]],
-        [actors[1], useCases[1]],
-      ].map(([tail, head]) =>
-        step(
-          "create_edge_with_view",
-          {
-            type: "UMLAssociation",
-            parentId: model._id,
-            diagramId: useCaseDiagram._id,
-            tailViewId: tail.created.view._id,
-            headViewId: head.created.view._id,
-          },
-          "extension",
-          "/create_edge_with_view",
-          {
-            view: summary("UMLAssociationView", null, useCaseDiagram),
-            model: summary("UMLAssociation", "", tail.created.model),
-          },
-        ),
-      ),
-      step("save_project", { filename: "/work/checkout.mdj" }, "extension", "/save_project", {
-        filename: "/work/checkout.mdj",
-      }),
+      findModel,
+      ...useCase.steps,
+      saveAs("/work/checkout.mdj"),
     ],
+    batched: [findModel, useCase.batch, saveAs("/work/checkout.mdj")],
   },
   {
     name: "Inspect and refactor a class model",
@@ -238,6 +321,27 @@ const scenarios = [
       step("save_project", {}, "extension", "/save_project", { filename: "/work/shop.mdj" }),
     ],
   },
+  {
+    name: "Native class diagram + export",
+    steps: [
+      findModel,
+      ...shop.steps,
+      step(
+        "get_diagram_image_by_id",
+        { diagramId: shop.diagram._id },
+        "builtin",
+        "/get_diagram_image_by_id",
+        "iVBORw0KGgo=",
+      ),
+      saveAs("/work/shop.mdj"),
+    ],
+    batched: [
+      findModel,
+      shop.batch,
+      step("export_diagram", { id: shop.diagram._id }, "extension", "/export_diagram", exported),
+      saveAs("/work/shop.mdj"),
+    ],
+  },
 ];
 
 // --- Replay ------------------------------------------------------------------------------------
@@ -269,6 +373,7 @@ async function measure(createServer) {
     const listed = new Set(tools.map((t) => t.name));
     const perScenario = [];
     for (const scenario of scenarios) {
+      const steps = listed.has("batch") && scenario.batched ? scenario.batched : scenario.steps;
       let results = 0;
       const call = async (name, args) => {
         const result = await client.callTool({ name, arguments: args });
@@ -277,18 +382,20 @@ async function measure(createServer) {
         }
         results += textTokens(result);
       };
-      const unlisted = [...new Set(scenario.steps.map((s) => s.tool))].filter(
-        (t) => !listed.has(t),
+      // A batch op's body follows its endpoint's schema, which the model must have read too.
+      const used = steps.flatMap((s) =>
+        s.tool === "batch" ? s.args.ops.map((op) => op.path.slice(1)) : [s.tool],
       );
+      const unlisted = [...new Set(used)].filter((t) => !listed.has(t));
       if (unlisted.length > 0) await call("describe_endpoints", { names: unlisted });
-      for (const s of scenario.steps) {
+      for (const s of steps) {
         const fixture = s.upstream === "builtin" ? builtin : extension;
         fixture.reply(s.slug, { body: ok(s.data) });
         await (listed.has(s.tool)
           ? call(s.tool, s.args)
           : call("call_endpoint", { name: s.tool, body: s.args }));
       }
-      perScenario.push({ definitions, results, total: definitions + results });
+      perScenario.push({ definitions, results, total: definitions + results, calls: steps.length });
     }
     return { definitions, tools: tools.length, perScenario };
   } finally {
@@ -321,19 +428,19 @@ const now = servers.at(-1);
 const rows = [
   ...scenarios.map((s, i) => ({
     scenario: s.name,
-    calls: s.steps.length,
     pick: (m) => m.perScenario[i],
   })),
   {
     scenario: "all scenarios",
-    calls: sum(
-      scenarios.map((s) => ({ n: s.steps.length })),
-      "n",
-    ),
-    pick: (m) => ({ results: sum(m.perScenario, "results"), total: sum(m.perScenario, "total") }),
+    pick: (m) => ({
+      results: sum(m.perScenario, "results"),
+      total: sum(m.perScenario, "total"),
+      calls: sum(m.perScenario, "calls"),
+    }),
   },
-].map(({ scenario, calls, pick }) => {
-  const row = { scenario, calls };
+].map(({ scenario, pick }) => {
+  // Calls of a baseline / of the current server, describe_endpoints not included.
+  const row = { scenario, calls: `${pick(servers[0]).calls}/${pick(now).calls}` };
   for (const m of servers) row[`results ${m.label}`] = pick(m).results;
   for (const m of servers) row[`total ${m.label}`] = pick(m).total;
   for (const m of servers.slice(0, -1)) {
@@ -352,3 +459,15 @@ console.table(rows);
 console.log(
   `--tools all: ${all.definitions} definition tokens (${all.tools} tools), all scenarios ${sum(all.perScenario, "total")}.`,
 );
+/** The 60%-below-pre-#5 target of issue #5, over `count` scenarios from the first. */
+function target(count) {
+  const totals = (m) => sum(m.perScenario.slice(0, count), "total");
+  const goal = Math.floor(totals(servers[0]) * 0.4);
+  const reached = totals(now);
+  const definitions = now.definitions * count;
+  console.log(
+    `Target over the first ${count} scenarios (60% below ${servers[0].label} ${totals(servers[0])}): <= ${goal}; now ${reached} (${pct(totals(servers[0]), reached)}), ${reached <= goal ? "met" : `${reached - goal} over`}; definitions alone ${definitions}.`,
+  );
+}
+target(3);
+target(scenarios.length);
