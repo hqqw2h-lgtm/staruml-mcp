@@ -373,6 +373,15 @@ describe("diagram_quality and improve_diagram", () => {
     expect(text(qualityResult({ count: 0 }, {}))).toBe('{"count":0}');
     expect(text(qualityResult(null, {}))).toBe("null");
     expect(JSON.parse(text(qualityResult({ score: 90 }, {})))).toEqual({ score: 90 });
+    // A diagram past a hard limit scores at most 59 and says which (#38); none says nothing.
+    const failing = { ...SCORED, score: 59, failures: ["aspect 3.14 > 3"] };
+    expect(JSON.parse(text(qualityResult(failing, {})))).toMatchObject({
+      score: 59,
+      failures: ["aspect 3.14 > 3"],
+    });
+    expect(JSON.parse(text(qualityResult({ ...SCORED, failures: [] }, {})))).not.toHaveProperty(
+      "failures",
+    );
     expect(text(improveResult(null, {}))).toBe("null");
     expect(text(improveResult({ quality: { score: 1 } }, {}))).toBe('{"quality":{"score":1}}');
   });

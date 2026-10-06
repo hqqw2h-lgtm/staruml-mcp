@@ -45,11 +45,11 @@ const FAMILIES =
 const LISTED: Record<string, string> = {
   kind: "Required with spec; activity|usecase read a Mermaid flowchart so.",
   spec: `${SHAPES} ${FAMILIES}`,
-  mermaid: "Instead of spec; its title names the diagram unless name is given.",
+  mermaid: "Instead of spec; its title is the default name.",
   name: "Diagram name; \\n or <br/> breaks lines.",
   upsert: "Add only what the same-named diagram lacks.",
   prune: "With upsert, also delete what the spec lacks.",
-  dryRun: "Change nothing; answer the plan and its batch ops.",
+  dryRun: "Change nothing; answer the plan.",
   direction: "Layout direction.",
   layout: "Preset flow-|hierarchy- + down|up|right|left; default by kind.",
 };

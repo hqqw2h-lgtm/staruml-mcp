@@ -35,17 +35,26 @@ export function countsByRule(findings: unknown): unknown {
  * The loop's report as `{score, target, iterations, findings}`: `rating` is the score in fifths
  * (4 needs 80), `passes` is score >= target, `before` and `steps` say how the loop got there,
  * which the next call does not need. Left findings stay, counted by rule: a report with one
- * finding left is 25 o200k_base tokens against 62 (StarUML 7.1.1, a two-class build).
+ * finding left is 25 o200k_base tokens against 62 (StarUML 7.1.1, a two-class build). So do
+ * `failures`, the hard limits extension #38 caps the score at 59 for (aspect past the profile's
+ * maxAspect, more boxes than maxNodes): no relayout fixes them, so the next call has to split
+ * the diagram, and an empty list says nothing.
  */
 export function compactQuality(quality: unknown): unknown {
   if (!isObject(quality) || typeof quality.score !== "number") return quality;
-  const { score, target, iterations, findings } = quality;
+  const { score, target, iterations, findings, failures } = quality;
   return {
     score,
     ...(target === undefined ? {} : { target }),
     ...(iterations === undefined ? {} : { iterations }),
     ...(findings === undefined ? {} : { findings: countsByRule(findings) }),
+    ...hardFailures(failures),
   };
+}
+
+/** `{failures}` when the list names any, else nothing. */
+export function hardFailures(failures: unknown): { failures?: unknown } {
+  return Array.isArray(failures) && failures.length > 0 ? { failures } : {};
 }
 
 interface Rename {

@@ -70,18 +70,6 @@ function payload<T>(result: CallToolResult): T {
   return JSON.parse(ok(result)) as T;
 }
 
-/**
- * Whether the running extension publishes `path` as the bundled manifest does. Phase 2l runs
- * against an extension whose next release is in progress; where an endpoint changed, the
- * assertions that depend on its old behaviour wait for the next manifest sync.
- */
-let runningManifest: typeof BUNDLED_MANIFEST | undefined;
-function sameAsBundled(path: string): boolean {
-  const entry = (m: typeof BUNDLED_MANIFEST | undefined) =>
-    JSON.stringify(m?.endpoints.find((e) => e.path === path));
-  return entry(runningManifest) === entry(BUNDLED_MANIFEST);
-}
-
 function failure(result: CallToolResult): { code: string; message: string; status?: number } {
   expect(result.isError, text(result)).toBe(true);
   return (result.structuredContent as { error: { code: string; message: string } }).error;
@@ -137,7 +125,6 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     const diagnosis = await diagnose(new StarUMLClient());
     expect(healthy(diagnosis.checks), JSON.stringify(diagnosis.checks)).toBe(true);
     catalog = new CatalogState(diagnosis.catalog);
-    runningManifest = diagnosis.catalog.compiled.manifest;
     mcp = await connect({ catalog });
     listed = new Set((await mcp.client.listTools()).tools.map((t) => t.name));
     // A null filename (never saved) is pruned from the result.
@@ -681,6 +668,9 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
     it("lays out, moves, resizes, styles and reorders views", async () => {
       ok(await call("layout_diagram", { diagram: classDiagramId, direction: "LR" }));
+      // Extension #38 sizes views to their content as it makes them, so fit resizes only views
+      // sized off their content since, such as this one.
+      ok(await call("resize_node", { ref: ids.bookView, width: 600, height: 400 }));
       // preset echoes the argument and is dropped from the answer.
       const laid = payload<{ separations: { node: number; rank: number }; fitted: number }>(
         await call("layout_diagram", {
@@ -692,9 +682,13 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         }),
       );
       expect(laid.separations).toMatchObject({ node: 40, rank: 80 });
-      // The extension's next release sizes views to their content when it builds them, so its
-      // fit finds nothing left to resize; the bundled 0.3.0 always resized some.
-      if (sameAsBundled("/layout_diagram")) expect(laid.fitted).toBeGreaterThan(0);
+      // The resized view, and any the LR layout above left off its content.
+      expect(laid.fitted).toBeGreaterThanOrEqual(1);
+      const fitted = payload<Summary>(
+        await call("get_element_by_id", { ref: ids.bookView, fields: ["width", "height"] }),
+      );
+      expect(fitted.width).toBeLessThan(600);
+      expect(fitted.height).toBeLessThan(400);
       expect(
         payload<{ edges: number }>(
           await call("route_edges", { diagram: classDiagramId, lineStyle: "rectilinear" }),
@@ -1839,7 +1833,13 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         readFileSync(new URL("../fixtures/thingsboard.oo.json", import.meta.url), "utf8"),
       ) as { system: string; classes: unknown[] };
       interface Derived {
-        diagrams: { kind: string; name: string; score?: number; created?: number }[];
+        diagrams: {
+          kind: string;
+          name: string;
+          diagram?: string;
+          score?: number;
+          created?: number;
+        }[];
         counts: { diagrams: number; created: number; updated: number; deleted: number };
         quality: { min: number; mean: number; passing: number; failing?: string[] };
       }
@@ -1977,13 +1977,13 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
               "mindmap",
             ]),
           );
-          // The in-progress extension scores what a reader sees (labels over text, shared edge
-          // lines, ...), which takes ThingsBoard's worst diagram from 82 to 59; until the
-          // manifest is synced, the bundled metric's floor applies to its mean only.
-          const sameMetric = sameAsBundled("/diagram_quality");
-          expect(sameMetric ? derived.quality.min : derived.quality.mean).toBeGreaterThanOrEqual(
-            80,
-          );
+          // Extension #38's metric, fitted to human ratings: every diagram of the class-view set
+          // scores 80 or more. Class - Rule Engine is the one drawn past 3:1 (aspect 3.14), which
+          // the metric allows on a diagram within the page; it scores 93 and fails no limit.
+          const below = derived.diagrams.filter((d) => (d.score ?? 0) < 80);
+          expect(below).toEqual([]);
+          expect(derived.quality.min).toBeGreaterThanOrEqual(80);
+          expect(derived.quality.failing ?? []).toEqual([]);
           expect(tokens).toBeLessThan(3000);
         },
       );
@@ -1997,9 +1997,17 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           const again = payload<Derived>(await ooCall("derive_diagrams", { scope: tb.system }));
 
           expect(again.counts).toMatchObject({ created: 0, updated: 0, deleted: 0 });
-          expect(again.diagrams.map((d) => [d.name, d.score])).toEqual(
-            derived.diagrams.map((d) => [d.name, d.score]),
+          // Extension 0.3.0 (phase 1j) answers Deployment - Monolith's first derive with the
+          // loop's 94, while diagram_quality of the stored diagram, and every derive after, reads
+          // 98 with nothing changed: the one score the first answer understates.
+          const scores = (list: Derived["diagrams"]) =>
+            Object.fromEntries(list.map((d) => [d.name, d.score]));
+          const changed = Object.entries(scores(again.diagrams)).filter(
+            ([name, score]) => scores(derived.diagrams)[name] !== score,
           );
+          expect(changed).toEqual([["Deployment - Monolith", 98]]);
+          expect(scores(derived.diagrams)["Deployment - Monolith"]).toBe(94);
+          expect(again.diagrams.map((d) => d.name)).toEqual(derived.diagrams.map((d) => d.name));
           expect(text(await ooCall("diagram_as_text", { diagram: first.name }))).toBe(before);
         },
       );
@@ -2076,15 +2084,41 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       it("reads, reviews and scores the derived model", { timeout: 120_000 }, async () => {
         const explained = text(await ooCall("explain_model", { scope: tb.system, maxChars: 2000 }));
         expect(explained.split("\n")[0]).toMatch(new RegExp(`^${tb.system}: \\d+ packages`));
-        expect(explained).toMatch(/\[cut at maxChars; raise it or narrow scope\]$/);
+        // Extension #40's marker names the section and the cursor; this server adds none.
+        const marker =
+          /\n\[truncated in (\w+) at (\d+) of (\d+) chars; call again with cursor: (\d+)[^\]]*\]$/;
+        const [, section, at, total, cursor] = marker.exec(explained)!;
+        expect(section).toBe("classes");
+        expect(cursor).toBe(at);
+        expect(explained).not.toContain("[cut at maxChars");
+        const next = text(
+          await ooCall("explain_model", {
+            scope: tb.system,
+            sections: ["classes"],
+            maxChars: 2000,
+            cursor: Number(cursor),
+          }),
+        );
+        expect(next.length).toBeGreaterThan(0);
+        expect(Number(total)).toBeGreaterThan(Number(at));
+        const lifecycles = text(
+          await ooCall("explain_model", { scope: tb.system, sections: ["lifecycles"] }),
+        );
+        expect(lifecycles).not.toMatch(/\(class\)/);
+        expect(lifecycles).toContain("Device lifecycle");
         const lint = payload<{ count: number; findings?: { rule: string; fix: string }[] }>(
           await ooCall("model_lint", { scope: tb.system, limit: 5 }),
         );
         expect(lint.count).toBeGreaterThanOrEqual(lint.findings?.length ?? 0);
-        const detected = payload<{ detections?: unknown[] }>(
+        // Extension #40: 0.8 by default, so every candidate answered is at least that sure.
+        const detected = payload<{ detections?: { confidence: number }[]; count?: number }>(
           await ooCall("detect_patterns", { scope: tb.system }),
         );
-        expect(Array.isArray(detected.detections ?? [])).toBe(true);
+        for (const d of detected.detections ?? []) expect(d.confidence).toBeGreaterThanOrEqual(0.8);
+        const guesses = payload<{ count?: number }>(
+          await ooCall("detect_patterns", { scope: tb.system, minConfidence: 0.3 }),
+        );
+        expect(guesses.count ?? 0).toBeGreaterThanOrEqual(detected.count ?? 0);
         const sequence = derived.diagrams.find((d) => d.kind === "sequence")!;
         const scored = payload<{ score: number; target: number }>(
           await ooCall("diagram_quality", { ref: sequence.name }),
@@ -2193,6 +2227,68 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           ok(await call("set_style_profile", { reset: true }));
         }
       });
+
+      it(
+        "a dry run of the whole model answers a summary unless detail is full (#39)",
+        { timeout: 300_000 },
+        async () => {
+          interface Planned {
+            changes: { created: unknown[] };
+            plan: { ops: number };
+            omitted?: { created?: number };
+          }
+          const spec = { ...tb, system: "ThingsBoardDry" };
+          const brief = await ooCall("build_model", { spec, dryRun: true });
+          const full = await ooCall("build_model", { spec, dryRun: true, detail: "full" });
+          const summary = payload<Planned>(brief);
+          const whole = payload<Planned>(full);
+          // The same ops either way; the summary names 20 of each kind and counts the rest.
+          expect(summary.plan.ops).toBe(whole.plan.ops);
+          expect(summary.changes.created).toHaveLength(20);
+          expect(summary.changes.created.length + summary.omitted!.created!).toBe(
+            whole.changes.created.length,
+          );
+          expect(whole.omitted).toBeUndefined();
+          console.info(
+            `[live] ThingsBoard dry run (#39): ${whole.plan.ops} ops; summary ` +
+              `${countTokens(text(brief))} tokens, detail full ${countTokens(text(full))}`,
+          );
+          expect(countTokens(text(brief))).toBeLessThan(countTokens(text(full)) / 4);
+          expect(failure(await ooCall("explain_model", { scope: "ThingsBoardDry" })).code).toBe(
+            "NOT_FOUND",
+          );
+        },
+      );
+
+      it(
+        "derives the per-package set at 80 or more but for the one the extension reports short (#38)",
+        { timeout: 600_000 },
+        async () => {
+          const perPackage = payload<Derived>(
+            await ooCall("derive_diagrams", {
+              scope: tb.system,
+              policy: { classDiagrams: "perPackage" },
+            }),
+          );
+          const scores = Object.fromEntries(perPackage.diagrams.map((d) => [d.name, d.score]));
+          console.info(`[live] ThingsBoard per package (#38): ${JSON.stringify(scores)}`);
+          expect(perPackage.counts.diagrams).toBeGreaterThanOrEqual(29);
+          // Extension #38's report: eight rule nodes each depend on the same three services, and
+          // every drawing of them within 3:1 scores 69 to 77.
+          expect(
+            perPackage.diagrams.filter((d) => (d.score ?? 0) < 80).map((d) => [d.name, d.score]),
+          ).toEqual([["Rule Engine API", 77]]);
+          expect(perPackage.quality.failing).toEqual(["Rule Engine API 77"]);
+          const short = payload<{ score: number; failures?: string[] }>(
+            await ooCall("diagram_quality", {
+              ref: perPackage.diagrams.find((d) => d.name === "Rule Engine API")!.diagram,
+            }),
+          );
+          // Short of the target, but no hard limit broken: the score is not capped.
+          expect(short).toMatchObject({ score: 77 });
+          expect(short.failures).toBeUndefined();
+        },
+      );
     });
 
     /**
@@ -2377,13 +2473,11 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     it("called every listed tool and every endpoint of the bundled manifest", async () => {
       const { tools } = await mcp.client.listTools();
       const live = catalog.current.compiled.manifest.endpoints.map((e) => e.path);
-      // Phase 2l runs against an extension whose next release is in progress (the quality
-      // metric, layout and build endpoints changed their descriptions and schemas), so the
-      // running manifest has to contain the bundled endpoints rather than equal them; the
-      // exact contract returns with the next manifest sync.
+      // The extension is final at 0.3.0 (phase 1j): the running one offers exactly the bundled
+      // manifest, every endpoint with the same description and schemas.
       const bundled = BUNDLED_MANIFEST.endpoints.map((e) => e.path);
-      expect(live).toEqual(expect.arrayContaining(bundled));
-      expect(catalog.current.compiled.manifest.extension).toEqual(BUNDLED_MANIFEST.extension);
+      expect(live).toEqual(bundled);
+      expect(catalog.current.compiled.manifest).toEqual(BUNDLED_MANIFEST);
       const generic = ["describe_endpoints", "call_endpoint"];
       expect(
         [...tools.map((t) => t.name), ...bundled.map((p) => toolName(p))].filter(

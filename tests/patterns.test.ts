@@ -442,4 +442,42 @@ describe("answer shapes", () => {
     expect(countedPlan(data)).toEqual({ ...data, plan: { ops: 0 } });
     expect(countedPlan(null)).toBeNull();
   });
+
+  it("count a summary dry run's omitted ops and keep what the answer still leaves out (#39)", () => {
+    const ops = Array.from({ length: 20 }, () => ({ path: "/create_element" }));
+    const omitted = { created: 6, updated: 0, ops: 6, steps: 6 };
+
+    // With changes the steps are dropped, so only the changes' counts stay.
+    expect(
+      countedPlan({ dryRun: true, changes: { created: [] }, omitted, plan: { ops, creates: [] } }),
+    ).toEqual({
+      dryRun: true,
+      changes: { created: [] },
+      plan: { ops: 26 },
+      omitted: { created: 6 },
+    });
+    // Without changes the plan's steps stay, and so does their count.
+    expect(countedPlan({ dryRun: true, omitted, plan: { ops, creates: [] } })).toEqual({
+      dryRun: true,
+      plan: { ops: 26, creates: [] },
+      omitted: { created: 6, steps: 6 },
+    });
+    // Nothing left out: no omitted at all.
+    expect(
+      countedPlan({
+        dryRun: true,
+        changes: {},
+        omitted: { created: 0, updated: 0, ops: 0, steps: 4 },
+        plan: { ops },
+      }),
+    ).toEqual({ dryRun: true, changes: {}, plan: { ops: 20 } });
+    expect(countedPlan({ dryRun: true, omitted: null, plan: { ops } })).toEqual({
+      dryRun: true,
+      plan: { ops: 20 },
+    });
+    expect(countedPlan({ dryRun: true, omitted: { ops: "x" }, plan: { ops } })).toEqual({
+      dryRun: true,
+      plan: { ops: 20 },
+    });
+  });
 });

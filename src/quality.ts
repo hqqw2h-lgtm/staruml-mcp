@@ -9,7 +9,7 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { z } from "zod";
 import { shortInput, type ManifestEntry } from "./manifest.js";
-import { countsByRule } from "./reports.js";
+import { countsByRule, hardFailures } from "./reports.js";
 import { jsonResult } from "./tool-result.js";
 
 export const LINT_DIAGRAM = "lint_diagram";
@@ -72,9 +72,9 @@ export function findingsResult(data: unknown, input: Json): CallToolResult {
   );
 }
 
-/** The extension's descriptions list the nine measures and the loop's steps in 330 and 640 characters. */
+/** The extension's descriptions list the measures and the loop's steps in 710 and 630 characters. */
 export const DIAGRAM_QUALITY_DESCRIPTION =
-  "Score a diagram's layout 0-100 against a target; penalties say what costs points.";
+  "Score a layout 0-100; penalties say what costs points, failures what caps it.";
 
 export const IMPROVE_DIAGRAM_DESCRIPTION =
   "Re-lay out a diagram by the style profile until it scores its target.";
@@ -116,7 +116,8 @@ function diagramName(diagram: unknown): unknown {
  * the penalties that cost points (the zero ones left out, the largest first) and the findings
  * counted by rule. `rating` and `passes` follow from the score and the target, and the raw
  * `metrics` are what the penalties are computed from: for a two-class diagram from StarUML 7.1.1
- * the answer goes from 189 o200k_base tokens to 27.
+ * the answer goes from 189 o200k_base tokens to 27. `failures` stays when it names a hard limit
+ * (reports.ts `hardFailures`).
  */
 export function qualityResult(data: unknown, input: Json): CallToolResult {
   const answer = data as Json | null;
@@ -132,6 +133,7 @@ export function qualityResult(data: unknown, input: Json): CallToolResult {
       target: answer.target,
       penalties: Object.fromEntries(penalties),
       findings: countsByRule(answer.findings),
+      ...hardFailures(answer.failures),
     },
     input,
   );

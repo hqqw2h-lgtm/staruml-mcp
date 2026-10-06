@@ -73,6 +73,16 @@ describe("compactQuality", () => {
     expect(compactQuality({ score: 70 })).toEqual({ score: 70 });
   });
 
+  it("keeps the hard limits a failing diagram broke, and drops an empty list (#38)", () => {
+    const failures = ["aspect 3.14 > 3", "61 boxes > 60"];
+    expect(compactQuality({ ...QUALITY, score: 59, failures })).toMatchObject({
+      score: 59,
+      failures,
+    });
+    expect(compactQuality({ score: 90, failures: [] })).toEqual({ score: 90 });
+    expect(compactQuality({ score: 90, failures: "none" })).toEqual({ score: 90 });
+  });
+
   it.each([[null], [7], [{ min: 82, mean: 90, passing: 25, failing: [] }]])(
     "passes %j, which is not the loop's report, as it is",
     (value) => {

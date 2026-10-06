@@ -1998,6 +1998,13 @@
                 },
                 "description": "Names off the rules that the profile only reports (fix none, or no fix matches a custom pattern)."
               },
+              "escaped": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Kept names holding / . # @ ( ) , or \\, as a path ref writes them escaped (name -> escaped); or rename them in the spec, keeping the id."
+              },
               "styled": {
                 "type": "integer",
                 "minimum": -9007199254740991,
@@ -2278,6 +2285,13 @@
                   "type": "string"
                 },
                 "description": "Names off the rules that the profile only reports (fix none, or no fix matches a custom pattern)."
+              },
+              "escaped": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Kept names holding / . # @ ( ) , or \\, as a path ref writes them escaped (name -> escaped); or rename them in the spec, keeping the id."
               },
               "styled": {
                 "type": "integer",
@@ -4725,6 +4739,13 @@
                   "additionalProperties": false
                 },
                 "description": "/lint_diagram findings left, by rule."
+              },
+              "failures": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Hard limits broken: aspect past the profile's maxAspect on a diagram larger than the page, more boxes than maxNodes."
               }
             },
             "required": [
@@ -7455,6 +7476,13 @@
                 },
                 "description": "Names off the rules that the profile only reports (fix none, or no fix matches a custom pattern)."
               },
+              "escaped": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Kept names holding / . # @ ( ) , or \\, as a path ref writes them escaped (name -> escaped); or rename them in the spec, keeping the id."
+              },
               "styled": {
                 "type": "integer",
                 "minimum": -9007199254740991,
@@ -7544,6 +7572,13 @@
                   "additionalProperties": false
                 },
                 "description": "/lint_diagram findings left, by rule."
+              },
+              "failures": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Hard limits broken: aspect past the profile's maxAspect on a diagram larger than the page, more boxes than maxNodes."
               }
             },
             "required": [
@@ -8829,7 +8864,7 @@
     },
     {
       "path": "/build_model",
-      "description": "Make or update a model from an object-level spec, without diagrams, as one undo step: packages (contexts), classes with members and responsibilities (documentation), relationships (owns, has, uses, isA, implements, knows, association), actors and use cases, collaborations as interactions with lifelines and messages, lifecycles as state machines. The spec is strict (additionalProperties false, no geometry or colour fields); its view sections (classViews, useCaseViews, activities, erd, components, deployments, features) are stored with the model as a hidden tag for /derive_diagrams. dryRun lists the changes and the /batch ops; upsert updates the model of the same name.",
+      "description": "Make or update a model from an object-level spec, without diagrams, as one undo step: packages (contexts), classes with members and responsibilities (documentation), relationships (owns, has, uses, isA, implements, knows, association), actors and use cases, collaborations as interactions with lifelines and messages, lifecycles as state machines. The spec is strict (additionalProperties false, no geometry or colour fields); its view sections (classViews, useCaseViews, activities, erd, components, deployments, features) are stored with the model as a hidden tag for /derive_diagrams. Relationship types are these verbs only: a UML word (composition, generalization...) is refused with the verb to write. dryRun answers the counts with the first 20 changes and /batch ops (detail full: every one); upsert updates the model of the same name.",
       "readOnly": false,
       "destructive": false,
       "request": {
@@ -9100,13 +9135,7 @@
                         "isA",
                         "implements",
                         "knows",
-                        "association",
-                        "composition",
-                        "aggregation",
-                        "dependency",
-                        "generalization",
-                        "realization",
-                        "directed"
+                        "association"
                       ],
                       "description": "owns: composition: from is the whole (end1, composite), to the part; has: aggregation: from is the whole (end1, shared), to the part; uses: dependency: from is the client, to the supplier; isA: generalization: from is the specific, to the general; implements: interface realization: from implements the interface to; knows: directed association: from navigates to to; association: association with no navigability or aggregation"
                     },
@@ -9948,7 +9977,15 @@
           },
           "dryRun": {
             "type": "boolean",
-            "description": "Answer the changes and the exact /batch ops, and change nothing."
+            "description": "Answer the changes and the /batch ops, and change nothing; detail says how many."
+          },
+          "detail": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "full"
+            ],
+            "description": "With dryRun: summary (default; /build_model with result full defaults to full) lists the first 20 changes, ops and steps of each kind with the counts of the rest in omitted, strings in ops cut at 200 characters; full lists every one whole. A 645-op ThingsBoard model's full dry run is 80 KB."
           },
           "result": {
             "type": "string",
@@ -10292,6 +10329,39 @@
             "additionalProperties": false,
             "description": "With dryRun: what applying runs."
           },
+          "omitted": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "updated": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "ops": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "steps": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "created",
+              "updated",
+              "ops",
+              "steps"
+            ],
+            "additionalProperties": false,
+            "description": "With a summary dry run: how many of each were left out of changes and plan."
+          },
           "style": {
             "type": "object",
             "properties": {
@@ -10329,6 +10399,13 @@
                   "type": "string"
                 },
                 "description": "Names off the rules that the profile only reports (fix none, or no fix matches a custom pattern)."
+              },
+              "escaped": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Kept names holding / . # @ ( ) , or \\, as a path ref writes them escaped (name -> escaped); or rename them in the spec, keeping the id."
               },
               "styled": {
                 "type": "integer",
@@ -10926,7 +11003,7 @@
     },
     {
       "path": "/explain_model",
-      "description": "The model as compact text to reason about: per package each class with its responsibilities (documentation), what it owns, has, knows, is, implements and uses, and its operations; each collaboration's messages; each lifecycle's transitions; each actor's use cases. Read-only.",
+      "description": "The model as compact text to reason about, by section: summary; classes (per package each class with its responsibilities, what it owns, has, knows, is, implements and uses, and its operations); collaborations (each one's messages); lifecycles (each one's transitions); useCases (each actor's use cases); views (the view sections stored for /derive_diagrams). sections picks some, scope narrows to a package, maxChars bounds the answer: longer text ends with a marker naming the section it stopped in and the cursor to pass to read on. Read-only.",
       "readOnly": true,
       "destructive": false,
       "request": {
@@ -10938,11 +11015,33 @@
             "minLength": 1,
             "description": "A model or package; default the project. Id or path."
           },
+          "sections": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "summary",
+                "classes",
+                "collaborations",
+                "lifecycles",
+                "useCases",
+                "views"
+              ]
+            },
+            "description": "Only these sections, in the text's order; default all."
+          },
           "maxChars": {
             "type": "integer",
             "minimum": 200,
             "maximum": 9007199254740991,
-            "description": "Default 20000; longer text is cut."
+            "description": "Default 20000; longer text is cut at a line end and a marker line follows."
+          },
+          "cursor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Where to start in the text, the next of a cut answer; default 0."
           },
           "ref": {
             "type": "string",
@@ -10962,6 +11061,30 @@
           },
           "truncated": {
             "type": "boolean"
+          },
+          "next": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "With truncated: the cursor that reads on from the cut."
+          },
+          "stoppedIn": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "classes",
+              "collaborations",
+              "lifecycles",
+              "useCases",
+              "views"
+            ],
+            "description": "With truncated: the section cut."
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "With truncated: the whole text's length."
           }
         },
         "required": [
@@ -11353,7 +11476,15 @@
           },
           "dryRun": {
             "type": "boolean",
-            "description": "Answer what would be made and set, and change nothing."
+            "description": "Answer what would be made and set, and change nothing; detail says how many."
+          },
+          "detail": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "full"
+            ],
+            "description": "With dryRun: summary (default; /build_model with result full defaults to full) lists the first 20 changes, ops and steps of each kind with the counts of the rest in omitted, strings in ops cut at 200 characters; full lists every one whole. A 645-op ThingsBoard model's full dry run is 80 KB."
           }
         },
         "required": [
@@ -11655,6 +11786,39 @@
             ],
             "additionalProperties": false
           },
+          "omitted": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "updated": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "ops": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "steps": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "created",
+              "updated",
+              "ops",
+              "steps"
+            ],
+            "additionalProperties": false,
+            "description": "With a summary dry run: how many of each were left out of changes and plan."
+          },
           "style": {
             "type": "object",
             "properties": {
@@ -11692,6 +11856,13 @@
                   "type": "string"
                 },
                 "description": "Names off the rules that the profile only reports (fix none, or no fix matches a custom pattern)."
+              },
+              "escaped": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Kept names holding / . # @ ( ) , or \\, as a path ref writes them escaped (name -> escaped); or rename them in the spec, keeping the id."
               },
               "styled": {
                 "type": "integer",
@@ -11782,6 +11953,13 @@
                   "additionalProperties": false
                 },
                 "description": "/lint_diagram findings left, by rule."
+              },
+              "failures": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Hard limits broken: aspect past the profile's maxAspect on a diagram larger than the page, more boxes than maxNodes."
               }
             },
             "required": [
@@ -11812,7 +11990,7 @@
     },
     {
       "path": "/detect_patterns",
-      "description": "Find instances of the library's patterns in the model by structure: roles bound along the relationships the pattern prescribes, scored by the share of its element types, properties, members and relationship ends the model has. Answers candidates with their confidence (1: everything the pattern prescribes), the elements in each role and what is missing. Read-only.",
+      "description": "Find instances of the library's patterns in the model by structure: roles bound along the relationships the pattern prescribes, scored by the share of its element types, properties, members and relationship ends the model has. Answers candidates at or above minConfidence (default 0.8) with their confidence (1: everything the pattern prescribes, as /apply_pattern builds it), the elements in each role and what is missing; a candidate whose elements a better one of the same pattern already binds is dropped and counted in duplicates. Read-only.",
       "readOnly": true,
       "destructive": false,
       "request": {
@@ -11836,7 +12014,7 @@
             "type": "number",
             "minimum": 0,
             "maximum": 1,
-            "description": "Default 0.6."
+            "description": "Default 0.8: below it a candidate is mostly a guess from names and shape."
           },
           "limit": {
             "type": "integer",
@@ -11855,6 +12033,12 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991,
             "description": "Candidates found, before limit."
+          },
+          "duplicates": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Candidates dropped: a better one of the same pattern binds all their elements."
           },
           "detections": {
             "type": "array",
@@ -12909,7 +13093,7 @@
     },
     {
       "path": "/diagram_quality",
-      "description": "Score a diagram 0–100 from its view geometry, no rendering: overlap of boxes, edges through nodes, crossing edges, edge length variation, bends, alignment, whitespace balance, aspect ratio and size against the style profile's page. rating is 1–5 (4 needs 80); target is the profile's threshold for the kind. Read-only.",
+      "description": "Score a diagram 0–100 from its view geometry, no rendering: boxes on boxes, labels printed over text or far from their edge or crossed by another edge, edges through nodes, crossing edges, edges sharing one line, boxes cut by a lane or fragment border, selection handles an export would draw, edge length variation, bends, alignment, whitespace balance, aspect ratio and size against the style profile's page. failures lists hard limits broken (aspect past maxAspect on a diagram larger than the page, more than maxNodes boxes); a failing diagram scores at most 59. rating is 1–5 (4 needs 80); target is the profile's threshold for the kind. The weights are fitted to human ratings (Spearman ≥ 0.7). Read-only.",
       "readOnly": true,
       "destructive": false,
       "request": {
@@ -12996,7 +13180,7 @@
             "additionalProperties": {
               "type": "number"
             },
-            "description": "overlapArea, overlapPairs, overlapRatio, nodeEdgeCrossings, edgeCrossings, lengthVariation, bends, alignment, whitespace, aspect, width, height, nodes, edges."
+            "description": "overlapArea, overlapPairs, overlapRatio, severeOverlaps, labelOverlaps, detachedLabels, labelCrossings, nodeEdgeCrossings, edgeCrossings, sharedSegments, borderCrossings, selected, lengthVariation, bends, alignment, whitespace, aspect, width, height, nodes, edges."
           },
           "penalties": {
             "type": "object",
@@ -13006,7 +13190,7 @@
             "additionalProperties": {
               "type": "number"
             },
-            "description": "Points lost per measure, at most: overlap 30, nodeEdge 20, edgeEdge 15, length 5, bends 5, alignment 10, whitespace 5, aspect 5, page 5."
+            "description": "Points lost per measure, at most: overlap 18, labels 18, nodeEdge 13, edgeEdge 12, shared 5, borders 8, selection 6, length 3, bends 1, alignment 2, whitespace 4, aspect 4, page 6."
           },
           "findings": {
             "type": "array",
@@ -13042,6 +13226,13 @@
               "additionalProperties": false
             },
             "description": "/lint_diagram findings left, by rule."
+          },
+          "failures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Hard limits broken: aspect past the profile's maxAspect on a diagram larger than the page, more boxes than maxNodes."
           }
         },
         "required": [
@@ -13230,6 +13421,13 @@
                   "additionalProperties": false
                 },
                 "description": "/lint_diagram findings left, by rule."
+              },
+              "failures": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Hard limits broken: aspect past the profile's maxAspect on a diagram larger than the page, more boxes than maxNodes."
               }
             },
             "required": [

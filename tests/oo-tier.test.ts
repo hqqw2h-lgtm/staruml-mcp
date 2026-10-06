@@ -143,17 +143,35 @@ describe("oo tier listing", () => {
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     });
     expect(tool("explain_model").description).toBe(EXPLAIN_MODEL_DESCRIPTION);
-    expect(Object.keys(tool("explain_model").inputSchema.properties!)).toEqual([
-      "scope",
-      "maxChars",
-    ]);
+    expect(tool("explain_model").inputSchema.properties).toEqual({
+      scope: { type: "string", description: "Model or package; default the project." },
+      sections: {
+        type: "array",
+        minItems: 1,
+        items: {
+          type: "string",
+          enum: ["summary", "classes", "collaborations", "lifecycles", "useCases", "views"],
+        },
+        description: "Only these; default all.",
+      },
+      maxChars: { description: "Default 20000." },
+      cursor: { description: "A cut answer's next." },
+    });
     expect(tool("model_lint").description).toBe(MODEL_LINT_DESCRIPTION);
     expect(Object.keys(tool("model_lint").inputSchema.properties!)).toEqual(["scope", "rules"]);
     expect(tool("detect_patterns").description).toBe(DETECT_PATTERNS_DESCRIPTION);
     expect(Object.keys(tool("detect_patterns").inputSchema.properties!)).toEqual([
       "scope",
       "patterns",
+      "minConfidence",
     ]);
+    // Extension #40 raised the default from 0.6; the bounds stay for the client to check.
+    expect(tool("detect_patterns").inputSchema.properties!.minConfidence).toEqual({
+      type: "number",
+      minimum: 0,
+      maximum: 1,
+      description: "Default 0.8; lower finds guesses from names and shape.",
+    });
   });
 
   it("parses --tools oo and STARUML_MCP_TOOLS=oo as a closed selection", () => {
@@ -728,9 +746,35 @@ describe("model-first answers", () => {
     });
 
     expect(text(await mcp.call("explain_model", { scope: "Shop" }))).toBe(explained);
+    // An extension before #40 cuts without a marker or a cursor; this server adds the marker.
     expect(text(explainResult({ text: "x", truncated: true }, {}))).toBe(
       "x\n[cut at maxChars; raise it or narrow scope]",
     );
+    // Since #40 the extension's own marker names the cursor, and only it is shown.
+    const cut =
+      "Shop: 0 packages\n[truncated in classes at 271 of 980 chars; call again with cursor: 271, or narrow sections or scope]";
+    extension.reply("/explain_model", {
+      body: {
+        success: true,
+        data: { text: cut, truncated: true, next: 271, stoppedIn: "classes", total: 980 },
+      },
+    });
+    expect(
+      text(
+        await mcp.call("explain_model", {
+          scope: "Shop",
+          sections: ["summary", "classes"],
+          maxChars: 300,
+          cursor: 0,
+        }),
+      ),
+    ).toBe(cut);
+    expect(extension.requests.at(-1)!.body).toEqual({
+      scope: "Shop",
+      sections: ["summary", "classes"],
+      maxChars: 300,
+      cursor: 0,
+    });
     expect(text(explainResult({ count: 1 }, {}))).toBe('{"count":1}');
   });
 

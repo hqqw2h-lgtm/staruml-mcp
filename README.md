@@ -431,9 +431,9 @@ the core tier):
 
 | Endpoint | Does |
 |---|---|
-| `build_model` | A model without diagrams from an object-level spec, in one undo step: packages (`contexts`), classes with members and a `responsibility` that becomes their documentation, relationships named by verb (`owns` composition, `has` aggregation, `uses` dependency, `isA` generalization, `implements` realization, `knows` directed association), actors and use cases, collaborations as interactions, lifecycles as state machines; `upsert` extends the model of the same name, `dryRun` names every change by path. |
-| `apply_pattern` / `list_patterns` / `describe_pattern` / `detect_patterns` / `apply_preset` | A design pattern (the 23 GoF and seven domain patterns, kept as data) applied to existing classes bound by path or to new ones, with every property it prescribes on elements, members and relationship ends / the library / one pattern's roles and properties / instances found in the model by structure, with a confidence and what is missing / a kind's properties (value object, entity, immutable, ...) on one class. |
-| `derive_diagrams` / `explain_model` / `model_lint` | Every diagram a model implies, by rule, in one undo step: a package overview, class diagrams per class view or package, a sequence diagram per collaboration, use case diagrams, a state machine per lifecycle, and the activities, ERD, C4 containers, deployments and feature mind map `build_model` stored with the model; each laid out by the style profile and run through the quality loop; again after a model change, it updates them in place / the model as compact text to reason about / design review: god classes, feature envy, cyclic packages, anaemic entities, single-implementation interfaces, unused classes, uncalled operations, each with a fix line. |
+| `build_model` | A model without diagrams from an object-level spec, in one undo step: packages (`contexts`), classes with members and a `responsibility` that becomes their documentation, relationships named by verb (`owns` composition, `has` aggregation, `uses` dependency, `isA` generalization, `implements` realization, `knows` directed association), actors and use cases, collaborations as interactions, lifecycles as state machines; a UML word (`composition`, `generalization`, ...) as a relationship type is refused with the verb to write; `upsert` extends the model of the same name, `dryRun` names the first 20 changes of each kind by path and counts the rest (`detail: "full"` names every one). |
+| `apply_pattern` / `list_patterns` / `describe_pattern` / `detect_patterns` / `apply_preset` | A design pattern (the 23 GoF and seven domain patterns, kept as data) applied to existing classes bound by path or to new ones, with every property it prescribes on elements, members and relationship ends / the library / one pattern's roles and properties / instances found in the model by structure at or above `minConfidence` (default 0.8), with a confidence and what is missing / a kind's properties (value object, entity, immutable, ...) on one class. |
+| `derive_diagrams` / `explain_model` / `model_lint` | Every diagram a model implies, by rule, in one undo step: a package overview, class diagrams per class view or package, a sequence diagram per collaboration, use case diagrams, a state machine per lifecycle, and the activities, ERD, C4 containers, deployments and feature mind map `build_model` stored with the model; each laid out by the style profile and run through the quality loop; again after a model change, it updates them in place / the model as compact text to reason about, by section (`sections`: summary, classes, collaborations, lifecycles, useCases, views); a cut answer ends with a line naming the section and the `cursor` that reads on / design review: god classes, feature envy, cyclic packages, anaemic entities, single-implementation interfaces, unused classes, uncalled operations, each with a fix line. |
 | `get_style_profile` / `set_style_profile` / `apply_style_profile` / `explain_style_violation` | The project's style profile (naming rules, visuals, layout presets, quality thresholds, `strict`, `blockSaveOnErrors`; built-ins `uml-standard`, `minimal`, `presentation`, `print`) / store one, a built-in or a patch / bring existing names and views in line with it / which rule an element breaks, or whether a name would pass, with a fix. |
 | `diagram_quality` / `improve_diagram` | A diagram's score 0–100 from its geometry (overlap, edges through nodes, crossings, length variation, bends, alignment, whitespace, aspect, page size) against the profile's target / the quality loop on an existing diagram in one undo step: the profile's layout preset, post-processing, lint autofixes, each step kept only when it raises the score. |
 | `sync_operations` / `check_messages` / `describe_type` / `apply_theme` | Add the operations a sequence diagram's messages name to their receivers / list the messages that name none / a metamodel type's properties and their UML meaning / colour a diagram by a theme preset. |
@@ -515,7 +515,11 @@ in 56 tokens, and `ref` and `dryRun` in 74; `target`, `maxIterations`, `relayout
 pass unlisted. `diagram_quality` answers the diagram by name, the score and the target, the
 penalties that cost points (largest first, the zero ones left out) and the lint findings counted
 by rule; the raw metrics, the 1–5 rating and `passes` follow from those and are left out (27
-tokens instead of 189 for a two-class diagram). `improve_diagram` answers the diagram by name and
+tokens instead of 189 for a two-class diagram). Since extension #38 the score is fitted to human
+ratings and a diagram past a hard limit (aspect over the profile's `maxAspect` on a diagram larger
+than the page, more boxes than `maxNodes`) scores at most 59; `failures` names those limits and is
+kept, in this answer and in every compacted `quality` report, whenever it names one: no relayout
+fixes it, the diagram has to be split. `improve_diagram` answers the diagram by name and
 the loop's compacted report. `set_style_profile` answers the profile's name, `strict`,
 `blockSaveOnErrors`, where it is stored and whether it changed, not the whole merged profile
 (about 600 tokens), which `get_style_profile` reads.
@@ -548,7 +552,19 @@ it. Their answers, and those of `apply_preset`, `detect_patterns`, `sync_operati
 `apply_theme` through `call_endpoint`, name elements by path: each role's elements as paths,
 created and updated elements as `{path: type}` and `{path: fields}`, every property set grouped
 as `{path: {field: value}}`, and a dry run's `/batch` ops counted with the "$name" placeholder ids
-left out (its `changes` name every step).
+left out (its `changes` name every step). Since extension #39 those dry runs answer a summary by
+default: the first 20 changes of each kind, with `omitted` counting the rest; the op count here
+adds the omitted ops, so it is what applying runs either way, and `omitted` keeps only the counts
+of lists the answer still has. ThingsBoard's 646-op model answers 914 tokens as a summary and
+20,131 with `detail: "full"` (StarUML 7.1.1, live suite).
+
+`explain_model`, `derive_diagrams` and `detect_patterns` are listed by the `oo` tier.
+`explain_model` lists `scope`, `sections` (with its enum), `maxChars` and `cursor`, and answers
+plain text; since extension #40 a cut answer ends with the extension's own line naming the section
+it stopped in and the cursor to pass next, which this server leaves as it is (an older build's cut
+text gets `[cut at maxChars; raise it or narrow scope]`). `detect_patterns` lists `scope`,
+`patterns` and `minConfidence` (default 0.8, below which a candidate is mostly a guess from names
+and shape).
 
 Since extension #31 and #32 authoring answers carry two reports, compacted wherever they appear
 (`build_diagram`, `build_model`, `apply_pattern`, `layout_diagram`, the single-view creates):

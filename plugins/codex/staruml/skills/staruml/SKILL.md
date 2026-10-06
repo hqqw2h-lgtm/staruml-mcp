@@ -828,15 +828,20 @@ a hand-drawn diagram, say that it needs a server started with another tier.
 1. **Explain the domain back** in a few sentences: contexts, classes with one responsibility
    each, how they relate (section 7's verbs), actors and use cases, the collaborations worth a
    sequence diagram, the lifecycles worth a state machine.
-2. **Write it as one spec** and check it with `dryRun: true`.
+2. **Write it as one spec** and check it with `dryRun: true`. The answer names the first 20
+   changes of each kind and counts the rest in `omitted`; `detail: "full"` names every one. A
+   relationship typed with a UML word (`composition`) is refused with the verb to write (`owns`).
 3. **Build** it: `build_model` makes the model in one undo step.
 4. **Derive**: `derive_diagrams` draws every diagram the model implies by rule (a package
    overview, class diagrams per context or `classViews`, a sequence diagram per collaboration,
    use case diagrams, a state machine per lifecycle, and the activities, ERD, C4, deployment and
    mind map sections), each laid out by the style profile and run through the quality loop. The
-   answer lists each diagram's name and score; `quality.failing` names any below target.
-5. **Look and review**: `view_diagram` on the diagrams that matter, `explain_model` for the
-   whole model as text, `model_lint` for the design (god classes, feature envy, package cycles,
+   answer lists each diagram's name and score; `quality.failing` names any below target. A
+   `diagram_quality` answer with `failures` broke a hard limit (wider than 3:1, too many boxes)
+   and is capped at 59: split it with a `classViews` entry rather than relayout it.
+5. **Look and review**: `view_diagram` on the diagrams that matter (with `path` to write the
+   image to a file), `explain_model` for the whole model as text (`sections: ["classes"]` for
+   one part; a cut answer's last line gives the `cursor` to read on), `model_lint` for the design (god classes, feature envy, package cycles,
    anaemic entities, ...).
 6. **Iterate through the spec**: fix it, `build_model` with `upsert: true`, `derive_diagrams`
    again. Both update in place; the same spec and profile give the same diagrams, so a second

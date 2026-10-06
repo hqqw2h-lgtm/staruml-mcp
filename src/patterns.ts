@@ -46,8 +46,12 @@ export const DETECT_PATTERNS_DESCRIPTION =
 export function detectPatternsInput(entry: ManifestEntry): z.ZodObject {
   return shortInput(
     entry,
-    { scope: "Model or package; default the project.", patterns: "Only these pattern names." },
-    // minConfidence (default 0.6) and limit pass unlisted.
+    {
+      scope: "Model or package; default the project.",
+      patterns: "Only these pattern names.",
+      minConfidence: "Default 0.8; lower finds guesses from names and shape.",
+    },
+    // limit passes unlisted. minConfidence keeps its 0-1 bounds.
     new Set(["patterns"]),
   );
 }

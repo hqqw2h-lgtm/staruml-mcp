@@ -17,7 +17,7 @@ export const EXPLAIN_MODEL = "explain_model";
 export const SYNC_OPERATIONS = "sync_operations";
 export const APPLY_THEME = "apply_theme";
 
-/** One line for tools/list; the extension's description is 520 characters. */
+/** One line for tools/list; the extension's description is 840 characters. */
 export const BUILD_MODEL_DESCRIPTION = "Make or update a model, no diagrams, from an object spec.";
 
 /**
@@ -33,10 +33,14 @@ const SPEC =
 const LISTED: Record<string, string> = {
   spec: SPEC,
   upsert: "Update the same-named model; removes nothing.",
-  dryRun: "Change nothing; answer the changes.",
+  dryRun: "Change nothing; answer the changes (detail full: past 20).",
 };
 
-/** The flags say they are flags, and spec's record type lists as four keywords. */
+/**
+ * The flags say they are flags, and spec's record type lists as four keywords. `detail`, which
+ * the dryRun line names, passes unlisted: its enum and the extension's 260-character description
+ * would cost the core tier about 60 tokens for a call a model makes once per model, if at all.
+ */
 const UNTYPED = new Set(["spec", "upsert", "dryRun"]);
 
 export function buildModelInput(entry: ManifestEntry): z.ZodObject {
@@ -60,13 +64,27 @@ export function modelResult(data: unknown, input: Json): CallToolResult {
  * the answer has `changes`, which name every element made or changed by path, the plan's step
  * lists (`creates`, `updates`, `deletes`) say the same again by "$name" and are dropped too: for
  * Strategy over three classes that is 460 tokens down to 265.
+ *
+ * Since extension #39 a dry run answers a summary unless `detail: "full"`: the first 20 of each
+ * list, with what it left out counted in `omitted`. The op count adds the omitted ops, so it is
+ * what applying runs either way; `omitted` keeps the counts of what the answer still lists (the
+ * steps only where they stay) and is dropped when nothing is left out.
  */
 export function countedPlan(data: unknown): unknown {
   const answer = data as { dryRun?: unknown; plan?: { ops?: unknown } } | null;
   if (answer?.dryRun !== true || !Array.isArray(answer.plan?.ops)) return data;
-  const { plan, ...rest } = answer as Json & { plan: Json & { ops: unknown[] } };
-  const ops = plan.ops.length;
-  return withoutPlaceholders({ ...rest, plan: "changes" in rest ? { ops } : { ...plan, ops } });
+  const { plan, omitted, ...rest } = answer as Json & { plan: Json & { ops: unknown[] } };
+  const left = (omitted ?? {}) as Record<string, unknown>;
+  const ops = plan.ops.length + (typeof left.ops === "number" ? left.ops : 0);
+  const steps = !("changes" in rest);
+  const still = Object.entries(left).filter(
+    ([key, count]) => key !== "ops" && (steps || key !== "steps") && count !== 0,
+  );
+  return withoutPlaceholders({
+    ...rest,
+    plan: steps ? { ...plan, ops } : { ops },
+    ...(still.length > 0 ? { omitted: Object.fromEntries(still) } : {}),
+  });
 }
 
 /** `{_id: "$m0", ...}` objects without the `_id`, recursively; ids of existing elements stay. */
@@ -86,7 +104,7 @@ export const DERIVE_DIAGRAMS_DESCRIPTION =
   "Draw every diagram a model implies, laid out by the style profile, in one undo step.";
 
 export const EXPLAIN_MODEL_DESCRIPTION =
-  "The model as compact text: classes, responsibilities, relationships, operations, flows.";
+  "The model as compact text by section: classes, relationships, operations, flows, views.";
 
 export function deriveDiagramsInput(entry: ManifestEntry): z.ZodObject {
   return shortInput(
@@ -102,11 +120,20 @@ export function deriveDiagramsInput(entry: ManifestEntry): z.ZodObject {
   );
 }
 
+/**
+ * sections lists with its six-name enum, which says what there is to pick; cursor and maxChars
+ * are numbers their descriptions name.
+ */
 export function explainModelInput(entry: ManifestEntry): z.ZodObject {
   return shortInput(
     entry,
-    { scope: "Model or package; default the project.", maxChars: "Default 20000." },
-    new Set(["maxChars"]),
+    {
+      scope: "Model or package; default the project.",
+      sections: "Only these; default all.",
+      maxChars: "Default 20000.",
+      cursor: "A cut answer's next.",
+    },
+    new Set(["maxChars", "cursor"]),
   );
 }
 
@@ -154,13 +181,15 @@ export function deriveResult(data: unknown, input: Json): CallToolResult {
 
 /**
  * The explanation as plain text: as a JSON string every quote and line break in it would be
- * escaped. A cut text says so on a last line.
+ * escaped. A cut text says so on a last line: since extension #40 the extension writes that line
+ * itself, naming the section and the cursor to read on from (`next`), so one without `next` is
+ * an older build's and gets this server's.
  */
 export function explainResult(data: unknown, input: Json): CallToolResult {
-  const answer = data as { text?: unknown; truncated?: unknown } | null;
+  const answer = data as { text?: unknown; truncated?: unknown; next?: unknown } | null;
   if (typeof answer?.text !== "string") return jsonResult(data, input);
   return textResult(
-    answer.truncated === true
+    answer.truncated === true && typeof answer.next !== "number"
       ? `${answer.text}\n[cut at maxChars; raise it or narrow scope]`
       : answer.text,
   );
