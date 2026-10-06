@@ -8,9 +8,13 @@ import fc from "fast-check";
 import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
 import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { CatalogState, describe as describeEndpoints } from "../src/extension-tools.js";
+import {
+  CatalogState,
+  describe as describeEndpoints,
+  HAND_WRITTEN_TOOLS,
+} from "../src/extension-tools.js";
 import { parseArgs } from "../src/index.js";
-import { BUNDLED_MANIFEST } from "../src/manifest.js";
+import { BUNDLED_MANIFEST, compileManifest } from "../src/manifest.js";
 import {
   DERIVE_DIAGRAMS_DESCRIPTION,
   deriveResult,
@@ -19,8 +23,8 @@ import {
 } from "../src/model.js";
 import { DETECT_PATTERNS_DESCRIPTION } from "../src/patterns.js";
 import { MODEL_LINT_DESCRIPTION } from "../src/quality.js";
-import { OO_REACHABLE, OO_TOOLS, parseToolSelection } from "../src/tiers.js";
-import { UpstreamFixture } from "./support/fixture.js";
+import { OO_REACHABLE, OO_TOOLS, parseToolSelection, reaches } from "../src/tiers.js";
+import { styleProfile, UpstreamFixture } from "./support/fixture.js";
 import { connect, text, type ConnectedClient } from "./support/mcp.js";
 
 const HOST = "http://127.0.0.1";
@@ -237,13 +241,15 @@ describe("oo tier refusals", () => {
     }
     expect(extension.requests).toEqual([]);
 
+    extension.reply("/get_style_profile", styleProfile(true));
     const renamed = await mcp.call("call_endpoint", {
       name: "update_element",
       body: { ref: "Shop/Order", field: "name", value: "Purchase" },
     });
     expect(renamed.isError).toBeFalsy();
-    expect(extension.requests.map((r) => r.body)).toEqual([
-      { ref: "Shop/Order", field: "name", value: "Purchase" },
+    expect(extension.requests.map((r) => [r.path, r.body])).toEqual([
+      ["/get_style_profile", {}],
+      ["/update_element", { ref: "Shop/Order", field: "name", value: "Purchase" }],
     ]);
   });
 
@@ -260,10 +266,18 @@ describe("oo tier refusals", () => {
 
   it("reaches a name added to the tier, drawing or not, since the user asked for it", async () => {
     await connectOo("oo,move_views");
+    extension.reply("/get_style_profile", styleProfile(true));
     extension.reply("/move_views", { body: { success: true, data: { moved: 1 } } });
 
     expect(await names()).toContain("move_views");
     expect((await mcp.call("move_views", { refs: ["V1"], dx: 1, dy: 0 })).isError).toBeFalsy();
+    // The user named it, so its override is theirs to pass; the profile is strict all the same.
+    const moved = await mcp.call("call_endpoint", {
+      name: "move_views",
+      body: { refs: ["V1"], dx: 1, dy: 0, override: true },
+    });
+    expect(moved.isError).toBeFalsy();
+    expect(extension.requests.at(-1)!.body).toMatchObject({ override: true });
   });
 
   it("refuses a spec that tries to draw: the OO spec is strict", async () => {
@@ -278,6 +292,205 @@ describe("oo tier refusals", () => {
     });
     expect(text(result)).toMatch(/spec\.classes\.0: Unrecognized keys: "x", "fillColor"/);
     expect(extension.requests).toEqual([]);
+  });
+});
+
+describe("oo tier: the style profile is strict before anything changes", () => {
+  const SPEC = { spec: { system: "Shop", classes: [{ name: "Order" }] } };
+  const built = { body: { success: true, data: { model: { _id: "M1", path: "Shop" } } } };
+  const sent = () => extension.requests.map((r) => [r.path, r.body]);
+
+  it("makes the profile strict, reads it back, then sends the change", async () => {
+    await connectOo();
+    extension.reply("/get_style_profile", styleProfile(false), styleProfile(true));
+    extension.reply("/set_style_profile", {
+      body: { success: true, data: { profile: { name: "uml-standard" }, source: "project" } },
+    });
+    extension.reply("/build_model", built);
+
+    const result = await mcp.call("build_model", SPEC);
+
+    expect(result.isError, text(result)).toBeFalsy();
+    expect(sent()).toEqual([
+      ["/get_style_profile", {}],
+      ["/set_style_profile", { patch: { strict: true } }],
+      ["/get_style_profile", {}],
+      ["/build_model", SPEC],
+    ]);
+  });
+
+  it("only reads a profile that is strict already, before every change", async () => {
+    await connectOo();
+    extension.reply("/get_style_profile", styleProfile(true));
+    extension.reply("/build_model", built);
+
+    await mcp.call("build_model", SPEC);
+    await mcp.call("build_model", SPEC);
+
+    expect(sent().map(([path]) => path)).toEqual([
+      "/get_style_profile",
+      "/build_model",
+      "/get_style_profile",
+      "/build_model",
+    ]);
+  });
+
+  it("refuses the change when the profile is still not strict after setting it", async () => {
+    await connectOo();
+    extension.reply("/get_style_profile", styleProfile(false));
+    extension.reply("/set_style_profile", { body: { success: true, data: { changed: false } } });
+
+    const result = await mcp.call("build_model", SPEC);
+
+    expect(result.structuredContent).toEqual({
+      error: {
+        code: "PROFILE_NOT_STRICT",
+        message:
+          "The oo tier makes the project's style profile strict before it changes anything, and could not: the extension still reports strict: false after setting it",
+        endpoint: "/build_model",
+        hint: expect.stringMatching(/^Nothing was changed\./),
+      },
+    });
+    expect(sent().map(([path]) => path)).not.toContain("/build_model");
+  });
+
+  it.each([
+    ["reading", "/get_style_profile"],
+    ["setting", "/set_style_profile"],
+  ])("refuses the change when %s the profile fails", async (_, failing) => {
+    await connectOo();
+    extension.reply("/get_style_profile", styleProfile(false));
+    extension.reply(failing, {
+      status: 500,
+      body: { success: false, code: "INTERNAL", error: "profile store broke" },
+    });
+
+    const result = await mcp.call("call_endpoint", { name: "undo", body: {} });
+
+    expect(result.structuredContent).toMatchObject({
+      error: { code: "PROFILE_NOT_STRICT", endpoint: "/undo" },
+    });
+    expect(text(result)).toContain(`profile store broke [INTERNAL, ${failing}]`);
+    expect(sent().map(([path]) => path)).not.toContain("/undo");
+  });
+
+  it("reads a profile answer without a profile as not strict", async () => {
+    await connectOo();
+    extension.reply("/get_style_profile", { body: { success: true, data: null } });
+    extension.reply("/set_style_profile", { body: { success: true, data: {} } });
+
+    const result = await mcp.call("call_endpoint", { name: "undo", body: {} });
+
+    expect(result.structuredContent).toMatchObject({ error: { code: "PROFILE_NOT_STRICT" } });
+  });
+
+  it("leaves reads, and replacing the project, alone", async () => {
+    await connectOo();
+    extension.reply("/explain_model", { body: { success: true, data: { text: "Shop" } } });
+    extension.reply("/new_project", { body: { success: true, data: {} } });
+    extension.reply("/get_element_by_id", { body: { success: true, data: { _id: "C1" } } });
+
+    await mcp.call("explain_model", { scope: "Shop" });
+    await mcp.call("call_endpoint", { name: "get_element_by_id", body: { ref: "Shop" } });
+    await mcp.call("call_endpoint", { name: "new_project", body: {} });
+
+    expect(sent().map(([path]) => path)).toEqual([
+      "/explain_model",
+      "/get_element_by_id",
+      "/new_project",
+    ]);
+  });
+
+  it("leaves the core tier's profile as the project has it", async () => {
+    await connectOo("core");
+    extension.reply("/build_model", built);
+
+    await mcp.call("build_model", SPEC);
+
+    expect(sent().map(([path]) => path)).toEqual(["/build_model"]);
+  });
+});
+
+/**
+ * Endpoints whose `override` passes a strict profile (STYLE_LOCKED) rather than
+ * blockSaveOnErrors, read from the manifest's own description of the field.
+ */
+const STRICT_GUARDED = BUNDLED_MANIFEST.endpoints
+  .filter((e) =>
+    /style profile is strict/.test(
+      String(
+        (e.request.properties as Record<string, { description?: string }> | undefined)?.override
+          ?.description,
+      ),
+    ),
+  )
+  .map((e) => e.path.slice(1));
+const OVERRIDABLE = BUNDLED_MANIFEST.endpoints
+  .filter((e) => Object.hasOwn((e.request.properties ?? {}) as object, "override"))
+  .map((e) => e.path.slice(1));
+
+describe("oo tier: STYLE_LOCKED is reachable only through override, which it does not expose", () => {
+  it("reaches one strict-guarded endpoint, update_element, whose view fields it refuses itself", () => {
+    const oo = parseToolSelection("oo");
+    expect(STRICT_GUARDED.length).toBeGreaterThan(5);
+    expect(STRICT_GUARDED.filter((name) => reaches(oo, name))).toEqual(["update_element"]);
+  });
+
+  it.each(OVERRIDABLE.filter((name) => reaches(parseToolSelection("oo"), name)))(
+    "call_endpoint refuses %s with override before anything is sent",
+    async (name) => {
+      await connectOo();
+
+      for (const override of [true, false]) {
+        const result = await mcp.call("call_endpoint", { name, body: { override } });
+        expect(result.structuredContent).toEqual({
+          error: {
+            code: "NOT_IN_TIER",
+            message: "override is not part of the oo tier: the style profile decides",
+            endpoint: `/${name}`,
+            hint: expect.stringMatching(/^The oo tier states the model/),
+          },
+        });
+        expect(text(result)).not.toMatch(WAY_OUT);
+      }
+      expect(extension.requests).toEqual([]);
+    },
+  );
+
+  it("shows override in no schema the tier lists or describes", async () => {
+    await connectOo();
+    const { tools } = await mcp.client.listTools();
+    for (const tool of tools) {
+      expect(Object.keys(tool.inputSchema.properties ?? {}), tool.name).not.toContain("override");
+    }
+    const described = JSON.parse(
+      text(
+        await mcp.call("describe_endpoints", {
+          names: [...OO_REACHABLE.filter((n) => !OO_TOOLS.includes(n))],
+        }),
+      ),
+    ) as Record<string, { request: { properties?: Record<string, unknown> } }>;
+    const overridable = Object.keys(described).filter((n) => OVERRIDABLE.includes(n));
+    expect(overridable.length).toBeGreaterThan(5);
+    for (const [name, { request }] of Object.entries(described)) {
+      expect(Object.keys(request.properties ?? {}), name).not.toContain("override");
+    }
+  });
+
+  it("describes override where the user named the endpoint, and everywhere under core", async () => {
+    await connectOo("oo,move_views");
+    const named = JSON.parse(
+      text(await mcp.call("describe_endpoints", { names: ["move_views", "save_project"] })),
+    ) as Record<string, { request: { properties: Record<string, unknown> } }>;
+    expect(Object.keys(named.move_views!.request.properties)).toContain("override");
+    expect(Object.keys(named.save_project!.request.properties)).not.toContain("override");
+    await mcp.close();
+
+    await connectOo("core");
+    const core = JSON.parse(
+      text(await mcp.call("describe_endpoints", { names: ["save_project"] })),
+    ) as Record<string, { request: { properties: Record<string, unknown> } }>;
+    expect(Object.keys(core.save_project!.request.properties)).toContain("override");
   });
 });
 
@@ -463,11 +676,12 @@ describe("model-first answers", () => {
 
   it("derive_diagrams answers each diagram by kind, name, id, non-zero counts and score", async () => {
     await connectOo();
+    extension.reply("/get_style_profile", styleProfile(true));
     extension.reply("/derive_diagrams", { body: { success: true, data: DERIVED } });
 
     const result = await mcp.call("derive_diagrams", { scope: "ThingsBoard" });
 
-    expect(extension.requests[0]!.body).toEqual({ scope: "ThingsBoard" });
+    expect(extension.requests.at(-1)!.body).toEqual({ scope: "ThingsBoard" });
     // failing: [] is empty and pruned.
     expect(JSON.parse(text(result))).toEqual({
       model: "ThingsBoard",
@@ -537,6 +751,22 @@ describe("model-first answers", () => {
       { scope: "Shop", minConfidence: 0.9 },
       { scope: "Shop", limit: 5, rules: { M001: "off" } },
     ]);
+  });
+
+  it("describe() of a closed tier passes a request schema without properties as it is", () => {
+    // Every endpoint of extension 0.3.0 has properties; a newer one may take no body at all.
+    const endpoints = BUNDLED_MANIFEST.endpoints.map((e) =>
+      e.path === "/undo" ? { ...e, request: { type: "object" } } : e,
+    );
+    const compiled = compileManifest({ ...BUNDLED_MANIFEST, endpoints }, HAND_WRITTEN_TOOLS);
+    const state = new CatalogState(
+      { compiled, source: "bundled", enabled: true },
+      parseToolSelection("oo"),
+    );
+
+    expect(describeEndpoints(state, { names: ["undo"] })).toEqual({
+      undo: expect.objectContaining({ request: { type: "object" } }),
+    });
   });
 
   it("describe() of a closed tier leaves out what it cannot reach", () => {

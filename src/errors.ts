@@ -28,6 +28,11 @@ export const ErrorCode = {
    * only `--allow-tier-switch` permits (issue #19): the tier is the user's choice at launch.
    */
   TierLocked: "TIER_LOCKED",
+  /**
+   * The `oo` tier could not make the project's style profile strict, so it refused to change
+   * anything (issue #19).
+   */
+  ProfileNotStrict: "PROFILE_NOT_STRICT",
 } as const;
 
 export type Upstream = "builtin" | "extension";

@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { CatalogState } from "../src/extension-tools.js";
 import { BUNDLED_MANIFEST } from "../src/manifest.js";
 import { parseToolSelection } from "../src/tiers.js";
-import { UpstreamFixture } from "./support/fixture.js";
+import { styleProfile, UpstreamFixture } from "./support/fixture.js";
 import { connect, text } from "./support/mcp.js";
 import { frontMatter, readSkill, skillExamples } from "./support/skill.js";
 import packageJson from "../package.json" with { type: "json" };
@@ -52,6 +52,7 @@ function serve(): void {
     extension.reply(path, { body: { success: true, data: summary } });
   }
   extension.reply("/batch", { body: { success: true, data: { succeeded: 8, results: [] } } });
+  extension.reply("/get_style_profile", styleProfile(true));
   extension.reply("/export_diagram", {
     body: {
       success: true,

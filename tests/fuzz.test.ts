@@ -10,7 +10,7 @@ import { ErrorCode } from "../src/errors.js";
 import { CatalogState } from "../src/extension-tools.js";
 import { BUNDLED_MANIFEST, toolName } from "../src/manifest.js";
 import { parseToolSelection, reaches } from "../src/tiers.js";
-import { UpstreamFixture } from "./support/fixture.js";
+import { styleProfile, UpstreamFixture } from "./support/fixture.js";
 import { connect, type ConnectedClient } from "./support/mcp.js";
 
 const builtin = new UpstreamFixture();
@@ -31,6 +31,8 @@ beforeAll(async () => {
   for (const { path } of BUNDLED_MANIFEST.endpoints) {
     extension.reply(path, { body: { success: true, data: { path } } });
   }
+  // The oo tier reads the profile before every change and refuses unless it is strict.
+  extension.reply("/get_style_profile", styleProfile(true));
   // apply_pattern and delete_element left the core tier in 0.8.0 and are listed by name.
   mcp = await connect({
     apiHost: "http://127.0.0.1",
@@ -235,8 +237,13 @@ describe("fuzz", () => {
           if (names.includes(name) && !reaches(selection, name) && !sdkRefused) {
             expect(code, name).toBe(ErrorCode.NotInTier);
           }
-          // Whatever reached the extension is an endpoint the tier reaches.
+          // Whatever reached the extension is an endpoint the tier reaches, or the strict
+          // profile the server itself sets before a change (issue #19).
           for (const request of extension.requests.slice(sentBefore)) {
+            if (request.path === "/set_style_profile") {
+              expect(request.body).toEqual({ patch: { strict: true } });
+              continue;
+            }
             expect(reaches(selection, request.path.slice(1)), request.path).toBe(true);
           }
         }),

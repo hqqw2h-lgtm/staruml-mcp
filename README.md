@@ -347,9 +347,17 @@ profile's read side, `apply_style_profile`, `improve_diagram`, saving and export
 `create_*_with_view`, `layout_diagram`, `move_views`, `set_view_style`, ...), for `batch` and
 `execute_command`, which could run those, and for `set_style_profile`, which could turn strict
 mode off; `update_element` setting a view attribute (`left`, `fillColor`, `suppressAttributes`,
-...) is refused the same way. Under a strict style profile the extension refuses the drawing
-endpoints itself (`STYLE_LOCKED`), so a client that bypasses this server cannot draw freely
-either, and `build_model`'s strict spec refuses geometry and colour. `oo,save_project` adds a
+...) is refused the same way, and so is `override` on any endpoint the tier reaches, which
+`describe_endpoints` leaves out of their schemas. Before every call that changes something (any
+endpoint the manifest does not mark read-only, saves and exports included, but not `new_project`
+or `open_project`), the server reads the project's style profile and, when it is not strict, sets
+`strict: true` (`blockSaveOnErrors` stays as the profile has it) and reads it back; a profile it
+cannot make strict refuses the call with `PROFILE_NOT_STRICT` and nothing is sent (issue #19).
+The read costs one local request per change; a session-wide flag would miss an `undo`, a
+`restore_snapshot`, another project or another client turning strict off. With the profile strict
+the extension refuses the drawing endpoints itself (`STYLE_LOCKED`), so a client that bypasses
+this server cannot draw either, and the only way past `STYLE_LOCKED` is `override`, which the
+tier does not expose. `build_model`'s strict spec refuses geometry and colour. `oo,save_project` adds a
 name to the tier; `oo` with `core` or `all` is open again. The prompts follow the tier:
 `model-codebase`, which draws with `build_diagram`, is not listed under `oo`.
 
@@ -637,6 +645,7 @@ A failed tool call returns `isError: true` with a one-line cause, a hint where o
 | extension 0.3.0 codes | Passed through with their HTTP status: `INVALID_ARGUMENT` (400), `UNKNOWN_TYPE` (400), `NOT_FOUND` (404), `UNKNOWN_ENDPOINT` (404, with the upgrade hint), `NO_PROJECT` (409), `STARUML_ERROR` (422, StarUML refused the operation), `DIALOG_REQUIRED` (422, the command or generator would have opened a dialog; the hint points to `describe_commands` for `execute_command` and to `list_code_generators` for code generation, and `details` names the missing arguments), `INTERNAL` (500). An error body's `details` is passed through as `error.details` and, except for a rolled-back batch's results, as a `Details:` line. |
 | extension reference codes | Passed through with a hint: `AMBIGUOUS_REF` (409: a path fits several elements; the hint names up to five of `details.candidates` by path, or by id where their paths collide), `DUPLICATE_NAME` (409: a sibling of that kind has the name; refer to `details.existing` by its path, keep `build_diagram`'s `reuse` on, rename, or pass `allowDuplicateNames: true`), `SNAPSHOT_STALE` (409: the undo history no longer reaches the snapshot; take a new one), `UNSUPPORTED_SYNTAX` (422: diagram text with a construct StarUML cannot draw; the message names it and its line). |
 | `NOT_IN_TIER` | Raised by `call_endpoint` and `describe_endpoints` before any request under a closed tier (`--tools oo`) for an endpoint the tier leaves out, or an `update_element` of a view attribute; the hint explains the model-first alternative (change the model with `build_model`, then `derive_diagrams` and `improve_diagram`) and never names a way out of the tier. |
+| `PROFILE_NOT_STRICT` | Under `--tools oo`, before a call that changes something: the project's style profile could not be made strict (reading or setting it failed, or it still reads `strict: false`). The message says which; nothing was sent. |
 | `TIER_LOCKED` | `doctor({tools})` asked for a tier that reaches more than the current one, without `--allow-tier-switch`; nothing changed. The hint gives the model-first alternative and says only the user can start the server with a wider tier. |
 | extension style codes | Passed through with a hint: `STYLE_LOCKED` (403: the project's style profile is `strict`, so the endpoints that place, size or colour views by hand refuse; the hint names `improve_diagram`, `apply_style_profile`, a rebuild, `override: true` for a change the user asked for, and `set_style_profile({patch: {strict: false}})`), `SAVE_BLOCKED` (409: the profile's `blockSaveOnErrors` refuses saving and exporting while `uml_lint` or `model_lint` report errors; the hint names the first ones from `details.findings` and `override: true`). |
 | extension request checks | Passed through with a hint naming the setting: `UNAUTHORIZED` (401: no or wrong access token; how to set or clear it), `FORBIDDEN_ORIGIN` (403: an `Origin` header not in Allowed Origins), `PAYLOAD_TOO_LARGE` (413: Max Request Body (KiB) or Max Batch Ops), `UNSUPPORTED_MEDIA_TYPE` (415: not `application/json`), `RATE_LIMITED` (429: Commands per Minute, with the `Retry-After` seconds), `TIMEOUT` (504: Request Timeout (s); the work may still complete). A 401/403/413/415/429/504 without these codes, as from a proxy, gets the same hint. |

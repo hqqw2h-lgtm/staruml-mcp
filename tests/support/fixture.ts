@@ -21,6 +21,23 @@ const UNAUTHORIZED = {
 };
 
 /**
+ * /get_style_profile of a project whose profile is strict, which the oo tier checks before every
+ * call that changes something (issue #19).
+ */
+export function styleProfile(strict: boolean): Reply {
+  return {
+    body: {
+      success: true,
+      data: {
+        profile: { name: "uml-standard", strict, blockSaveOnErrors: false },
+        source: strict ? "project" : "preferences",
+        builtIns: ["uml-standard", "minimal", "presentation", "print"],
+      },
+    },
+  };
+}
+
+/**
  * Stand-in for StarUML's built-in API (58321) or staruml-mcp-extension (58322). Routes reply
  * with a fixed status and body; unknown POST paths get the extension's 404 envelope.
  */

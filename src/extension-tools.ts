@@ -106,13 +106,15 @@ import {
   patternResult,
 } from "./patterns.js";
 import { withReports } from "./reports.js";
-import { SET_STYLE_PROFILE, setProfileResult } from "./style.js";
+import { ensureStrictProfile, SET_STYLE_PROFILE, setProfileResult } from "./style.js";
 import type { StarUMLClient } from "./staruml-client.js";
 import {
   CORE_ENDPOINTS,
   DEFAULT_TOOLS,
   ENDPOINT_GROUPS,
   endpointGroup,
+  exposesOverride,
+  needsStrictProfile,
   OO_TOOLS,
   parseToolSelection,
   reaches,
@@ -398,7 +400,7 @@ function specs(server: McpServer, client: StarUMLClient, state: CatalogState): T
       ? {
           name: tool.name,
           fingerprint: tool.fingerprint,
-          register: () => registerGenerated(server, client, tool),
+          register: () => registerGenerated(server, client, state, tool),
         }
       : {
           name: tool.name,
@@ -435,6 +437,7 @@ function specs(server: McpServer, client: StarUMLClient, state: CatalogState): T
 function registerGenerated(
   server: McpServer,
   client: StarUMLClient,
+  state: CatalogState,
   tool: GeneratedTool,
 ): RegisteredTool {
   return server.registerTool(
@@ -442,9 +445,25 @@ function registerGenerated(
     { description: tool.description, inputSchema: tool.inputSchema, annotations: tool.annotations },
     async (input: Record<string, unknown>) =>
       runTool(actionOf(tool.name), async () =>
-        resultOf(tool.name, await client.callExtension(tool.path, input), input),
+        resultOf(tool.name, await send(client, state, tool, input), input),
       ),
   );
+}
+
+/**
+ * Every extension tool sends through here: under a closed tier a call that changes something
+ * waits until the project's style profile is strict, and is refused when it cannot be made so.
+ */
+async function send(
+  client: StarUMLClient,
+  state: CatalogState,
+  tool: GeneratedTool,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  if (needsStrictProfile(state.selection, tool.name, tool.entry.readOnly === true)) {
+    await ensureStrictProfile(client, tool.path);
+  }
+  return client.callExtension(tool.path, body);
 }
 
 /** Endpoints whose answers are reshaped for the model; the rest are compact JSON. */
@@ -506,7 +525,7 @@ function registerShortListed(
     async (input: Record<string, unknown>) =>
       runTool(actionOf(tool.name), async () => {
         const body = validated(state, tool, input);
-        return resultOf(tool.name, await client.callExtension(tool.path, body), body);
+        return resultOf(tool.name, await send(client, state, tool, body), body);
       }),
   );
 }
@@ -523,6 +542,7 @@ function validated(
 ): Record<string, unknown> {
   const { body, used } = canonicalBody(tool, input);
   refuseDrawing(state, tool, body);
+  refuseOverride(state, tool, body);
   const parsed = tool.requestSchema.safeParse(body);
   if (!parsed.success) {
     const issues = parsed.error.issues.map(
@@ -564,6 +584,23 @@ function refuseDrawing(state: CatalogState, tool: GeneratedTool, body: Record<st
       code: ErrorCode.NotInTier,
       endpoint: tool.path,
       hint: "Change the model and let derive_diagrams or improve_diagram lay the views out.",
+    },
+  );
+}
+
+/**
+ * `override` past a strict profile or `blockSaveOnErrors`, refused under a closed tier for what
+ * it reaches by default (`exposesOverride`). Without it, a STYLE_LOCKED or SAVE_BLOCKED from the
+ * extension is final there.
+ */
+function refuseOverride(state: CatalogState, tool: GeneratedTool, body: Record<string, unknown>) {
+  if (!Object.hasOwn(body, "override") || exposesOverride(state.selection, tool.name)) return;
+  throw new ToolInputError(
+    `override is not part of the ${state.selection.label} tier: the style profile decides`,
+    {
+      code: ErrorCode.NotInTier,
+      endpoint: tool.path,
+      hint: `${MODEL_FIRST_HINT} A save or export the profile blocks needs uml_lint's and model_lint's errors fixed first.`,
     },
   );
 }
@@ -685,14 +722,25 @@ export function describe(
   }
   const out: Record<string, unknown> = {};
   for (const [name, { entry }] of chosen) {
+    const { schema } = listedRequestSchema(entry);
     out[name] = {
       description: entry.description,
       ...(entry.readOnly ? { readOnly: true } : {}),
       ...(entry.destructive ? { destructive: true } : {}),
-      request: withoutTrivialKeywords(listedRequestSchema(entry).schema),
+      request: withoutTrivialKeywords(
+        exposesOverride(state.selection, name) ? schema : withoutOverride(schema),
+      ),
     };
   }
   return out;
+}
+
+/** A request schema without its `override` property, which a closed tier refuses anyway. */
+function withoutOverride(schema: Record<string, unknown>): Record<string, unknown> {
+  const properties = (schema.properties ?? {}) as Record<string, unknown>;
+  if (!Object.hasOwn(properties, "override")) return schema;
+  const { override: _override, ...rest } = properties;
+  return { ...schema, properties: rest };
 }
 
 const CallInput = unstamped(
@@ -726,7 +774,7 @@ function registerCall(
           return jsonResult(await readIntrospect(client, state, tool.path, sent), body);
         }
         const sent = validated(state, tool, body);
-        return resultOf(name, await client.callExtension(tool.path, sent), body);
+        return resultOf(name, await send(client, state, tool, sent), body);
       }),
   );
 }

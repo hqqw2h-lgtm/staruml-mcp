@@ -70,9 +70,10 @@ export const OO_TOOLS: readonly string[] = [
  * exporting. Left out are the endpoints that place, size, colour or draw views
  * (`DRAWING_ENDPOINTS` in the extension's src/style/guard.ts: /build_diagram, /move_views,
  * /set_view_style, /layout_diagram, ...), `/set_style_profile`, which could turn strict mode off,
- * `/batch` and `/execute_command`, which run any of those, and the editor's UI state. A strict
- * style profile refuses the drawing endpoints in the extension as well (STYLE_LOCKED), so a
- * client that bypasses this server cannot draw freely either.
+ * `/batch` and `/execute_command`, which run any of those, and the editor's UI state. The tier
+ * makes the project's style profile strict before it changes anything (`needsStrictProfile`), so
+ * the extension refuses the drawing endpoints as well (STYLE_LOCKED) and a client that bypasses
+ * this server cannot draw either.
  */
 export const OO_REACHABLE: readonly string[] = [
   "get_project_info",
@@ -231,6 +232,38 @@ export function listsHandWritten(selection: ToolSelection, name: string): boolea
 /** Whether call_endpoint and describe_endpoints may reach an endpoint. */
 export function reaches(selection: ToolSelection, name: string): boolean {
   return !selection.closed || selection.reachable.has(name);
+}
+
+/** What the `oo` tier reaches without the user naming anything. */
+const OO_DEFAULT: ReadonlySet<string> = new Set([...OO_TOOLS, ...OO_REACHABLE]);
+
+/**
+ * Whether a body may carry `override`, which makes the extension do what a strict profile
+ * (STYLE_LOCKED) or `blockSaveOnErrors` (SAVE_BLOCKED) would refuse. A closed tier does not
+ * expose it for what it reaches by default, so STYLE_LOCKED stays the last word there; an
+ * endpoint the user named at launch (`oo,move_views`) comes as the user asked, override included.
+ */
+export function exposesOverride(selection: ToolSelection, name: string): boolean {
+  return !selection.closed || !OO_DEFAULT.has(name);
+}
+
+/**
+ * Endpoints that replace the open project. Making the project they discard strict first would
+ * only mark it modified; the next change in the new project makes that one strict.
+ */
+const REPLACES_PROJECT: ReadonlySet<string> = new Set(["new_project", "open_project"]);
+
+/**
+ * Whether a call needs the project's style profile strict first (issue #19): any endpoint of a
+ * closed tier the manifest does not mark read-only, saves and exports included, so the file a
+ * session saves carries the strict profile too.
+ */
+export function needsStrictProfile(
+  selection: ToolSelection,
+  name: string,
+  readOnly: boolean,
+): boolean {
+  return selection.closed && !readOnly && !REPLACES_PROJECT.has(name);
 }
 
 /**

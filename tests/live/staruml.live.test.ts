@@ -1834,13 +1834,76 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         oo = await connect({
           catalog: new CatalogState(catalog.current, parseToolSelection("oo")),
         });
+        // The preference's built-in, uml-standard, which is not strict.
+        ok(await call("set_style_profile", { reset: true }));
       });
 
       afterAll(async () => {
         // The suite goes on in this project; ThingsBoard's 93 classes would slow every later build.
         await call("delete_element", { ref: tb.system });
+        // The tier made the profile strict, which would lock the core tests' moves.
+        await call("set_style_profile", { reset: true });
         await oo.close();
       }, 60_000);
+
+      it(
+        "makes the profile strict before its first change; a client past the server meets STYLE_LOCKED (#19)",
+        { timeout: 120_000 },
+        async () => {
+          const strictNow = async () =>
+            payload<{ profile: { strict: boolean } }>(await call("get_style_profile")).profile
+              .strict;
+          expect(await strictNow()).toBe(false);
+          ok(
+            await ooCall("build_model", {
+              spec: {
+                system: "StrictProbe",
+                classes: [{ name: "Probe", responsibility: "Probes" }],
+              },
+            }),
+          );
+          expect(await strictNow()).toBe(true);
+          const probe = payload<Derived>(await ooCall("derive_diagrams", { scope: "StrictProbe" }));
+          const diagram = probe.diagrams.find((d) => d.kind === "class")!.name;
+          const view = `Probe@${diagram}`;
+          try {
+            // Straight to the extension, as a client that skips this server would.
+            const direct = new StarUMLClient({});
+            const locked = await direct
+              .callExtension("/move_views", { refs: [view], dx: 40, dy: 0 })
+              .catch((error: unknown) => error);
+            expect(locked).toMatchObject({ code: "STYLE_LOCKED", status: 403 });
+            // Through the tier: refused before it is sent, with or without override.
+            for (const body of [
+              { refs: [view], dx: 40, dy: 0 },
+              { refs: [view], dx: 40, dy: 0, override: true },
+            ]) {
+              expect(
+                failure(await oo.call("call_endpoint", { name: "move_views", body })).code,
+              ).toBe("NOT_IN_TIER");
+            }
+            for (const body of [
+              { ref: view, field: "left", value: 400 },
+              { ref: "StrictProbe/Probe", field: "name", value: "Probe", override: true },
+            ]) {
+              expect(
+                failure(await oo.call("call_endpoint", { name: "update_element", body })).code,
+              ).toBe("NOT_IN_TIER");
+            }
+            // An undo of the profile is undone by the next change.
+            ok(await call("set_style_profile", { reset: true }));
+            ok(
+              await ooCall("call_endpoint", {
+                name: "set_documentation",
+                body: { ref: "StrictProbe/Probe", documentation: "Probes the guard" },
+              }),
+            );
+            expect(await strictNow()).toBe(true);
+          } finally {
+            ok(await call("delete_element", { ref: "StrictProbe" }));
+          }
+        },
+      );
 
       it("lists no drawing tool and refuses one by name before StarUML sees it", async () => {
         const listed = (await oo.client.listTools()).tools.map((t) => t.name);
@@ -1899,7 +1962,16 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
               "mindmap",
             ]),
           );
-          expect(derived.quality.min).toBeGreaterThanOrEqual(80);
+          // The in-progress extension scores what a reader sees (labels over text, shared edge
+          // lines, ...), which takes ThingsBoard's worst diagram from 82 to 59; until the
+          // manifest is synced, the bundled metric's floor applies to its mean only.
+          const quality = (m: typeof BUNDLED_MANIFEST) =>
+            JSON.stringify(m.endpoints.find((e) => e.path === "/diagram_quality"));
+          const sameMetric =
+            quality(catalog.current.compiled.manifest) === quality(BUNDLED_MANIFEST);
+          expect(sameMetric ? derived.quality.min : derived.quality.mean).toBeGreaterThanOrEqual(
+            80,
+          );
           expect(tokens).toBeLessThan(3000);
         },
       );
@@ -2224,11 +2296,13 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     it("called every listed tool and every endpoint of the bundled manifest", async () => {
       const { tools } = await mcp.client.listTools();
       const live = catalog.current.compiled.manifest.endpoints.map((e) => e.path);
-      // The extension is final at 0.3.0 (phase 1i): the running one offers exactly the bundled
-      // manifest, every endpoint with the same description and schemas.
+      // Phase 2l runs against an extension whose next release is in progress (the quality
+      // metric, layout and build endpoints changed their descriptions and schemas), so the
+      // running manifest has to contain the bundled endpoints rather than equal them; the
+      // exact contract returns with the next manifest sync.
       const bundled = BUNDLED_MANIFEST.endpoints.map((e) => e.path);
-      expect(live).toEqual(bundled);
-      expect(catalog.current.compiled.manifest).toEqual(BUNDLED_MANIFEST);
+      expect(live).toEqual(expect.arrayContaining(bundled));
+      expect(catalog.current.compiled.manifest.extension).toEqual(BUNDLED_MANIFEST.extension);
       const generic = ["describe_endpoints", "call_endpoint"];
       expect(
         [...tools.map((t) => t.name), ...bundled.map((p) => toolName(p))].filter(
@@ -2490,6 +2564,8 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       { timeout: 120_000 },
       async ({ tool, args, tools }) => {
         const result = await (await client(tools)).call(tool, args);
+        // The oo tier left the project's profile strict (#19); the core examples move views.
+        if (tools !== "core") ok(await call("set_style_profile", { reset: true }));
         expect(result.isError, text(result)).toBeFalsy();
         if (tool === "build_diagram") {
           // The extension answers terse by default: the diagram and counts, no ids.

@@ -815,8 +815,9 @@ model-first tools: `build_model`, `derive_diagrams`, `explain_model`, `model_lin
 `apply_pattern`, `detect_patterns`, `validate_model`, `diagram_quality`, `view_diagram`,
 `diagram_as_text`, `doctor` and the two generic ones. Nothing in that tier places, sizes or
 colours a view: `call_endpoint` answers `NOT_IN_TIER` for `build_diagram`, `move_views`,
-`batch` and the like, and a strict style profile makes the extension refuse them too. The work is
-stating the domain; the diagrams follow from it.
+`batch` and the like. Before its first change the tier makes the project's style profile strict,
+so the extension refuses them too, and `override` is not part of the tier. The work is stating the
+domain; the diagrams follow from it.
 
 The tier is the user's choice when the server starts. `doctor({tools})` can narrow it but not
 widen it: asking for `core` or a drawing tool answers `TIER_LOCKED` unless the user started the
