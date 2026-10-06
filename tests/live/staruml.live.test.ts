@@ -38,11 +38,12 @@ import { CORE_ENDPOINTS, OO_TOOLS, parseToolSelection } from "../../src/tiers.js
 import { closedPort } from "../support/fixture.js";
 import { decodePng, differingRows } from "../support/png.js";
 import { connect, text, UI_CAPABILITIES, type ConnectedClient } from "../support/mcp.js";
-import { skillExamples } from "../support/skill.js";
+import { SKILL_PATH, skillExamples } from "../support/skill.js";
 import { loadViewer } from "../support/viewer.js";
 import { rpc } from "../support/sse.js";
 
 const LIVE = process.env.STARUML_LIVE === "1";
+
 const PNG_SIGNATURE = "89504e470d0a1a0a";
 
 interface Summary {
@@ -2452,7 +2453,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
    */
   describe("skill examples (#12)", () => {
     const tiers = new Map<string, Promise<ConnectedClient>>();
-    /** The default client, or one per tier an example names (section 7: oo). */
+    /** The default client, or one per tier an example names (section 8: oo). */
     const client = (tools: string) => {
       if (tools === "core") return Promise.resolve(mcp);
       if (!tiers.has(tools)) {
@@ -2467,7 +2468,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       for (const tier of tiers.values()) await (await tier).close();
     });
 
-    // A build takes StarUML seconds while other clients use it; section 7's derive several.
+    // A build takes StarUML seconds while other clients use it; section 8's derive several.
     it.each(skillExamples())(
       "SKILL.md line $line: $tool ($tools)",
       { timeout: 120_000 },
@@ -2484,6 +2485,60 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           expect(JSON.parse(text(result))).toMatchObject({
             succeeded: (args.ops as unknown[]).length,
           });
+        }
+      },
+    );
+
+    /**
+     * Section 4's read-back for every family: the spec diagram_as_text writes builds the same
+     * diagram again. The copy is built with reuse off, since with it on a copy in the same
+     * project would show the original's elements, and with duplicate names allowed, since an
+     * internal block or parametric diagram adds its parts to the one block both draw.
+     *
+     * What extension 0.3.0 does not round-trip, which the skill says: a composite structure's
+     * class lists its parts and ports among its attributes as well, so the copy's class gets
+     * attributes of those names too; and an upsert of the spec into the diagram it came from
+     * does not match parts inside a class, messages riding a connector, a timing lifeline's
+     * states and segments or an overview's unnamed control nodes against what is there, and
+     * adds them again.
+     */
+    const COPY_DIFFERS = ["composite"];
+    const UPSERT_ADDS_AGAIN = ["composite", "communication", "timing", "overview"];
+    const familyExamples = () => {
+      const lines = readFileSync(SKILL_PATH, "utf8").split("\n");
+      const from = lines.indexOf("## 4. Diagram families") + 1;
+      const to = lines.indexOf("## 5. The build loop and drawing good UML") + 1;
+      return skillExamples().filter(
+        (e) => e.tool === "build_diagram" && e.line > from && e.line < to,
+      );
+    };
+    it.each(familyExamples())(
+      "$args.kind reads back as a spec that builds it again",
+      async ({ args }) => {
+        const specOf = async (diagram: string) =>
+          JSON.parse(
+            ok(await mcp.call("diagram_as_text", { diagram, format: "spec" })).split("\n")[0]!,
+          ) as Record<string, unknown>;
+        const kind = args.kind as string;
+        const spec = await specOf(args.name as string);
+        const copy = `${String(args.name)} copy`;
+        ok(
+          await mcp.call("build_diagram", {
+            kind,
+            name: copy,
+            spec,
+            reuse: false,
+            allowDuplicateNames: true,
+          }),
+        );
+        if (!COPY_DIFFERS.includes(kind)) expect(await specOf(copy)).toEqual(spec);
+
+        const again = payload<{ created?: number; unchanged?: number }>(
+          await mcp.call("build_diagram", { kind, name: args.name, spec, upsert: true }),
+        );
+        expect(again.unchanged).toBeGreaterThan(0);
+        if (!UPSERT_ADDS_AGAIN.includes(kind)) {
+          expect(again.created ?? 0, JSON.stringify(again)).toBe(0);
         }
       },
     );

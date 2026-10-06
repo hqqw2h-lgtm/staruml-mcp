@@ -247,7 +247,7 @@ describe("review-diagram", () => {
         "",
         '1. call_endpoint({name: "describe_diagram", body: {diagram: "Model/Shop/Main"}}) for its nodes, members and edges.',
         "2. call_endpoint({name: \"validate_model\", body: {scope: <the diagram's _parent>}}) for StarUML's rule violations; get_element_by_id gives the _parent.",
-        '3. diagram_as_text({diagram: "Model/Shop/Main"}) when the exact notation matters.',
+        '3. diagram_as_text({diagram: "Model/Shop/Main"}) when the exact notation matters; format: "spec" for the kinds neither Mermaid nor PlantUML has (composite, timing, SysML, BPMN, DFD, wireframe, cloud and the other build_diagram families).',
         "",
         "Report modelling problems (each validation finding with its element, missing types or multiplicities, misused relationship kinds, naming), what a reader would find unclear, and a concrete fix for each as a build_diagram upsert or update_element call. Change nothing until asked.",
       ].join("\n"),

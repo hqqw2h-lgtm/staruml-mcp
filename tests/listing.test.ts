@@ -75,7 +75,7 @@ describe("listing", () => {
       {
         name: "diagram_as_text",
         description:
-          "A diagram as Mermaid (default) or PlantUML text; build_diagram reads the Mermaid back.",
+          "A diagram as Mermaid (default), PlantUML or spec text; build_diagram reads each back.",
         annotations: READ_ONLY,
       },
       {

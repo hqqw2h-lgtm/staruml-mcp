@@ -25,6 +25,26 @@ const KINDS = [
   "mindmap",
 ];
 
+/** Extension #25's families: a section each in section 4 (the clouds share one), an example each. */
+const FAMILIES = [
+  "composite",
+  "object",
+  "communication",
+  "timing",
+  "overview",
+  "infoflow",
+  "profile",
+  "dfd",
+  "bdd",
+  "ibd",
+  "parametric",
+  "bpmn",
+  "wireframe",
+  "aws",
+  "azure",
+  "gcp",
+];
+
 /** Answers shaped like extension 0.3.0's, enough for every tool to finish without an error. */
 function serve(): void {
   const summary = { _id: "E1", _type: "UMLClass", name: "Invoice", _parent: "M1" };
@@ -108,7 +128,7 @@ describe("SKILL.md", () => {
     const specKinds = examples
       .filter((e) => e.tool === "build_diagram" && e.args.spec !== undefined && !e.args.dryRun)
       .map((e) => e.args.kind);
-    expect(specKinds).toEqual(KINDS);
+    expect(specKinds).toEqual([...KINDS, ...FAMILIES]);
     // The build loop: a dry run, a lint and uml_lint (#13).
     expect(examples.some((e) => e.tool === "build_diagram" && e.args.dryRun === true)).toBe(true);
     expect(examples.some((e) => e.tool === "call_endpoint" && e.args.name === "uml_lint")).toBe(
@@ -124,6 +144,7 @@ describe("SKILL.md", () => {
         "describe_endpoints",
         "call_endpoint",
         "find_elements",
+        "quick_find",
         "view_diagram",
         "export_diagram",
         "diagram_as_text",
@@ -135,15 +156,79 @@ describe("SKILL.md", () => {
         "explain_model",
       ]),
     );
-    // Section 7's example runs in the oo tier, every other one in the default tier.
+    // Section 8's example runs in the oo tier, every other one in the default tier.
     expect(new Set(examples.filter((e) => e.tools !== "core").map((e) => e.tools))).toEqual(
       new Set(["oo"]),
     );
   });
 
+  it("has a section and a build_diagram example for every diagram family, read back as spec (#15)", () => {
+    const source = readSkill();
+    const section = /^## 4\. Diagram families\n([\s\S]*?)^## /m.exec(source)?.[1] ?? "";
+    const families = (
+      BUNDLED_MANIFEST.endpoints.find((e) => e.path === "/build_diagram")!.request.properties as {
+        kind: { enum: string[] };
+      }
+    ).kind.enum.filter(
+      (k) =>
+        !KINDS.includes(k) &&
+        !["requirement", "c4", "package", "component", "deployment"].includes(k),
+    );
+
+    expect(families).toEqual(FAMILIES);
+    for (const family of FAMILIES) {
+      expect(section, family).toMatch(new RegExp(`^### (.*[ ,])?${family}(,| |$)`, "m"));
+      expect(section, family).toContain(`"kind": "${family}"`);
+    }
+    const readBack = examples.find((e) => e.tool === "diagram_as_text" && e.args.format === "spec");
+    const dfd = examples.find((e) => e.tool === "build_diagram" && e.args.kind === "dfd");
+    expect(readBack!.args.diagram).toBe(dfd!.args.name);
+    // Read back after it is built: the live suite runs the examples in order.
+    expect(readBack!.line).toBeGreaterThan(dfd!.line);
+  });
+
+  it("teaches the project features with tested examples (#15)", () => {
+    const section =
+      /^## 14\. The project: finding, preferences, templates, fragments\n([\s\S]*?)^## /m.exec(
+        readSkill(),
+      )?.[1] ?? "";
+    for (const name of [
+      "quick_find",
+      "get_project_metadata",
+      "set_project_metadata",
+      "get_preference",
+      "set_preference",
+      "list_templates",
+      "new_from_template",
+      "list_working_diagrams",
+      "close_diagrams",
+      "export_fragment",
+      "import_fragment",
+      "export_xmi",
+      "import_xmi",
+      "list_extensions",
+      "performance_stats",
+    ]) {
+      expect(section, name).toContain(`\`${name}\``);
+    }
+    const called = examples.map((e) => (e.tool === "call_endpoint" ? String(e.args.name) : e.tool));
+    for (const name of [
+      "quick_find",
+      "set_project_metadata",
+      "get_preference",
+      "list_templates",
+      "close_diagrams",
+      "export_fragment",
+      "import_fragment",
+      "performance_stats",
+    ]) {
+      expect(called, name).toContain(name);
+    }
+  });
+
   it("teaches object-first authoring with one complete example, spec to derived diagrams (#17)", () => {
     const section =
-      /^## 7\. Object-first, never draw\n([\s\S]*?)^## /m.exec(readSkill())?.[1] ?? "";
+      /^## 8\. Object-first, never draw\n([\s\S]*?)^## /m.exec(readSkill())?.[1] ?? "";
     const oo = examples.filter((e) => e.tools === "oo");
 
     expect(section).toContain("--tools oo");
@@ -187,7 +272,7 @@ describe("SKILL.md", () => {
   });
 
   it("teaches the build loop and what a readable UML diagram needs (#13)", () => {
-    const section = /^## 4\. The build loop and drawing good UML\n([\s\S]*?)^## /m.exec(
+    const section = /^## 5\. The build loop and drawing good UML\n([\s\S]*?)^## /m.exec(
       readSkill(),
     )?.[1];
 
@@ -218,7 +303,7 @@ describe("SKILL.md", () => {
 
   it("teaches consistent, good-looking diagrams: profile once, engine layout, quality, split (#16)", () => {
     const section =
-      /^## 5\. Consistent, good-looking diagrams\n([\s\S]*?)^## /m.exec(readSkill())?.[1] ?? "";
+      /^## 6\. Consistent, good-looking diagrams\n([\s\S]*?)^## /m.exec(readSkill())?.[1] ?? "";
 
     for (const topic of [
       "**Set the profile once**",

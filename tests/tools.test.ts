@@ -113,6 +113,7 @@ const SHORT = new Set([
   "/build_diagram",
   "/export_diagram",
   "/find_elements",
+  "/quick_find",
   "/update_element",
   "/search_types",
   "/describe_diagram",

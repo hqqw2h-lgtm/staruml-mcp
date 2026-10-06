@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Soak test over stdio: starts the built server (dist/index.js) against an in-process stub of both
 // StarUML ports, sends tool calls one after another through the MCP SDK client (a rotation of
-// get_all_diagrams_info, call_endpoint find_elements, batch, build_diagram, lint_diagram through
+// get_all_diagrams_info, quick_find, get_preference and performance_stats through call_endpoint,
+// call_endpoint find_elements, batch, build_diagram, lint_diagram through
 // call_endpoint, diagram_quality, and dry runs of improve_diagram, build_model, and of
 // apply_pattern and derive_diagrams through call_endpoint),
 // and compares the first and the last --window of --calls
@@ -62,6 +63,12 @@ const HEAP_HOOK = `process.on("SIGUSR2", () => {
 
 const ROTATION = [
   { name: "get_all_diagrams_info", arguments: {} },
+  { name: "quick_find", arguments: { text: "order" } },
+  {
+    name: "call_endpoint",
+    arguments: { name: "get_preference", body: { key: "diagramEditor.showGrid" } },
+  },
+  { name: "call_endpoint", arguments: { name: "performance_stats" } },
   {
     name: "call_endpoint",
     arguments: { name: "find_elements", body: { type: "UMLClass", limit: 10 } },
@@ -230,6 +237,30 @@ async function startStub() {
     "GET /": JSON.stringify(manifest.extension),
     "POST /introspect": ok(manifest),
     "POST /find_elements": ok(page),
+    "POST /quick_find": ok({
+      matches: [
+        { element: { _id: "C1", _type: "UMLClass", name: "Order" }, field: "name", text: "Order" },
+      ],
+      total: 1,
+      truncated: false,
+    }),
+    "POST /get_preference": ok({
+      key: "diagramEditor.showGrid",
+      value: true,
+      default: true,
+      type: "check",
+      settable: true,
+    }),
+    "POST /performance_stats": ok({
+      listeners: { operationExecuted: 15, created: 2, updated: 4, deleted: 2 },
+      undo: 3,
+      redo: 0,
+      elements: 12,
+      workingDiagrams: 1,
+      explorerAnimations: 0,
+      heapUsedMiB: 70.6,
+      quiet: false,
+    }),
     "POST /batch": ok({
       atomic: true,
       succeeded: 2,

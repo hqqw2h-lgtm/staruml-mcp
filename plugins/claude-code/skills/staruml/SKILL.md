@@ -1,6 +1,6 @@
 ---
 name: staruml
-description: Use when creating, reading, changing or exporting UML models and diagrams in StarUML through the staruml MCP server - class, sequence, use case, activity, state machine, ER, flowchart or mind map diagrams, Mermaid into StarUML, .mdj projects - or whenever the user mentions StarUML.
+description: Use when creating, reading, changing or exporting UML models and diagrams in StarUML through the staruml MCP server - class, sequence, use case, activity, state machine, ER, flowchart, mind map, composite structure, object, communication, timing, SysML, BPMN, data flow, wireframe or AWS/Azure/GCP architecture diagrams, Mermaid into StarUML, .mdj projects, templates, fragments - or whenever the user mentions StarUML.
 ---
 
 # StarUML through the staruml MCP server
@@ -31,23 +31,26 @@ extension's endpoints, so run it after the user upgrades the extension.
 
 | The user wants | Use |
 |---|---|
-| A domain model from a description or requirements | `build_model` with an object spec (section 6), then diagrams of it |
+| A domain model from a description or requirements | `build_model` with an object spec (section 7), then diagrams of it |
 | A new diagram of a kind below | `build_diagram` with a `spec`: exact names, one undo step |
-| A design pattern, or a class to be a value object or entity | `apply_pattern` or `apply_preset` through `call_endpoint` (section 8) |
-| Their Mermaid source rendered | `generate_diagram` (routes itself, see section 9) |
+| A composite structure, object, communication, timing, SysML, BPMN, DFD, wireframe or cloud diagram | `build_diagram` with a family's nodes and edges (section 4) |
+| An element whose exact name the user does not give | `quick_find` (section 14) |
+| A design pattern, or a class to be a value object or entity | `apply_pattern` or `apply_preset` through `call_endpoint` (section 9) |
+| Their Mermaid source rendered | `generate_diagram` (routes itself, see section 10) |
 | Small edits to an existing model | `find_elements`, then `update_element`; deletions as a `/delete_element` op in a `batch` |
 | Many related creations or edits | one `batch` |
-| To read or explain a diagram | `diagram_as_text` (section 12), not a picture |
+| To read or explain a diagram | `diagram_as_text` (section 13), not a picture |
 | The `type` or command id to pass | `search_types` through `call_endpoint` |
-| To check a model | `uml_lint` and `validate_model` through `call_endpoint` (section 4) |
-| A diagram that reads badly, or one look for every diagram | `diagram_quality`, then `improve_diagram`; the style profile (section 5) |
+| To check a model | `uml_lint` and `validate_model` through `call_endpoint` (section 5) |
+| A diagram that reads badly, or one look for every diagram | `diagram_quality`, then `improve_diagram`; the style profile (section 6) |
 | To see what a build would change | `build_diagram` with `dryRun: true`, or `diff_diagram` |
+| Project metadata, preferences, templates, fragments, XMI | `call_endpoint` (section 14) |
 | Anything else StarUML can do | `describe_endpoints`, then `call_endpoint` |
 | To see a diagram | `view_diagram`; `export_diagram` for files |
 
 A user may also start the server's prompts `model-codebase` (reverse-engineer a source directory
 or build class diagrams from a description), `review-diagram`, `improve-diagram` (the quality
-loop of section 5) and `apply-pattern` (section 8); they spell out the same calls.
+loop of section 6) and `apply-pattern` (section 9); they spell out the same calls.
 
 ### Ids and paths
 
@@ -67,7 +70,7 @@ need to look an id up first:
 A `\` escapes `/ . # @ ( ) ,` inside a name. Element results carry the `path` each element
 resolves by. A path that fits several elements is refused as `AMBIGUOUS_REF` with the candidates'
 ids and paths; pass one of those or a longer path. Use paths for what already exists and `$name`
-references (section 10) for what a batch creates.
+references (section 11) for what a batch creates.
 
 ## 3. build_diagram: one spec per kind
 
@@ -251,9 +254,389 @@ document, predefined, alternate, database, manualInput, preparation, connector, 
 The full grammar with every optional field, the `requirement`, `c4`, `package`, `component` and
 `deployment` kinds, and `text` with
 `format` for PlantUML, SQL DDL or JSON Schema sources: `describe_endpoints({names:
-["build_diagram"]})`.
+["build_diagram"]})`. The sixteen other kinds share one shape, next.
 
-## 4. The build loop and drawing good UML
+## 4. Diagram families
+
+Sixteen more kinds share one spec: `nodes[{name, id, type, in, stereotype, documentation,
+properties, attributes, operations, slots, width, height}]` and `edges[{from, to, type,
+name}]`. `type` picks a node or edge of the family's palette, and a node or edge without one
+gets the family's default, named first below. `in` puts a node inside another: a part in its
+class, a lane in its pool, a control in its frame, a service in its VPC. `attributes` and
+`operations` are UML strings as on a class diagram, `slots` are `"name = value"`, `properties`
+sets any attribute of the model (`{"id": "1"}` on a DFD process, `{"checked": true}` on a
+checkbox). Edges name nodes by name, or by `id` where a node has one; `\n` breaks a name as
+elsewhere.
+
+### composite (UML composite structure)
+
+Nodes `class` (default), `part`, `port`, `interface`, `collaboration`, `collaborationUse`; edges
+`connector` (default), `association`, `dependency`, `realization`, `roleBinding`,
+`generalization`. Parts and ports go `in` their class.
+
+```json build_diagram
+{
+  "kind": "composite",
+  "name": "Pump structure",
+  "spec": {
+    "nodes": [
+      { "name": "Pump", "attributes": ["+ratedFlow: Real"] },
+      { "name": "impeller", "type": "part", "in": "Pump" },
+      { "name": "motor", "type": "part", "in": "Pump" },
+      { "name": "inlet", "type": "port", "in": "Pump" }
+    ],
+    "edges": [{ "from": "motor", "to": "impeller", "name": "drives" }]
+  }
+}
+```
+
+### object (UML object)
+
+Nodes `object` (default), `class`, `componentInstance`, `nodeInstance`, `artifactInstance`, with
+`slots`; edges `link` (default), `directedLink`, `dependency`.
+
+```json build_diagram
+{
+  "kind": "object",
+  "name": "Order snapshot",
+  "spec": {
+    "nodes": [{ "name": "order1", "slots": ["total = 42", "status = PAID"] }, { "name": "alice" }, { "name": "item7" }],
+    "edges": [
+      { "from": "order1", "to": "alice", "name": "placedBy" },
+      { "from": "order1", "to": "item7", "type": "directedLink" }
+    ]
+  }
+}
+```
+
+### communication (UML communication)
+
+Nodes `lifeline`; edges `message` (default), numbered in order and drawn along the `connector`
+between the two lifelines, which is made once for all messages between them. Nodes may be plain
+names.
+
+```json build_diagram
+{
+  "kind": "communication",
+  "name": "Checkout talk",
+  "spec": {
+    "nodes": ["client", "server", "db"],
+    "edges": [
+      { "from": "client", "to": "server", "name": "checkout()" },
+      { "from": "server", "to": "db", "name": "save(order)" },
+      { "from": "server", "to": "client", "name": "done" }
+    ]
+  }
+}
+```
+
+### timing (UML timing)
+
+Nodes `lifeline` (default), `state` in a lifeline, `segment` in a state, whose `width` is its
+duration; edges `message` between segments. Give states an `id` when two lifelines share a state
+name.
+
+```json build_diagram
+{
+  "kind": "timing",
+  "name": "Request timing",
+  "spec": {
+    "nodes": [
+      { "name": "client" },
+      { "id": "client.idle", "name": "idle", "type": "state", "in": "client" },
+      { "id": "client.waiting", "name": "waiting", "type": "state", "in": "client" },
+      { "id": "c1", "name": "t1", "type": "segment", "in": "client.idle", "width": 120 },
+      { "id": "c2", "name": "t2", "type": "segment", "in": "client.waiting", "width": 200 },
+      { "name": "server" },
+      { "id": "server.busy", "name": "busy", "type": "state", "in": "server" },
+      { "id": "s1", "name": "t3", "type": "segment", "in": "server.busy", "width": 160 }
+    ],
+    "edges": [{ "from": "c1", "to": "s1", "name": "request" }]
+  }
+}
+```
+
+### overview (UML interaction overview)
+
+Nodes `interactionUse` (default), `interaction`, `initial`, `final`, `decision`, `merge`,
+`fork`, `join`; edges `flow`, whose `name` is the guard.
+
+```json build_diagram
+{
+  "kind": "overview",
+  "name": "Shopping overview",
+  "spec": {
+    "nodes": [
+      { "id": "start", "type": "initial" },
+      { "name": "Log in" },
+      { "id": "ok", "type": "decision" },
+      { "name": "Browse", "type": "interaction" },
+      { "id": "end", "type": "final" }
+    ],
+    "edges": [
+      { "from": "start", "to": "Log in" },
+      { "from": "Log in", "to": "ok" },
+      { "from": "ok", "to": "Browse", "name": "[ok]" },
+      { "from": "ok", "to": "end", "name": "[failed]" },
+      { "from": "Browse", "to": "end" }
+    ]
+  }
+}
+```
+
+### infoflow (UML information flow)
+
+Nodes `class` (default), `actor`, `useCase`, `item` (an information item); edges `flow`
+(default), `dependency`, `association`.
+
+```json build_diagram
+{
+  "kind": "infoflow",
+  "name": "Billing information",
+  "spec": {
+    "nodes": [{ "name": "Accounts" }, { "name": "Payer", "type": "actor" }, { "name": "Invoice data", "type": "item" }],
+    "edges": [{ "from": "Accounts", "to": "Payer", "name": "invoices" }]
+  }
+}
+```
+
+### profile (UML profile)
+
+Nodes `stereotype` (default, with `attributes` as tag definitions), `metaclass`, `enumeration`;
+edges `extension` (default) from a stereotype to the metaclass it extends, `generalization`.
+
+```json build_diagram
+{
+  "kind": "profile",
+  "name": "Persistence profile",
+  "spec": {
+    "nodes": [
+      { "name": "Table", "attributes": ["schema: String"] },
+      { "name": "Key" },
+      { "name": "Class", "type": "metaclass" },
+      { "name": "Property", "type": "metaclass" }
+    ],
+    "edges": [{ "from": "Table", "to": "Class" }, { "from": "Key", "to": "Property" }]
+  }
+}
+```
+
+### dfd (data flow, Gane-Sarson)
+
+Nodes `process` (default), `external`, `store`; edges `flow`. `properties.id` numbers a process
+or a store.
+
+```json build_diagram
+{
+  "kind": "dfd",
+  "name": "Order processing",
+  "spec": {
+    "nodes": [
+      { "name": "Customer", "type": "external", "documentation": "Places and receives orders." },
+      { "name": "Place order", "properties": { "id": "1" } },
+      { "name": "Ship order", "properties": { "id": "2" } },
+      { "name": "Orders", "type": "store", "properties": { "id": "D1" } }
+    ],
+    "edges": [
+      { "from": "Customer", "to": "Place order", "name": "order" },
+      { "from": "Place order", "to": "Orders", "name": "order record" },
+      { "from": "Orders", "to": "Ship order", "name": "pending order" },
+      { "from": "Ship order", "to": "Customer", "name": "parcel" }
+    ]
+  }
+}
+```
+
+### bdd (SysML block definition)
+
+Nodes `block` (default), `valueType`, `interfaceBlock`, `constraintBlock`, `enumeration`,
+`signal`, `stakeholder`, `viewpoint`, `view`; edges `composition` (default, `from` is the whole),
+`association`, `directed`, `aggregation`, `generalization`, `dependency`, `realization`,
+`conform`, `expose`.
+
+```json build_diagram
+{
+  "kind": "bdd",
+  "name": "Vehicle blocks",
+  "spec": {
+    "nodes": [
+      { "name": "Vehicle", "attributes": ["mass: Kilogram"], "operations": ["accelerate(by: Real)"] },
+      { "name": "Car", "stereotype": "system" },
+      { "name": "Engine" },
+      { "name": "Wheel" },
+      { "name": "Kilogram", "type": "valueType" },
+      { "name": "Newton", "type": "constraintBlock" }
+    ],
+    "edges": [
+      { "from": "Car", "to": "Vehicle", "type": "generalization" },
+      { "from": "Car", "to": "Engine" },
+      { "from": "Car", "to": "Wheel" }
+    ]
+  }
+}
+```
+
+### ibd (SysML internal block)
+
+The inside of one block, `spec.block` (an existing block by name or path, or a new one). Nodes
+`part` (default), `reference`, `value`, `port`; edges `connector`.
+
+```json build_diagram
+{
+  "kind": "ibd",
+  "name": "Car internals",
+  "spec": {
+    "block": "Car",
+    "nodes": [{ "name": "engine" }, { "name": "gearbox" }, { "name": "wheels" }, { "name": "fuel", "type": "port" }],
+    "edges": [{ "from": "fuel", "to": "engine" }, { "from": "engine", "to": "gearbox" }, { "from": "gearbox", "to": "wheels" }]
+  }
+}
+```
+
+### parametric (SysML parametric)
+
+The constraints of `spec.block`. Nodes `constraint` (default), `parameter`, `value`, `part`;
+edges `connector` binding a value to a constraint.
+
+```json build_diagram
+{
+  "kind": "parametric",
+  "name": "Car dynamics",
+  "spec": {
+    "block": "Car",
+    "nodes": [{ "name": "newton" }, { "name": "mass", "type": "value" }, { "name": "acceleration", "type": "value" }],
+    "edges": [{ "from": "newton", "to": "mass" }, { "from": "newton", "to": "acceleration" }]
+  }
+}
+```
+
+### bpmn (BPMN process)
+
+Nodes `task` (default), `userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`,
+`scriptTask`, `businessRuleTask`, `callActivity`, `subProcess`, events `start`, `end`, `throw`,
+`catch`, gateways `exclusive`, `parallel`, `inclusive`, `eventBased`, `complex`, and `pool`,
+`lane`, `dataObject`, `dataStore`, `annotation`; edges `sequence` (default), `message`,
+`association`, `data`. Lanes go `in` a pool, flow nodes `in` a lane.
+
+```json build_diagram
+{
+  "kind": "bpmn",
+  "name": "Order fulfilment",
+  "spec": {
+    "nodes": [
+      { "name": "Shop", "type": "pool" },
+      { "name": "Sales", "type": "lane", "in": "Shop" },
+      { "name": "Warehouse", "type": "lane", "in": "Shop" },
+      { "name": "Order received", "type": "start", "in": "Sales" },
+      { "name": "Check order", "type": "userTask", "in": "Sales" },
+      { "id": "ok", "name": "In stock?", "type": "exclusive", "in": "Sales" },
+      { "name": "Pack", "in": "Warehouse" },
+      { "name": "Done", "type": "end", "in": "Warehouse" }
+    ],
+    "edges": [
+      { "from": "Order received", "to": "Check order" },
+      { "from": "Check order", "to": "ok" },
+      { "from": "ok", "to": "Pack", "name": "yes" },
+      { "from": "Pack", "to": "Done" }
+    ]
+  }
+}
+```
+
+### wireframe
+
+Frames `frame` (default), `webFrame`, `mobileFrame`, `desktopFrame`, holding `panel` and the
+controls `button`, `text`, `input`, `dropdown`, `checkbox`, `radio`, `switch`, `link`, `tabList`,
+`tab`, `image`, `separator`, `avatar`, `slider`, stacked top to bottom in spec order. No edges.
+
+```json build_diagram
+{
+  "kind": "wireframe",
+  "name": "Login screen",
+  "spec": {
+    "nodes": [
+      { "name": "Login", "type": "webFrame" },
+      { "name": "Email", "type": "input", "in": "Login" },
+      { "name": "Password", "type": "input", "in": "Login" },
+      { "name": "Remember me", "type": "checkbox", "in": "Login", "properties": { "checked": true } },
+      { "name": "Sign in", "type": "button", "in": "Login" }
+    ]
+  }
+}
+```
+
+### aws, azure, gcp (cloud architecture)
+
+aws: nodes `service` (default), `resource`, `generalResource`, `group` (cloud, VPC, subnet),
+`genericGroup`, `availabilityZone`, `securityGroup`, `callout`; edges `arrow`. azure: nodes
+`service` (default), `group`, `callout`; edges `connector` (`properties: {"dashed": true}`).
+gcp: nodes `product` (default), `service`, `zone` (project, region), `user`; edges `path`.
+Services go `in` their group or zone.
+
+```json build_diagram
+{
+  "kind": "aws",
+  "name": "Web tier",
+  "spec": {
+    "nodes": [
+      { "name": "AWS Cloud", "type": "group" },
+      { "name": "VPC", "type": "group", "in": "AWS Cloud" },
+      { "name": "Load balancer", "in": "VPC" },
+      { "name": "Web server", "in": "VPC" },
+      { "name": "Database", "type": "resource", "in": "VPC" }
+    ],
+    "edges": [{ "from": "Load balancer", "to": "Web server" }, { "from": "Web server", "to": "Database" }]
+  }
+}
+```
+
+```json build_diagram
+{
+  "kind": "azure",
+  "name": "App platform",
+  "spec": {
+    "nodes": [
+      { "name": "Resource group", "type": "group" },
+      { "name": "App Service", "in": "Resource group" },
+      { "name": "SQL Database", "in": "Resource group" }
+    ],
+    "edges": [{ "from": "App Service", "to": "SQL Database", "properties": { "dashed": true } }]
+  }
+}
+```
+
+```json build_diagram
+{
+  "kind": "gcp",
+  "name": "Serverless app",
+  "spec": {
+    "nodes": [
+      { "name": "User", "type": "user" },
+      { "name": "Project", "type": "zone" },
+      { "name": "Cloud Run", "in": "Project" },
+      { "name": "Cloud SQL", "type": "service", "in": "Project" }
+    ],
+    "edges": [{ "from": "User", "to": "Cloud Run" }, { "from": "Cloud Run", "to": "Cloud SQL" }]
+  }
+}
+```
+
+None of these has a Mermaid or PlantUML form, so `diagram_as_text` reads them back as their
+spec with `format: "spec"`, on one line:
+
+```json diagram_as_text
+{ "diagram": "Order processing", "format": "spec" }
+```
+
+The spec holds the names, types, nesting, members, slots and edges, not `documentation` or
+`properties`; `build_diagram` with the same `kind` builds the diagram again from it. To change a
+diagram, edit the spec and pass it with `upsert: true`, which adds what is new. For composite,
+communication, timing and overview diagrams an upsert adds parts, messages, timing states and
+segments, and unnamed control nodes again instead of matching them: change those diagrams with
+`update_element` or rebuild them under a new name. A composite structure's class also lists its
+parts and ports among its `attributes`; drop those before building from it.
+
+## 5. The build loop and drawing good UML
 
 Draw every diagram in this loop:
 
@@ -264,7 +647,7 @@ Draw every diagram in this loop:
 3. **Score**: the build already ran the quality loop; its answer's `quality: {score, target}`
    says how the picture reads. Below target, `improve_diagram` lays the diagram out again by the
    style profile and applies the lint autofixes (stacked or overlapping nodes, edges through
-   nodes, names wider than their box), keeping each step only when the score rises (section 5).
+   nodes, names wider than their box), keeping each step only when the score rises (section 6).
    `uml_lint` (through `call_endpoint`) lists modelling mistakes, each with a `fix` line; apply
    those with a `build_diagram` upsert or `update_element`.
 4. **Look**: `view_diagram` once, or `diagram_as_text` when the content is what matters.
@@ -322,7 +705,7 @@ What a diagram needs to read well:
 - **ER diagrams**: a primary key on every entity (U011), foreign keys marked `FK` with a
   relationship giving both cardinalities, one naming style for tables and columns.
 
-## 5. Consistent, good-looking diagrams
+## 6. Consistent, good-looking diagrams
 
 The project's style profile holds every convention a diagram follows: naming rules, colours,
 fonts and edge style, the layout preset per kind, the element limit per diagram and the quality
@@ -363,7 +746,7 @@ told to.
 { "name": "explain_style_violation", "body": { "kind": "classifier", "name": "order_line" } }
 ```
 
-## 6. Model first
+## 7. Model first
 
 When the user describes a domain, requirements or a system rather than a picture, build the
 model first and draw diagrams of it afterwards. `build_model` makes the packages, classes,
@@ -424,7 +807,7 @@ elements rather than copies. For a collaboration drawn as a sequence diagram,
 `call_endpoint({name: "check_messages", body: {diagram}})` lists the messages that name no
 operation of their receiver, and `sync_operations` adds those operations to the classes.
 
-## 7. Object-first, never draw
+## 8. Object-first, never draw
 
 When the server runs with `--tools oo` (or after `doctor({tools: "oo"})`), it lists only the
 model-first tools: `build_model`, `derive_diagrams`, `explain_model`, `model_lint`,
@@ -435,7 +818,7 @@ colours a view: `call_endpoint` answers `NOT_IN_TIER` for `build_diagram`, `move
 stating the domain; the diagrams follow from it.
 
 1. **Explain the domain back** in a few sentences: contexts, classes with one responsibility
-   each, how they relate (section 6's verbs), actors and use cases, the collaborations worth a
+   each, how they relate (section 7's verbs), actors and use cases, the collaborations worth a
    sequence diagram, the lifecycles worth a state machine.
 2. **Write it as one spec** and check it with `dryRun: true`.
 3. **Build** it: `build_model` makes the model in one undo step.
@@ -526,7 +909,7 @@ and of `billing`, the `Booking` sequence diagram, the use case diagram and the `
 states` state machine, every one a view of the model's own elements. `model_lint` points out
 that nothing calls `Invoice#pay()` (M007); add a collaboration that does, or let it be.
 
-## 8. Design patterns with correct properties
+## 9. Design patterns with correct properties
 
 A pattern is more than its class shapes: Strategy wants the strategy's operation abstract, the
 context's end of the association a shared aggregation that does not navigate, and the far end
@@ -591,7 +974,7 @@ For one class rather than a pattern, `apply_preset` gives it the properties of a
 `describe_type` explains what each property of a metamodel type means (`isLeaf`, `aggregation`,
 `navigable`, ...), when a pattern or preset sets one you need to understand.
 
-## 9. Mermaid
+## 10. Mermaid
 
 `build_diagram` reads `classDiagram`, `sequenceDiagram`, `flowchart`/`graph`, `erDiagram` and
 `stateDiagram` and names the diagram from `name`, front matter `title:` or a `title` line. `kind`
@@ -611,7 +994,7 @@ kind, a title or line breaks, which the built-in importer cannot do:
 
 Prefer a spec when you write the diagram yourself; use Mermaid when the user already has it.
 
-## 10. batch and `$name` references
+## 11. batch and `$name` references
 
 `batch` runs endpoint calls in order as one undo step and, by default, rolls every op back when
 one fails. `as` names an op's result; a later body refers to its id as `"$name"`, to a
@@ -636,10 +1019,11 @@ its success and the id it made or acted on; `result: "ids"` or `"full"` returns 
 
 `atomic: false` runs every op and reports each result instead.
 
-## 11. Endpoints without a tool
+## 12. Endpoints without a tool
 
 The default tool list is a core set. The other endpoints (project open/save, views, layout,
-styles, undo/redo, commands, code generation, PDF/HTML export) are one step away:
+styles, undo/redo, commands, code generation, PDF/HTML export, deleting, patterns, and the
+project features of section 14) are one step away:
 
 ```json describe_endpoints
 { "names": ["layout_diagram", "save_project"] }
@@ -656,7 +1040,7 @@ Saving is `call_endpoint({name: "save_project", body: {filename: "/absolute/path
 If a session needs one endpoint often, `doctor({tools: "core,layout_diagram"})` lists it as a
 tool, and `doctor({tools: "core"})` goes back.
 
-## 12. Reading, viewing and exporting
+## 13. Reading, viewing and exporting
 
 Read a diagram as text. For a six-class diagram with members, Mermaid or a `describe_diagram`
 summary (through `call_endpoint`) is about 270 tokens, a PNG about 1,600 (an estimate, billed as an image) and an element
@@ -667,7 +1051,8 @@ dump with `summary: false` about 4,400.
 ```
 
 `diagram_as_text` writes a diagram (default the current one) as Mermaid, or as PlantUML with
-`format: "plantuml"`, then a line with its `kind` and any `warnings` about what the text cannot
+`format: "plantuml"`, or as its `build_diagram` spec with `format: "spec"` for the families of
+section 4, then a line with its `kind` and any `warnings` about what the text cannot
 carry. The Mermaid is the form `build_diagram` reads back: edit it and pass it as `mermaid`, with
 `kind` for use case and activity diagrams, to rebuild. `describe_diagram` lists the
 nodes with their members and the edges as `"tail" -[Type "name"]-> "head"`, without
@@ -712,7 +1097,75 @@ what you see can be named in the next call:
 `export_diagram` returns PNG or JPEG as an image and SVG as text; with `path` it writes the file
 and returns only its size, which is what to do for anything the user wants on disk.
 
-## 13. Keeping token use down
+## 14. The project: finding, preferences, templates, fragments
+
+`quick_find` finds elements whose name, documentation or tag values contain a text, in any case,
+as Edit > Find does; each match names the element with its path, the field that matched and the
+text around it. Use it when the user names something loosely; `find_elements` wants a type or
+the exact name.
+
+```json quick_find
+{ "text": "invoice" }
+```
+
+The rest are one `call_endpoint` away, in the `project`, `io` and `perf` groups of
+`describe_endpoints`:
+
+**Metadata**: `get_project_metadata` and `set_project_metadata` read and set the project's
+name, author, company, copyright, version and documentation, as one undo step.
+
+```json call_endpoint
+{ "name": "set_project_metadata", "body": { "author": "Modelling team", "version": "1.2" } }
+```
+
+**Preferences** (File > Preferences): `get_preference` answers a key's value, default, type and
+whether it may be changed; `set_preference` changes view, editor, theme, validation and each
+diagram extension's defaults (`uml.*`, `bpmn.*`, `c4.*`, ...) for what is drawn next. Who may
+call the server is not changeable here, and the access token is never answered.
+
+```json call_endpoint
+{ "name": "get_preference", "body": { "key": "diagramEditor.showGrid" } }
+```
+
+**Templates**: `list_templates` names the File > New From Template projects (`UMLConventional`,
+`C4Model`, `BusinessProcessModel`, `WireframeModel`, ...); `new_from_template` replaces the open
+project with one, unsaved changes lost, so save first.
+
+```json call_endpoint
+{ "name": "list_templates" }
+```
+
+**Editor tabs**: `list_working_diagrams` lists the open diagram tabs and which is current;
+`close_diagrams` closes the named ones, or every one but `keep`. The diagrams stay in the model.
+
+```json call_endpoint
+{ "name": "close_diagrams", "body": { "keep": ["Ordering"] } }
+```
+
+**Fragments**: `export_fragment` writes an element and everything it owns to a `.mfj` file and
+`import_fragment` reads one into any project, under `parent` (default the project). Undo skips
+the import (StarUML records it that way); delete the imported element to take it out.
+
+```json call_endpoint
+{ "name": "export_fragment", "body": { "ref": "Billing", "filename": "/tmp/billing.mfj" } }
+```
+
+```json call_endpoint
+{ "name": "import_fragment", "body": { "filename": "/tmp/billing.mfj", "parent": "@project" } }
+```
+
+**XMI**: `export_xmi` and `import_xmi` go through the staruml-xmi extension and answer
+`NOT_FOUND` naming it when it is not installed; `list_extensions` shows what StarUML loads and
+the menu commands each adds.
+**Diagnostics**: `performance_stats` counts the repository's listeners, the undo depth, the
+elements, the open tabs and the heap. A count that grows over a session while the model does
+not is what slows StarUML down; report it.
+
+```json call_endpoint
+{ "name": "performance_stats" }
+```
+
+## 15. Keeping token use down
 
 - Element results are summaries `{_id, _type, name, _parent, path}`. Ask for more with `fields`
   (attribute names), `depth` (owned elements) or, rarely, `summary: false`.
@@ -731,7 +1184,7 @@ and returns only its size, which is what to do for anything the user wants on di
   returns them alone unless asked for `include` sections; narrow the metamodel with
   `types: ["UMLClass"]`.
 
-## 14. Access token and refusals
+## 16. Access token and refusals
 
 If the extension's access token is set in StarUML (Server Info, Generate Access Token...), the
 server must be started with `--ext-token <token>` or the `STARUML_EXT_TOKEN` environment variable;
@@ -747,5 +1200,5 @@ inside a batch). `DIALOG_REQUIRED` means the command would open a dialog: pass t
 `build_diagram`'s `reuse` on, rename, or pass `allowDuplicateNames: true`. `SNAPSHOT_STALE` means
 the undo history no longer reaches the snapshot; `UNSUPPORTED_SYNTAX` names a construct of the
 diagram text and its line that StarUML cannot draw. `STYLE_LOCKED` means the style profile is
-strict (section 5): use `improve_diagram` or `apply_style_profile` instead of placing views.
+strict (section 6): use `improve_diagram` or `apply_style_profile` instead of placing views.
 `SAVE_BLOCKED` lists the lint errors that block saving; fix them first.

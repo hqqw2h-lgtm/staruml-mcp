@@ -24,7 +24,8 @@
 // the first call builds it and every later one finds nothing to add. --model and --pattern are
 // dry runs and change nothing, and so do --quality and --improve; --pattern --live needs a model in
 // the open project, where Strategy's new elements would go, and --quality --live and --improve
-// --live an open diagram, --derive --live a model named LoadTest.
+// --live an open diagram, --derive --live a model named LoadTest. --quick-find runs quick_find
+// (core since 0.8.0) for "order", which reads the whole repository in StarUML.
 //
 // Usage: npm run build && node scripts/load-test.mjs
 //          [--concurrency 50,200] [--requests 5000] [--warmup 500]
@@ -54,6 +55,7 @@ const { values: args } = parseArgs({
     lint: { type: "boolean", default: false },
     model: { type: "boolean", default: false },
     pattern: { type: "boolean", default: false },
+    "quick-find": { type: "boolean", default: false },
     quality: { type: "boolean", default: false },
     improve: { type: "boolean", default: false },
     derive: { type: "boolean", default: false },
@@ -92,6 +94,7 @@ const MODEL = {
 const PATTERN = { pattern: "Strategy", dryRun: true };
 /** The first mode given wins; each names the tool call, its label and the tier it needs. */
 const MODES = [
+  ["quick-find", { name: "quick_find", arguments: { text: "order" } }, 'quick_find ("order")'],
   [
     "pattern",
     { name: "apply_pattern", arguments: PATTERN },
@@ -325,6 +328,36 @@ async function startStub() {
       },
     }),
     "POST /find_elements": JSON.stringify({ success: true, data: page }),
+    // Two matches in the shape src/handlers/workspace.ts answers.
+    "POST /quick_find": JSON.stringify({
+      success: true,
+      data: {
+        matches: [
+          {
+            element: {
+              _id: "AAAAAAFF+qBtyKM79q0=",
+              _type: "UMLClass",
+              name: "Order",
+              _parent: "M1",
+            },
+            field: "name",
+            text: "Order",
+          },
+          {
+            element: {
+              _id: "AAAAAAFF+qBtyKM79q1=",
+              _type: "UMLClass",
+              name: "Line",
+              _parent: "M1",
+            },
+            field: "documentation",
+            text: "One line of an order.",
+          },
+        ],
+        total: 2,
+        truncated: false,
+      },
+    }),
     // Dry runs in the shapes src/handlers/model.ts and patterns.ts answer.
     "POST /build_model": JSON.stringify({
       success: true,

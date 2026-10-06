@@ -50,7 +50,11 @@ describe("diagram_as_text", () => {
       type: "object",
       properties: {
         diagram: { description: "Diagram id or path; default the current one." },
-        format: { type: "string", enum: ["mermaid", "plantuml"], description: "Default mermaid." },
+        format: {
+          type: "string",
+          enum: ["mermaid", "plantuml", "spec"],
+          description: "Default mermaid.",
+        },
       },
     });
   });
@@ -81,6 +85,46 @@ describe("diagram_as_text", () => {
       { type: "text", text: PLANTUML },
       { type: "text", text: JSON.stringify({ kind: "class", warnings }) },
     ]);
+  });
+
+  it("writes a diagram family's spec on one line, as build_diagram takes it back", async () => {
+    // What extension 0.3.0 answered for a three-node data flow diagram (live, StarUML 7.1.1).
+    const spec = {
+      nodes: [
+        { name: "Customer", type: "external" },
+        { name: "Place order", type: "process" },
+        { name: "Orders", type: "store" },
+      ],
+      edges: [{ from: "Customer", to: "Place order", type: "flow", name: "order" }],
+    };
+    extension.reply("/export_text", {
+      body: {
+        success: true,
+        data: {
+          diagram: { _id: "F1", _type: "DFDDiagram", name: "Orders" },
+          kind: "dfd",
+          format: "spec",
+          text: `${JSON.stringify(spec, null, 2)}\n`,
+          warnings: [],
+        },
+      },
+    });
+
+    const result = await mcp.call("diagram_as_text", { diagram: "Orders", format: "spec" });
+
+    expect(extension.requests[0]!.body).toEqual({ diagram: "Orders", format: "spec" });
+    expect(result.content).toEqual([
+      { type: "text", text: JSON.stringify(spec) },
+      { type: "text", text: '{"id":"F1","kind":"dfd"}' },
+    ]);
+  });
+
+  it("passes a spec that is not JSON through as it came", async () => {
+    extension.reply("/export_text", { body: answer("spec", "{not json") });
+
+    const result = await mcp.call("diagram_as_text", { diagram: "D1/+=", format: "spec" });
+
+    expect(result.content[0]).toEqual({ type: "text", text: "{not json" });
   });
 
   it("takes a path and names the id it resolved to", async () => {

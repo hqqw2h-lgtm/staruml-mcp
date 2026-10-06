@@ -19,6 +19,7 @@ import { BUILD_DIAGRAM } from "./build-diagram.js";
 import {
   DIAGRAM_AS_TEXT,
   DIAGRAM_AS_TEXT_DESCRIPTION,
+  DIAGRAM_TEXT_FORMATS,
   diagramAsText,
   exportText,
   TEXT_EXTENSIONS,
@@ -139,7 +140,7 @@ const DiagramAsTextInput = unstamped(
   untrivial(
     z.looseObject({
       diagram: diagramRef,
-      format: z.enum(TEXT_FORMATS).optional().describe("Default mermaid."),
+      format: z.enum(DIAGRAM_TEXT_FORMATS).optional().describe("Default mermaid."),
     }),
   ),
 );

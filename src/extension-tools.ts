@@ -24,6 +24,9 @@ import {
   findElementsInput,
   GET_ELEMENT_BY_ID,
   GET_ELEMENT_BY_ID_DESCRIPTION,
+  QUICK_FIND,
+  QUICK_FIND_DESCRIPTION,
+  quickFindInput,
   refInput,
   UPDATE_ELEMENT,
   UPDATE_ELEMENT_DESCRIPTION,
@@ -301,6 +304,10 @@ const SHORT_LISTED: Record<
   [FIND_ELEMENTS]: {
     description: FIND_ELEMENTS_DESCRIPTION,
     input: (tool) => findElementsInput(tool.entry),
+  },
+  [QUICK_FIND]: {
+    description: QUICK_FIND_DESCRIPTION,
+    input: (tool) => quickFindInput(tool.entry),
   },
   [UPDATE_ELEMENT]: {
     description: UPDATE_ELEMENT_DESCRIPTION,

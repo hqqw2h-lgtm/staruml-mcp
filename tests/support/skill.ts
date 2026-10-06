@@ -20,7 +20,7 @@ export function readSkill(): string {
 
 /**
  * The `json <tool> [tier]` blocks of the skill: every one is a tool call an agent may copy, under
- * the tier it names (`oo` for section 7) or the default one.
+ * the tier it names (`oo` for section 8) or the default one.
  */
 export function skillExamples(source = readSkill()): SkillExample[] {
   const examples: SkillExample[] = [];

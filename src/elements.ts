@@ -12,6 +12,7 @@ export const FIND_ELEMENTS = "find_elements";
 export const UPDATE_ELEMENT = "update_element";
 export const GET_ELEMENT_BY_ID = "get_element_by_id";
 export const DELETE_ELEMENT = "delete_element";
+export const QUICK_FIND = "quick_find";
 
 export const FIND_ELEMENTS_DESCRIPTION =
   "Find elements by metamodel type (subtypes too) and/or exact name, a page at a time.";
@@ -27,6 +28,19 @@ export const GET_ELEMENT_BY_ID_DESCRIPTION = "Read one element by id or path.";
 
 export const DELETE_ELEMENT_DESCRIPTION =
   "Delete an element with everything it owns, its views and the edges attached to them.";
+
+/**
+ * Extension #28's `/quick_find` (Edit > Find): a substring of a name, documentation or tag
+ * value, where find_elements needs the exact name. `limit` (default 50) is left to
+ * describe_endpoints and still passes, as build_diagram's unlisted parameters do: listing it
+ * cost the 7 tokens that kept the core tier under 2,000.
+ */
+export const QUICK_FIND_DESCRIPTION =
+  "Find elements whose name, documentation or tags contain a text, ignoring case.";
+
+export function quickFindInput(entry: ManifestEntry): z.ZodObject {
+  return shortInput(entry, { text: "Text to find." });
+}
 
 /** `ref` alone, required: get_element_by_id and delete_element. */
 export function refInput(entry: ManifestEntry): z.ZodObject {

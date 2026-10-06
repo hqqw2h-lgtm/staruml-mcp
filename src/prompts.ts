@@ -97,7 +97,9 @@ export function reviewDiagram(state: CatalogState, diagram: string | undefined):
       "",
       `1. ${invocation(state, "describe_diagram", `{diagram: "${ref}"}`)} for its nodes, members and edges.`,
       `2. ${invocation(state, "validate_model", "{scope: <the diagram's _parent>}")} for StarUML's rule violations; get_element_by_id gives the _parent.`,
-      `3. diagram_as_text({diagram: "${ref}"}) when the exact notation matters.`,
+      `3. diagram_as_text({diagram: "${ref}"}) when the exact notation matters; ` +
+        'format: "spec" for the kinds neither Mermaid nor PlantUML has (composite, timing, SysML, BPMN, DFD, ' +
+        "wireframe, cloud and the other build_diagram families).",
       "",
       "Report modelling problems (each validation finding with its element, missing types or " +
         "multiplicities, misused relationship kinds, naming), what a reader would find unclear, " +

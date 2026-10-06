@@ -7,7 +7,11 @@ import {
   searchResult,
   VALIDATE_MODEL_DESCRIPTION,
 } from "../src/reads.js";
-import { FIND_ELEMENTS_DESCRIPTION, UPDATE_ELEMENT_DESCRIPTION } from "../src/elements.js";
+import {
+  FIND_ELEMENTS_DESCRIPTION,
+  QUICK_FIND_DESCRIPTION,
+  UPDATE_ELEMENT_DESCRIPTION,
+} from "../src/elements.js";
 import { parseToolSelection } from "../src/tiers.js";
 import { UpstreamFixture } from "./support/fixture.js";
 import { connect, text, type ConnectedClient } from "./support/mcp.js";
@@ -97,6 +101,12 @@ describe("short listings", () => {
       },
       undefined,
     ],
+    [
+      "quick_find",
+      QUICK_FIND_DESCRIPTION,
+      { text: { type: "string", description: "Text to find." } },
+      ["text"],
+    ],
   ])(
     "lists %s with its own description and parameters",
     async (name, description, properties, required) => {
@@ -172,6 +182,8 @@ describe("short listings", () => {
     ],
     ["validate_model", { limit: 2000 }, "limit: Too big: expected number to be <=1000"],
     ["find_elements", { limit: "10" }, "limit: Invalid input: expected number, received string"],
+    ["quick_find", { text: "x", limit: 501 }, "limit: Too big: expected number to be <=500"],
+    ["quick_find", { text: "x", field: "name" }, 'body: Unrecognized key: "field"'],
     [
       "update_element",
       { ref: "Model/Order", op: "reorder", index: -1 },
@@ -273,5 +285,49 @@ describe("validate_model", () => {
     expect(text(result)).toBe(
       '{"count":1,"rules":61,"problems":[{"id":"C1","_type":"UMLClass","ruleId":"UML002","message":"Name expected"}]}',
     );
+  });
+});
+
+describe("quick_find (extension #28)", () => {
+  /** What extension 0.3.0 answered for "ledger" over a two-class model (live, StarUML 7.1.1). */
+  const FOUND = {
+    matches: [
+      {
+        element: { _id: "C1", _type: "UMLClass", name: "Ledger", _parent: "M1", path: "Ledger" },
+        field: "name",
+        text: "Ledger",
+      },
+      {
+        element: { _id: "C2", _type: "UMLClass", name: "Posting", _parent: "M1", path: "Posting" },
+        field: "documentation",
+        text: "One line of a ledger entry.",
+      },
+    ],
+    total: 2,
+    truncated: false,
+  };
+
+  it("is listed in the core tier and sends the text, with the unlisted limit, as written", async () => {
+    const core = await connect({ apiHost: HOST, apiPort: builtin.port, extPort: extension.port });
+    try {
+      expect((await core.client.listTools()).tools.map((t) => t.name)).toContain("quick_find");
+      extension.reply("/quick_find", { body: { success: true, data: FOUND } });
+
+      const result = await core.call("quick_find", { text: "LEDGER", limit: 10 });
+
+      expect(extension.requests).toEqual([
+        { method: "POST", path: "/quick_find", body: { text: "LEDGER", limit: 10 } },
+      ]);
+      expect(JSON.parse(text(result))).toEqual(FOUND);
+    } finally {
+      await core.close();
+    }
+  });
+
+  it("refuses an empty text before sending", async () => {
+    const result = await mcp.call("quick_find", { text: "" });
+
+    expect(result.isError).toBe(true);
+    expect(extension.requests).toEqual([]);
   });
 });

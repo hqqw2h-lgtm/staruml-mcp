@@ -255,6 +255,7 @@ describe("core tier (default)", () => {
       "view_diagram",
       "diagram_as_text",
       "doctor",
+      "quick_find",
       "get_element_by_id",
       "find_elements",
       "update_element",
@@ -464,7 +465,6 @@ describe("describe_endpoints", () => {
     const result = await mcp.call("describe_endpoints", { group: "element" });
 
     expect(Object.keys(JSON.parse(text(result)) as object)).toEqual([
-      "quick_find",
       "create_element",
       "delete_element",
       "create_relationship",

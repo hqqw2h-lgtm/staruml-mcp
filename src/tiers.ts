@@ -24,9 +24,13 @@
  * oo tier, which lists it, still reach it, and `/delete_element` (53) leaves too: a deletion is
  * one `/batch` op or call_endpoint away, and the default listing no longer offers the one tool
  * that takes a whole subtree with it. `--tools core,apply_pattern` and the like list them again.
+ * `/quick_find` (issue #15, 60 tokens) joins: find_elements needs a type or the exact name, and
+ * "where is the thing called something like X" is what a session asks first of a model it did
+ * not build.
  */
 export const CORE_ENDPOINTS: readonly string[] = [
   "find_elements",
+  "quick_find",
   "get_element_by_id",
   "update_element",
   "batch",
@@ -78,6 +82,7 @@ export const OO_REACHABLE: readonly string[] = [
   "open_project",
   "is_modified",
   "find_elements",
+  "quick_find",
   "get_element_by_id",
   "get_relationships_of",
   "get_refs_to",
