@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-06
+
+Built against staruml-mcp-extension 0.3.0 with 88 endpoints (extension phase 1h: the style
+profile, the quality loop, model-first derivation). In short, by phase:
+
+- **2j** (#4, #8, #16, #17): the 88-endpoint manifest; the extension's `style` and `quality`
+  reports compacted in every answer; `diagram_quality` and `improve_diagram` in the core tier for
+  `lint_diagram`, the quality-loop `improve-diagram` prompt and the skill's "Consistent,
+  good-looking diagrams"; the `oo` tier, which lists only model-first tools and refuses every
+  drawing endpoint by name, the `model-first` prompt and the skill's "Object-first, never draw".
+
+The core tier lists 20 tools in 1,997 tokens, the `oo` tier 13 in 1,111 (o200k_base). A messy
+diagram goes from a score of 58 to 98 with the quality loop in two calls whose text costs 192
+tokens. ThingsBoard becomes 25 diagrams scoring 82–96 in two calls through the `oo` tier, against
+25 drawing calls of which one diagram scores 73; the spec dominates both, so with prompt caching
+they cost the same within 2%, and without it 18,235 tokens against 64,712.
+
 ### Changed
 - `lint_diagram` leaves the core tier for `diagram_quality` and `improve_diagram`: `improve_diagram` runs its autofixes in its loop and `diagram_quality` reports what it still finds, by rule. `--tools core,lint_diagram` lists it again (#8, #16).
 - The `improve-diagram` prompt walks the quality loop: `view_diagram`, `diagram_quality`, `improve_diagram`, `view_diagram`; below target it splits a diagram past the profile's element limit, tries another preset or runs `uml_lint`, and never places views by hand (#16).
@@ -267,7 +284,8 @@ The original 4 Mermaid/diagram tools continue to work without the extension.
 - Inspired by [`staruml/staruml-mcp-server`](https://github.com/staruml/staruml-mcp-server) by Minkyu Lee (StarUML creator).
 - Reimplemented with multi-transport support to work around stdio MCP registration issues in some clients (e.g., [Claude Code #36914](https://github.com/anthropics/claude-code/issues/36914)).
 
-[Unreleased]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.3.2...v0.4.0

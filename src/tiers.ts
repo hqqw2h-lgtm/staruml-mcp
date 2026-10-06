@@ -1,7 +1,7 @@
 /**
  * Which extension endpoints get a tool of their own. Every tool definition is resent with each
  * model turn: with one tool per endpoint of extension 0.3.0 (88), tools/list and the instructions
- * cost about 13,300 tokens, the core tier under 2,000 and the oo tier under 1,500 (o200k_base,
+ * cost about 13,100 tokens, the core tier under 2,000 and the oo tier under 1,500 (o200k_base,
  * scripts/token-benchmark.mjs). The endpoints a session needs are listed and the rest are reached
  * through describe_endpoints and call_endpoint.
  */

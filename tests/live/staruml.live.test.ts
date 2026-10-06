@@ -1811,7 +1811,11 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       /** A tool of the oo tier, or an endpoint through its call_endpoint. */
       const ooCall = async (name: string, args: Record<string, unknown> = {}) => {
         called.add(name);
-        return oo.call(name, args);
+        // The SDK gives up on a request after 60 s (DEFAULT_REQUEST_TIMEOUT_MSEC). ThingsBoard's
+        // build_model takes 20 s on an idle StarUML and passed 60 s at load average 44.
+        return (await oo.client.callTool({ name, arguments: args }, undefined, {
+          timeout: 300_000,
+        })) as CallToolResult;
       };
       const tb = JSON.parse(
         readFileSync(new URL("../fixtures/thingsboard.oo.json", import.meta.url), "utf8"),
