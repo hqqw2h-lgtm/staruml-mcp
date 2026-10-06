@@ -4,6 +4,7 @@
  * leaves out, a view's geometry cannot be set through update_element, the OO spec is strict, and
  * the model-first answers are shaped for the model. Nothing here relies on the skill or a prompt.
  */
+import fc from "fast-check";
 import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
 import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -42,13 +43,19 @@ afterAll(async () => {
   await Promise.all([builtin.stop(), extension.stop()]);
 });
 
-async function connectOo(tools = "oo"): Promise<ConnectedClient> {
-  catalog = new CatalogState(undefined, parseToolSelection(tools));
+async function connectOo(tools = "oo", allowTierSwitch = false): Promise<ConnectedClient> {
+  catalog = new CatalogState(undefined, parseToolSelection(tools), { allowTierSwitch });
   mcp = await connect({ apiHost: HOST, apiPort: builtin.port, extPort: extension.port, catalog });
   return mcp;
 }
 
 const names = async () => (await mcp.client.listTools()).tools.map((t) => t.name);
+
+/**
+ * What a refusal of the tier must not say (issue #19): the re-validation's agent followed the
+ * hint's `doctor({tools: "core"})` and left the tier in one call.
+ */
+const WAY_OUT = /doctor|tools:|\bcore\b|switch|--tools|allow-tier/i;
 
 /**
  * Endpoints that place, size, colour or draw views (`DRAWING_ENDPOINTS` and `STYLE_ENDPOINTS` in
@@ -168,9 +175,12 @@ describe("oo tier refusals", () => {
         code: "NOT_IN_TIER",
         message: `${name} is outside the oo tier`,
         endpoint: `/${name}`,
-        hint: expect.stringContaining('doctor({tools: "core"})'),
+        hint: expect.stringContaining("derive_diagrams"),
       },
     });
+    const { hint } = (result.structuredContent as { error: { hint: string } }).error;
+    expect(hint).toMatch(/build_model.*derive_diagrams.*improve_diagram/);
+    expect(hint).not.toMatch(WAY_OUT);
     expect(extension.requests).toEqual([]);
   });
 
@@ -189,6 +199,7 @@ describe("oo tier refusals", () => {
 
     const refused = await mcp.call("describe_endpoints", { names: ["move_views"] });
     expect(refused.structuredContent).toMatchObject({ error: { code: "NOT_IN_TIER" } });
+    expect(text(refused)).not.toMatch(WAY_OUT);
     const group = JSON.parse(text(await mcp.call("describe_endpoints", { group: "style" })));
     expect(Object.keys(group)).toEqual([
       "get_style_profile",
@@ -221,6 +232,8 @@ describe("oo tier refusals", () => {
       expect(refused.structuredContent, field).toMatchObject({
         error: { code: "NOT_IN_TIER", endpoint: "/update_element" },
       });
+      expect(text(refused)).toMatch(/Hint: Change the model and let derive_diagrams/);
+      expect(text(refused)).not.toMatch(WAY_OUT);
     }
     expect(extension.requests).toEqual([]);
 
@@ -268,8 +281,8 @@ describe("oo tier refusals", () => {
   });
 });
 
-describe("doctor({tools: 'oo'})", () => {
-  it("switches to the oo tier and back, notifying the client each time", async () => {
+describe("doctor({tools}): the tier is fixed at launch", () => {
+  const manifest = () => {
     extension.banner = { name: "staruml-mcp-extension", version: "0.3.0", endpoints: [] };
     extension.reply("/introspect", {
       body: {
@@ -281,6 +294,10 @@ describe("doctor({tools: 'oo'})", () => {
         },
       },
     });
+  };
+
+  it("narrows core to oo, notifying the client, and refuses to widen it back", async () => {
+    manifest();
     await connectOo("core");
     let changed = 0;
     mcp.client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
@@ -298,9 +315,119 @@ describe("doctor({tools: 'oo'})", () => {
     expect(await names()).toContain("derive_diagrams");
     await vi.waitFor(() => expect(changed).toBeGreaterThan(0));
 
-    await mcp.call("doctor", { tools: "core" });
+    extension.requests.length = 0;
+    const refused = await mcp.call("doctor", { tools: "core" });
+    expect(refused.isError).toBe(true);
+    expect(refused.structuredContent).toEqual({
+      error: {
+        code: "TIER_LOCKED",
+        message:
+          "doctor cannot widen the oo tier to core: the tier was fixed when the server started",
+        hint: expect.stringMatching(/^The oo tier states the model and derives the diagrams/),
+      },
+    });
+    // Refused before the extension was read, and nothing changed.
+    expect(extension.requests).toEqual([]);
+    expect(catalog.selection.label).toBe("oo");
+    expect(await names()).not.toContain("generate_diagram");
+  });
+
+  it.each([
+    ["core", "core"],
+    ["all", "all"],
+    ["a drawing name added", "oo,move_views"],
+    ["a hand-written tool added", "oo,generate_diagram"],
+    ["an open list of oo's own tools", "build_model,derive_diagrams"],
+  ])("refuses widening oo to %s", async (_, tools) => {
+    await connectOo();
+
+    const refused = await mcp.call("doctor", { tools });
+
+    expect(refused.structuredContent).toMatchObject({ error: { code: "TIER_LOCKED" } });
+    expect(text(refused)).toContain(`widen the oo tier to ${tools}`);
+    expect(catalog.selection.label).toBe("oo");
+    expect(extension.requests).toEqual([]);
+  });
+
+  it.each([
+    ["oo again", "oo", "oo"],
+    ["oo with a name it reaches already", "oo", "oo,save_project"],
+    ["oo from oo with a name it reaches already", "oo,save_project", "oo"],
+  ])("takes %s", async (_, from, tools) => {
+    await connectOo(from);
+
+    const result = await mcp.call("doctor", { tools });
+
+    expect(result.structuredContent).toBeUndefined();
+    expect(catalog.selection.label).toBe(tools);
+  });
+
+  it("narrows oo,move_views to oo, after which move_views is out of reach for good", async () => {
+    await connectOo("oo,move_views");
+
+    expect(text(await mcp.call("doctor", { tools: "oo" }))).toMatch(/tier +ok +oo:/);
+    expect(await names()).not.toContain("move_views");
+    const back = await mcp.call("doctor", { tools: "oo,move_views" });
+    expect(back.structuredContent).toMatchObject({ error: { code: "TIER_LOCKED" } });
+  });
+
+  it("lists more under core without widening what it reaches: core to all is taken", async () => {
+    await connectOo("core");
+
+    await mcp.call("doctor", { tools: "all" });
+
+    expect(catalog.selection.all).toBe(true);
+  });
+
+  it("switches oo to core and back with --allow-tier-switch", async () => {
+    manifest();
+    await connectOo("oo", true);
+
+    expect(text(await mcp.call("doctor", { tools: "core" }))).toMatch(/tier +ok +core:/);
     expect(await names()).toContain("generate_diagram");
-    expect(await names()).not.toContain("derive_diagrams");
+    await mcp.call("doctor", { tools: "oo" });
+    expect(await names()).not.toContain("generate_diagram");
+  });
+
+  it("says in its schema whether the tier may widen", async () => {
+    await connectOo();
+    const locked = (await mcp.client.listTools()).tools.find((t) => t.name === "doctor")!;
+    expect(locked.inputSchema.properties!.tools).toMatchObject({
+      description: "Tier to list, never wider than at launch: core, oo, all or tool names.",
+    });
+    await mcp.close();
+
+    await connectOo("oo", true);
+    const open = (await mcp.client.listTools()).tools.find((t) => t.name === "doctor")!;
+    expect(open.inputSchema.properties!.tools).toMatchObject({
+      description: "Tier to list: core, oo, all or comma-separated tool names.",
+    });
+  });
+
+  it("no sequence of doctor calls widens the tier through the MCP tool", async () => {
+    const TIERS = ["oo", "core", "all", "oo,move_views", "oo,save_project", "build_model"];
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom("oo", "oo,move_views"),
+        fc.array(fc.constantFrom(...TIERS), { minLength: 1, maxLength: 4 }),
+        async (launch, calls) => {
+          await connectOo(launch);
+          const reachable = new Set(catalog.selection.reachable);
+          for (const tools of calls) {
+            await mcp.call("doctor", { tools });
+            expect(catalog.selection.closed).toBe(true);
+            for (const name of catalog.selection.reachable) expect(reachable).toContain(name);
+            for (const name of await names()) {
+              if (name !== "describe_endpoints" && name !== "call_endpoint") {
+                expect(reachable).toContain(name);
+              }
+            }
+          }
+          await mcp.close();
+        },
+      ),
+      { numRuns: 15 },
+    );
   });
 });
 

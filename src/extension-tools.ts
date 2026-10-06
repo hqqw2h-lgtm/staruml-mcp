@@ -118,6 +118,7 @@ import {
   reaches,
   selects,
   VIEW_STYLE_FIELDS,
+  widens,
   type ToolSelection,
 } from "./tiers.js";
 import { exportResult, jsonResult, runTool } from "./tool-result.js";
@@ -137,6 +138,13 @@ export const HAND_WRITTEN_TOOLS: ReadonlySet<string> = new Set([
   "describe_endpoints",
   "call_endpoint",
 ]);
+
+/**
+ * What the `oo` tier offers instead of drawing, for its refusals. It never names a way out of the
+ * tier: the re-validation's agent followed exactly that advice and left it in one call.
+ */
+export const MODEL_FIRST_HINT =
+  "The oo tier states the model and derives the diagrams: change the model with build_model (or the model endpoints describe_endpoints() lists), then derive_diagrams lays out every diagram the model implies and improve_diagram raises one's score.";
 
 /** The extension tools a server offers, and where their definitions came from. */
 export interface ExtensionCatalog {
@@ -170,10 +178,16 @@ export class CatalogState {
    */
   readonly reads = new LruCache<Promise<unknown>>(64);
 
+  /** `--allow-tier-switch`: doctor may widen the tier as well as narrow it. */
+  readonly allowTierSwitch: boolean;
+
   constructor(
     private currentCatalog: ExtensionCatalog = bundledCatalog(),
     private currentSelection: ToolSelection = parseToolSelection(DEFAULT_TOOLS),
-  ) {}
+    options: { allowTierSwitch?: boolean } = {},
+  ) {
+    this.allowTierSwitch = options.allowTierSwitch ?? false;
+  }
 
   get current(): ExtensionCatalog {
     return this.currentCatalog;
@@ -181,6 +195,23 @@ export class CatalogState {
 
   get selection(): ToolSelection {
     return this.currentSelection;
+  }
+
+  /**
+   * Refuses a selection that reaches more than the current one (`widens`), unless the server
+   * was started with `--allow-tier-switch`. The tier is what the user chose at launch; an agent
+   * that could widen it with one doctor call would treat the `oo` tier as advice (issue #19,
+   * from the oo re-validation, where `doctor({tools: "core"})` let build_diagram run).
+   */
+  checkSelection(next: ToolSelection): void {
+    if (this.allowTierSwitch || !widens(this.currentSelection, next)) return;
+    throw new ToolInputError(
+      `doctor cannot widen the ${this.currentSelection.label} tier to ${next.label}: the tier was fixed when the server started`,
+      {
+        code: ErrorCode.TierLocked,
+        hint: `${MODEL_FIRST_HINT} Only the user can start the server with a wider tier (--tools, or --allow-tier-switch).`,
+      },
+    );
   }
 
   update(current: ExtensionCatalog, selection: ToolSelection = this.currentSelection): void {
@@ -532,7 +563,7 @@ function refuseDrawing(state: CatalogState, tool: GeneratedTool, body: Record<st
     {
       code: ErrorCode.NotInTier,
       endpoint: tool.path,
-      hint: 'Change the model and let derive_diagrams or improve_diagram lay the views out; doctor({tools: "core"}) lists the drawing tools when the user asks for a placement.',
+      hint: "Change the model and let derive_diagrams or improve_diagram lay the views out.",
     },
   );
 }
@@ -709,7 +740,7 @@ function findTool(state: CatalogState, name: string): GeneratedTool {
     throw new ToolInputError(`${name} is outside the ${state.selection.label} tier`, {
       code: ErrorCode.NotInTier,
       endpoint: tool.path,
-      hint: 'The oo tier states the model and derives the diagrams; nothing in it places or styles views. describe_endpoints() lists what it reaches; doctor({tools: "core"}) switches to the drawing tools when the user asks to draw.',
+      hint: `${MODEL_FIRST_HINT} Nothing in the tier places or styles views.`,
     });
   }
   if (tool !== undefined) return tool;

@@ -10,6 +10,7 @@ import { ToolInputError } from "../src/errors.js";
 import {
   bundledCatalog,
   CatalogState,
+  HAND_WRITTEN_TOOLS,
   listedTools,
   unlistedTools,
 } from "../src/extension-tools.js";
@@ -39,6 +40,7 @@ import {
   parseToolSelection,
   reaches,
   selects,
+  widens,
 } from "../src/tiers.js";
 
 const isEmpty = (v: unknown) =>
@@ -243,11 +245,87 @@ describe("tiers.ts", () => {
       "batch",
       "execute_command",
     ];
+    // core and all open the selection; NAME generates them now and then (a seed found "all").
+    const EXTRA = NAME.filter((n) => n !== "core" && n !== "all");
     fc.assert(
-      fc.property(fc.array(NAME, { maxLength: 4 }), (extra) => {
+      fc.property(fc.array(EXTRA, { maxLength: 4 }), (extra) => {
         const selection = parseToolSelection(["oo", ...extra].join(","));
         for (const name of DRAWING) {
           expect(reaches(selection, name), name).toBe(extra.includes(name));
+        }
+      }),
+    );
+  });
+
+  it("no sequence of doctor selections widens the launch tier without --allow-tier-switch", () => {
+    const SELECTION = fc
+      .array(TOKEN, { minLength: 1, maxLength: 4 })
+      .map((tokens) => parseToolSelection(tokens.join(",")));
+    fc.assert(
+      fc.property(
+        SELECTION,
+        fc.array(SELECTION, { maxLength: 6 }),
+        fc.array(fc.oneof(PROBE, fc.constantFrom(...HAND_WRITTEN_TOOLS)), {
+          minLength: 1,
+          maxLength: 8,
+        }),
+        (launch, requests, probes) => {
+          const state = new CatalogState(undefined, launch);
+          for (const next of requests) {
+            const before = state.selection;
+            let refused = false;
+            try {
+              state.checkSelection(next);
+              state.update(state.current, next);
+            } catch (error) {
+              refused = true;
+              expect(error).toMatchObject({ code: "TIER_LOCKED" });
+            }
+            expect(refused).toBe(widens(before, next));
+            // Monotone: every step reaches and lists at most what the one before it did.
+            for (const probe of probes) {
+              if (reaches(state.selection, probe)) expect(reaches(before, probe)).toBe(true);
+              // A closed tier may list an endpoint it reached through call_endpoint already, so
+              // listing is checked for the tools of this server, which nothing else reaches.
+              if (HAND_WRITTEN_TOOLS.has(probe) && listsHandWritten(state.selection, probe)) {
+                expect(listsHandWritten(before, probe)).toBe(true);
+              }
+            }
+          }
+          for (const probe of [...probes, ...launch.reachable, ...state.selection.reachable]) {
+            if (reaches(state.selection, probe)) expect(reaches(launch, probe), probe).toBe(true);
+          }
+          if (launch.closed) expect(state.selection.closed).toBe(true);
+        },
+      ),
+    );
+  });
+
+  it("with --allow-tier-switch every doctor selection is taken", () => {
+    const SELECTION = fc
+      .array(TOKEN, { minLength: 1, maxLength: 4 })
+      .map((tokens) => parseToolSelection(tokens.join(",")));
+    fc.assert(
+      fc.property(SELECTION, fc.array(SELECTION, { maxLength: 4 }), (launch, requests) => {
+        const state = new CatalogState(undefined, launch, { allowTierSwitch: true });
+        for (const next of requests) {
+          state.checkSelection(next);
+          state.update(state.current, next);
+          expect(state.selection).toBe(next);
+        }
+      }),
+    );
+  });
+
+  it("widens only from a closed selection, and never to a subset of what it reaches", () => {
+    fc.assert(
+      fc.property(fc.array(TOKEN, { minLength: 1 }), fc.array(TOKEN, { minLength: 1 }), (a, b) => {
+        const from = parseToolSelection(a.join(","));
+        const to = parseToolSelection(b.join(","));
+        if (!from.closed) expect(widens(from, to)).toBe(false);
+        expect(widens(from, from)).toBe(false);
+        if (to.closed && [...to.reachable].every((n) => from.reachable.has(n))) {
+          expect(widens(from, to)).toBe(false);
         }
       }),
     );

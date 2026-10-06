@@ -210,7 +210,8 @@ staruml-mcp [options]
       --ext-token <token>  extension access token    (env STARUML_EXT_TOKEN)
       --api-host <url>     StarUML API host prefix   (default: http://localhost)
       --doctor             Check the setup, print a report and exit (1 on failure)
-      --tools <tiers>      core | all | comma list   (default: core; env STARUML_MCP_TOOLS)
+      --tools <tiers>      core | oo | all | comma list (default: core; env STARUML_MCP_TOOLS)
+      --allow-tier-switch  let doctor({tools}) widen the tier (env STARUML_MCP_ALLOW_TIER_SWITCH=1)
       --session-timeout <duration>  close an idle HTTP session (default: 30m; ms, s, m or h)
       --max-sessions <number>       live HTTP sessions, LRU beyond (default: 64; 0 = stateless)
   -V, --version            Print version
@@ -231,7 +232,8 @@ tier         ok    core: 10 extension tools listed, 93 endpoints through call_en
 
 A failing check is followed by a `fix` line: start StarUML, enable `apiServer` in StarUML's
 `settings.json`, install the extension from its URL, or restart StarUML. The `doctor` tool runs the
-same check for an agent; `doctor({tools: "all"})` also switches the listed tier.
+same check for an agent; `doctor({tools: "all"})` also switches the listed tier, within what the
+server was started with (see the `oo` tier below).
 
 ### Access token
 
@@ -318,10 +320,20 @@ the `oo` tier and reached by the `apply-pattern` prompt through `call_endpoint`,
 `delete_element` (53) leaves too, a deletion being one `batch` op or `call_endpoint` away.
 `--tools core,lint_diagram,search_types,describe_diagram,validate_model,apply_pattern,delete_element`
 lists them again. Pick the tier with `--tools`, or `STARUML_MCP_TOOLS` for clients that pass
-environment but no arguments; the flag wins. An agent can switch it at runtime with
+environment but no arguments; the flag wins. An agent can change it at runtime with
 `doctor({tools: "all"})`; the server then sends `notifications/tools/list_changed`, as it does when
 `doctor` finds a manifest with other endpoints. Names that are neither endpoints nor tools are
 reported by the `tier` check.
+
+The tier is fixed at launch (issue #19): `doctor({tools})` may only narrow what the server
+reaches. From an open tier (`core`, `all`, a list without `oo`) every endpoint is reachable through
+`call_endpoint` anyway, so any change is taken; from `oo` a selection that reaches an endpoint or
+lists a tool the current one does not (`core`, `all`, `oo,move_views`, an open list) is refused
+with `TIER_LOCKED` before anything is read, and narrowing is one-way. `--allow-tier-switch` (or
+`STARUML_MCP_ALLOW_TIER_SWITCH=1`) lifts this for a user who wants an agent to switch freely;
+`doctor`'s schema says which rule applies. A property test (`tests/properties.test.ts`) drives
+random sequences of `doctor` selections from random launch tiers and checks that each step
+reaches at most what the one before it did.
 
 The **`oo` tier** (issue #17) is for object-first authoring: the agent states the domain as
 objects and the extension derives and lays out every diagram, so nothing in the tier draws. Its
@@ -330,7 +342,8 @@ hand-written ones included (`generate_diagram` and the built-in image and diagra
 disabled); `call_endpoint` and `describe_endpoints` reach model-level endpoints only (reads,
 elements, members, relationships without views, history, patterns, `uml_lint`, the style
 profile's read side, `apply_style_profile`, `improve_diagram`, saving and exporting) and answer
-`NOT_IN_TIER` for everything that places, sizes or colours views (`build_diagram`,
+`NOT_IN_TIER` (whose hint names the model-first way, `build_model`, `derive_diagrams`,
+`improve_diagram`, and never a way out of the tier) for everything that places, sizes or colours views (`build_diagram`,
 `create_*_with_view`, `layout_diagram`, `move_views`, `set_view_style`, ...), for `batch` and
 `execute_command`, which could run those, and for `set_style_profile`, which could turn strict
 mode off; `update_element` setting a view attribute (`left`, `fillColor`, `suppressAttributes`,
@@ -623,7 +636,8 @@ A failed tool call returns `isError: true` with a one-line cause, a hint where o
 | `INVALID_ARGUMENT`, `UNKNOWN_ENDPOINT` | Also raised by `call_endpoint` itself, before any request, for a body the manifest schema rejects or a name it does not have; `endpoint` and `hint` say which and how to look it up. |
 | extension 0.3.0 codes | Passed through with their HTTP status: `INVALID_ARGUMENT` (400), `UNKNOWN_TYPE` (400), `NOT_FOUND` (404), `UNKNOWN_ENDPOINT` (404, with the upgrade hint), `NO_PROJECT` (409), `STARUML_ERROR` (422, StarUML refused the operation), `DIALOG_REQUIRED` (422, the command or generator would have opened a dialog; the hint points to `describe_commands` for `execute_command` and to `list_code_generators` for code generation, and `details` names the missing arguments), `INTERNAL` (500). An error body's `details` is passed through as `error.details` and, except for a rolled-back batch's results, as a `Details:` line. |
 | extension reference codes | Passed through with a hint: `AMBIGUOUS_REF` (409: a path fits several elements; the hint names up to five of `details.candidates` by path, or by id where their paths collide), `DUPLICATE_NAME` (409: a sibling of that kind has the name; refer to `details.existing` by its path, keep `build_diagram`'s `reuse` on, rename, or pass `allowDuplicateNames: true`), `SNAPSHOT_STALE` (409: the undo history no longer reaches the snapshot; take a new one), `UNSUPPORTED_SYNTAX` (422: diagram text with a construct StarUML cannot draw; the message names it and its line). |
-| `NOT_IN_TIER` | Raised by `call_endpoint` and `describe_endpoints` before any request under a closed tier (`--tools oo`) for an endpoint the tier leaves out, or an `update_element` of a view attribute; the hint names `doctor({tools: "core"})` for when the user asks to draw. |
+| `NOT_IN_TIER` | Raised by `call_endpoint` and `describe_endpoints` before any request under a closed tier (`--tools oo`) for an endpoint the tier leaves out, or an `update_element` of a view attribute; the hint explains the model-first alternative (change the model with `build_model`, then `derive_diagrams` and `improve_diagram`) and never names a way out of the tier. |
+| `TIER_LOCKED` | `doctor({tools})` asked for a tier that reaches more than the current one, without `--allow-tier-switch`; nothing changed. The hint gives the model-first alternative and says only the user can start the server with a wider tier. |
 | extension style codes | Passed through with a hint: `STYLE_LOCKED` (403: the project's style profile is `strict`, so the endpoints that place, size or colour views by hand refuse; the hint names `improve_diagram`, `apply_style_profile`, a rebuild, `override: true` for a change the user asked for, and `set_style_profile({patch: {strict: false}})`), `SAVE_BLOCKED` (409: the profile's `blockSaveOnErrors` refuses saving and exporting while `uml_lint` or `model_lint` report errors; the hint names the first ones from `details.findings` and `override: true`). |
 | extension request checks | Passed through with a hint naming the setting: `UNAUTHORIZED` (401: no or wrong access token; how to set or clear it), `FORBIDDEN_ORIGIN` (403: an `Origin` header not in Allowed Origins), `PAYLOAD_TOO_LARGE` (413: Max Request Body (KiB) or Max Batch Ops), `UNSUPPORTED_MEDIA_TYPE` (415: not `application/json`), `RATE_LIMITED` (429: Commands per Minute, with the `Retry-After` seconds), `TIMEOUT` (504: Request Timeout (s); the work may still complete). A 401/403/413/415/429/504 without these codes, as from a proxy, gets the same hint. |
 

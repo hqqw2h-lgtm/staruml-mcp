@@ -8,6 +8,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createServer as createHttpServer, request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
+  ALLOW_TIER_SWITCH_ENV,
   createHttpHandler,
   EXT_TOKEN_ENV,
   isEntrypoint,
@@ -59,9 +60,31 @@ describe("parseArgs", () => {
         closed: false,
         reachable: new Set(),
       },
+      allowTierSwitch: false,
       extToken: undefined,
       sessions: DEFAULT_SESSION_LIMITS,
     });
+  });
+
+  it.each([
+    ["not by default", [], undefined, false],
+    ["--allow-tier-switch", ["--allow-tier-switch"], undefined, true],
+    ["the flag over an off variable", ["--allow-tier-switch"], "0", true],
+    [`${ALLOW_TIER_SWITCH_ENV}=1`, [], "1", true],
+    [`${ALLOW_TIER_SWITCH_ENV}=TRUE`, [], " TRUE ", true],
+    [`${ALLOW_TIER_SWITCH_ENV}=false`, [], "false", false],
+    [`${ALLOW_TIER_SWITCH_ENV}=0`, [], "0", false],
+    [`an empty ${ALLOW_TIER_SWITCH_ENV}`, [], "", false],
+  ])("allows a tier switch: %s", (_, flags, env, allowed) => {
+    expect(parseArgs([...ARGV0, ...flags], { [ALLOW_TIER_SWITCH_ENV]: env }).allowTierSwitch).toBe(
+      allowed,
+    );
+  });
+
+  it("refuses an on/off variable it cannot read rather than reading it as off", () => {
+    expect(() => parseArgs(ARGV0, { [ALLOW_TIER_SWITCH_ENV]: "yes" })).toThrow(
+      `Invalid ${ALLOW_TIER_SWITCH_ENV}: "yes". Use 1, true, 0 or false.`,
+    );
   });
 
   it.each([
@@ -123,6 +146,7 @@ describe("parseArgs", () => {
         "--doctor",
         "--tools",
         "all",
+        "--allow-tier-switch",
         "--ext-token",
         "s3cret",
         "--session-timeout",
@@ -139,6 +163,7 @@ describe("parseArgs", () => {
       apiHost: "http://10.0.0.2",
       doctor: true,
       tools: parseToolSelection("all"),
+      allowTierSwitch: true,
       extToken: "s3cret",
       sessions: { idleTimeoutMs: 90_000, maxSessions: 0 },
     });
@@ -275,6 +300,33 @@ describe("main", () => {
       ).rejects.toMatchObject({ code: "EADDRINUSE" });
     } finally {
       await first.close();
+    }
+  });
+
+  it.each([
+    ["refuses", [], "TIER_LOCKED"],
+    ["with --allow-tier-switch allows", ["--allow-tier-switch"], undefined],
+  ])("%s widening the launch tier through doctor", async (_, flags, code) => {
+    const server = await main([
+      ...OFFLINE,
+      "--transport",
+      "http",
+      "--port",
+      "0",
+      "--tools",
+      "oo",
+      ...flags,
+    ]);
+    try {
+      const base = `http://127.0.0.1:${server.port}`;
+      const { message } = await rpc(base, 1, "tools/call", {
+        name: "doctor",
+        arguments: { tools: "core" },
+      });
+      const result = message.result as { structuredContent?: { error?: { code: string } } };
+      expect(result.structuredContent?.error?.code).toBe(code);
+    } finally {
+      await server.close();
     }
   });
 

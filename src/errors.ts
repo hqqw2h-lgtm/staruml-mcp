@@ -23,6 +23,11 @@ export const ErrorCode = {
    * view, which that tier leaves to the style profile (issue #17).
    */
   NotInTier: "NOT_IN_TIER",
+  /**
+   * doctor({tools}) asked for a tier that reaches more than the one the server runs with, which
+   * only `--allow-tier-switch` permits (issue #19): the tier is the user's choice at launch.
+   */
+  TierLocked: "TIER_LOCKED",
 } as const;
 
 export type Upstream = "builtin" | "extension";

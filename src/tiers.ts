@@ -234,6 +234,17 @@ export function reaches(selection: ToolSelection, name: string): boolean {
 }
 
 /**
+ * Whether `next` reaches an endpoint or lists a hand-written tool that `current` does not (issue
+ * #19). An open selection reaches every endpoint through call_endpoint and lists every
+ * hand-written tool, so only a closed one can be widened: `core` to `all` lists more tools but
+ * reaches nothing new, while `oo` to `core`, or to `oo,move_views`, reaches drawing endpoints.
+ */
+export function widens(current: ToolSelection, next: ToolSelection): boolean {
+  if (!current.closed) return false;
+  return !next.closed || [...next.reachable].some((name) => !current.reachable.has(name));
+}
+
+/**
  * Groups for describe_endpoints. The manifest has no group field, so endpoints are grouped by
  * name; the last rule catches everything, which keeps endpoints added by a newer extension
  * reachable through a group without a release of this server.

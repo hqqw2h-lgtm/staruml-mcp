@@ -35,6 +35,8 @@ export interface CliOptions {
   apiHost: string;
   doctor: boolean;
   tools: ToolSelection;
+  /** doctor({tools}) may widen the tier as well as narrow it. */
+  allowTierSwitch: boolean;
   /** The extension's access token; undefined when none is configured. */
   extToken: string | undefined;
   /** HTTP session idle timeout and cap. */
@@ -50,6 +52,8 @@ export const DEFAULT_HOST = "127.0.0.1";
 
 /** Read when `--tools` is absent, for clients that pass environment but no arguments. */
 export const TOOLS_ENV = "STARUML_MCP_TOOLS";
+/** Read when `--allow-tier-switch` is absent: `1` or `true` allows it, `0`, `false` or empty not. */
+export const ALLOW_TIER_SWITCH_ENV = "STARUML_MCP_ALLOW_TIER_SWITCH";
 /**
  * Read when `--ext-token` is absent. The variable keeps the token out of the process list, where
  * any local user can read command-line arguments.
@@ -110,7 +114,11 @@ export function parseArgs(
     )
     .option(
       "--tools <tiers>",
-      `Extension tools to list: core, all or comma-separated names (env ${TOOLS_ENV}; default ${DEFAULT_TOOLS})`,
+      `Extension tools to list: core, oo, all or comma-separated names (env ${TOOLS_ENV}; default ${DEFAULT_TOOLS})`,
+    )
+    .option(
+      "--allow-tier-switch",
+      `Let doctor({tools}) widen the tier, not only narrow it (env ${ALLOW_TIER_SWITCH_ENV})`,
     )
     .parse([...argv]);
 
@@ -123,6 +131,7 @@ export function parseArgs(
     apiHost: string;
     doctor: boolean;
     tools?: string;
+    allowTierSwitch?: boolean;
     extToken?: string;
     sessionTimeout: string;
     maxSessions: string;
@@ -142,6 +151,7 @@ export function parseArgs(
       raw.tools !== undefined
         ? parseToolSelection(raw.tools)
         : parseToolSelection(fromEnv || DEFAULT_TOOLS, TOOLS_ENV),
+    allowTierSwitch: raw.allowTierSwitch ?? parseSwitch(env[ALLOW_TIER_SWITCH_ENV]),
     // An empty value means no token, as an empty mcp-ext.token preference does in the extension.
     extToken: (raw.extToken ?? env[EXT_TOKEN_ENV]) || undefined,
     sessions: {
@@ -163,7 +173,9 @@ export async function main(
     extToken: options.extToken,
   });
   const { checks, catalog } = await diagnose(client);
-  const state = new CatalogState(catalog, options.tools);
+  const state = new CatalogState(catalog, options.tools, {
+    allowTierSwitch: options.allowTierSwitch,
+  });
   const report = formatReport([...checks, tierCheck(state)]);
 
   if (options.doctor) {
@@ -498,6 +510,17 @@ function parseDuration(value: string, flag: string): number {
     );
   }
   return ms;
+}
+
+/**
+ * An on/off environment variable. A value outside the four is refused rather than read as off:
+ * `STARUML_MCP_ALLOW_TIER_SWITCH=yes` read as off would fail closed but silently.
+ */
+function parseSwitch(value: string | undefined): boolean {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (normalized === "1" || normalized === "true") return true;
+  if (normalized === "" || normalized === "0" || normalized === "false") return false;
+  throw new Error(`Invalid ${ALLOW_TIER_SWITCH_ENV}: "${value}". Use 1, true, 0 or false.`);
 }
 
 function parseCount(value: string, flag: string): number {

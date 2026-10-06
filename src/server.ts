@@ -150,14 +150,23 @@ function diagramArgument(input: { diagram?: string; id?: unknown }): string | un
   return input.diagram ?? (typeof input.id === "string" ? input.id : undefined);
 }
 
-const DoctorInput = unstamped(
-  z.object({
-    tools: z
-      .string()
-      .optional()
-      .describe("Tier to list: core, oo, all or comma-separated tool names."),
-  }),
-);
+/**
+ * The tier argument says what the server lets it do: without --allow-tier-switch a model reading
+ * "tier to list" would otherwise try `core` from `oo` and meet TIER_LOCKED.
+ */
+const doctorInput = (allowTierSwitch: boolean) =>
+  unstamped(
+    z.object({
+      tools: z
+        .string()
+        .optional()
+        .describe(
+          allowTierSwitch
+            ? "Tier to list: core, oo, all or comma-separated tool names."
+            : "Tier to list, never wider than at launch: core, oo, all or tool names.",
+        ),
+    }),
+  );
 
 export function createServer(config: ServerConfig = {}): McpServer {
   const client = new StarUMLClient({
@@ -290,12 +299,14 @@ export function createServer(config: ServerConfig = {}): McpServer {
     "doctor",
     {
       description: "Check StarUML, extension and Node setup; reloads the extension's tools.",
-      inputSchema: DoctorInput,
+      inputSchema: doctorInput(catalog.allowTierSwitch),
       annotations: READ_ONLY,
     },
     async ({ tools }) =>
       runTool("run doctor", async () => {
         const selection = tools === undefined ? undefined : selectionArgument(tools);
+        // Before anything is read, so a refused widening changes nothing.
+        if (selection !== undefined) catalog.checkSelection(selection);
         const { checks, catalog: next } = await diagnose(client);
         // Re-syncs this server's tools and those of every other live session.
         catalog.update(next, selection);

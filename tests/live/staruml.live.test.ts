@@ -1977,8 +1977,24 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         },
       );
 
-      it("doctor switches a session to the oo tier and back", async () => {
-        const own = new CatalogState(catalog.current);
+      it("doctor narrows a session to the oo tier and cannot widen it back (#19)", async () => {
+        const session = await connect({ catalog: new CatalogState(catalog.current) });
+        try {
+          ok(await session.call("doctor", { tools: "oo" }));
+          const refused = failure(await session.call("doctor", { tools: "core" }));
+          expect(refused.code).toBe("TIER_LOCKED");
+          const names = (await session.client.listTools()).tools.map((t) => t.name);
+          expect(names).not.toContain("build_diagram");
+          expect(failure(await session.call("call_endpoint", { name: "build_diagram" })).code).toBe(
+            "NOT_IN_TIER",
+          );
+        } finally {
+          await session.close();
+        }
+      });
+
+      it("doctor switches a session to the oo tier and back with --allow-tier-switch", async () => {
+        const own = new CatalogState(catalog.current, undefined, { allowTierSwitch: true });
         const session = await connect({ catalog: own });
         try {
           const names = async () => (await session.client.listTools()).tools.map((t) => t.name);

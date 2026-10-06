@@ -818,6 +818,12 @@ colours a view: `call_endpoint` answers `NOT_IN_TIER` for `build_diagram`, `move
 `batch` and the like, and a strict style profile makes the extension refuse them too. The work is
 stating the domain; the diagrams follow from it.
 
+The tier is the user's choice when the server starts. `doctor({tools})` can narrow it but not
+widen it: asking for `core` or a drawing tool answers `TIER_LOCKED` unless the user started the
+server with `--allow-tier-switch`. A `NOT_IN_TIER` refusal therefore means "change the model":
+edit the spec or the model and run `derive_diagrams` or `improve_diagram` again. If the user wants
+a hand-drawn diagram, say that it needs a server started with another tier.
+
 1. **Explain the domain back** in a few sentences: contexts, classes with one responsibility
    each, how they relate (section 7's verbs), actors and use cases, the collaborations worth a
    sequence diagram, the lifecycles worth a state machine.
