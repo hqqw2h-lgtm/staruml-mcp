@@ -3142,10 +3142,10 @@
     }
   },
   "oo": {
-    "seconds": 23.4,
+    "seconds": 50.3,
     "build": {
       "model": {
-        "_id": "AAAAAAGhDocORalhq6Q=",
+        "_id": "AAAAAAGhEPu7xJNNu80=",
         "name": "ThingsBoard",
         "path": "ThingsBoard"
       },
@@ -3159,7 +3159,7 @@
           "UMLEnumeration": 3,
           "UMLInterface": 30,
           "UMLActor": 6,
-          "UMLUseCaseSubject": 1,
+          "UMLUseCaseSubject": 2,
           "UMLUseCase": 21,
           "UMLAttribute": 93,
           "UMLEnumerationLiteral": 19,
@@ -3203,6 +3203,17 @@
           "package Angular UI (ui-ngx)",
           "package Microservice Packaging (msa)",
           "package Entity Data Query Service"
+        ],
+        "escaped": [
+          "Domain Model (common.data) -> Domain Model \\(common\\.data\\)",
+          "Messaging (common.message, common.queue) -> Messaging \\(common\\.message\\, common\\.queue\\)",
+          "Actor Framework (common.actor) -> Actor Framework \\(common\\.actor\\)",
+          "Persistence (dao) -> Persistence \\(dao\\)",
+          "Transport API (common.transport) -> Transport API \\(common\\.transport\\)",
+          "Actor System (application.actors) -> Actor System \\(application\\.actors\\)",
+          "REST and WebSocket API (application.controller) -> REST and WebSocket API \\(application\\.controller\\)",
+          "Angular UI (ui-ngx) -> Angular UI \\(ui-ngx\\)",
+          "Microservice Packaging (msa) -> Microservice Packaging \\(msa\\)"
         ]
       }
     },
@@ -3215,13 +3226,13 @@
         {
           "kind": "package",
           "name": "ThingsBoard packages",
-          "diagram": "AAAAAAGhDocXt7Ptr9k=",
+          "diagram": "AAAAAAGhEPvD/p3cHFg=",
           "created": 43,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
           "quality": {
-            "score": 92,
+            "score": 90,
             "rating": 5,
             "passes": true
           }
@@ -3229,13 +3240,13 @@
         {
           "kind": "class",
           "name": "Class - Entities and DAO",
-          "diagram": "AAAAAAGhDocZ5bb/f7w=",
+          "diagram": "AAAAAAGhEPvGYqDvmQ0=",
           "created": 42,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
           "quality": {
-            "score": 94,
+            "score": 93,
             "rating": 5,
             "passes": true
           }
@@ -3243,22 +3254,8 @@
         {
           "kind": "class",
           "name": "Class - Application Services",
-          "diagram": "AAAAAAGhDochQ9wqi3c=",
+          "diagram": "AAAAAAGhEPvaFv97WWQ=",
           "created": 17,
-          "updated": 0,
-          "unchanged": 0,
-          "deleted": 0,
-          "quality": {
-            "score": 91,
-            "rating": 5,
-            "passes": true
-          }
-        },
-        {
-          "kind": "class",
-          "name": "Class - Rule Engine",
-          "diagram": "AAAAAAGhDocjV95reek=",
-          "created": 34,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
@@ -3270,14 +3267,28 @@
         },
         {
           "kind": "class",
+          "name": "Class - Rule Engine",
+          "diagram": "AAAAAAGhEPvghAHulYM=",
+          "created": 34,
+          "updated": 0,
+          "unchanged": 0,
+          "deleted": 0,
+          "quality": {
+            "score": 93,
+            "rating": 5,
+            "passes": true
+          }
+        },
+        {
+          "kind": "class",
           "name": "Class - Transport",
-          "diagram": "AAAAAAGhDocn4eRbtXE=",
+          "diagram": "AAAAAAGhEPvsgwxEnMo=",
           "created": 30,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
           "quality": {
-            "score": 82,
+            "score": 81,
             "rating": 4,
             "passes": true
           }
@@ -3285,8 +3296,50 @@
         {
           "kind": "class",
           "name": "Class - Actor System",
-          "diagram": "AAAAAAGhDocvmvXNrZI=",
+          "diagram": "AAAAAAGhEPv+9DGTmTI=",
           "created": 32,
+          "updated": 0,
+          "unchanged": 0,
+          "deleted": 0,
+          "quality": {
+            "score": 98,
+            "rating": 5,
+            "passes": true
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Class - Security",
+          "diagram": "AAAAAAGhEPwEMk047cU=",
+          "created": 29,
+          "updated": 0,
+          "unchanged": 0,
+          "deleted": 0,
+          "quality": {
+            "score": 89,
+            "rating": 4,
+            "passes": true
+          }
+        },
+        {
+          "kind": "sequence",
+          "name": "Seq - Telemetry ingestion over MQTT",
+          "diagram": "AAAAAAGhEPwMvVZxf4g=",
+          "created": 25,
+          "updated": 0,
+          "unchanged": 0,
+          "deleted": 0,
+          "quality": {
+            "score": 94,
+            "rating": 5,
+            "passes": true
+          }
+        },
+        {
+          "kind": "sequence",
+          "name": "Seq - Rule chain processing",
+          "diagram": "AAAAAAGhEPwPKljGllA=",
+          "created": 25,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
@@ -3297,57 +3350,15 @@
           }
         },
         {
-          "kind": "class",
-          "name": "Class - Security",
-          "diagram": "AAAAAAGhDoczgg0DFAs=",
-          "created": 29,
-          "updated": 0,
-          "unchanged": 0,
-          "deleted": 0,
-          "quality": {
-            "score": 94,
-            "rating": 5,
-            "passes": true
-          }
-        },
-        {
-          "kind": "sequence",
-          "name": "Seq - Telemetry ingestion over MQTT",
-          "diagram": "AAAAAAGhDoc2kRIphsk=",
-          "created": 25,
-          "updated": 0,
-          "unchanged": 0,
-          "deleted": 0,
-          "quality": {
-            "score": 93,
-            "rating": 5,
-            "passes": true
-          }
-        },
-        {
-          "kind": "sequence",
-          "name": "Seq - Rule chain processing",
-          "diagram": "AAAAAAGhDoc4ThR09jw=",
-          "created": 25,
-          "updated": 0,
-          "unchanged": 0,
-          "deleted": 0,
-          "quality": {
-            "score": 94,
-            "rating": 5,
-            "passes": true
-          }
-        },
-        {
           "kind": "sequence",
           "name": "Seq - Device provisioning",
-          "diagram": "AAAAAAGhDoc5tBa78zo=",
+          "diagram": "AAAAAAGhEPwQ2VsX6G4=",
           "created": 21,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
           "quality": {
-            "score": 95,
+            "score": 97,
             "rating": 5,
             "passes": true
           }
@@ -3355,13 +3366,13 @@
         {
           "kind": "sequence",
           "name": "Seq - Device claiming",
-          "diagram": "AAAAAAGhDoc7DRi1fqU=",
+          "diagram": "AAAAAAGhEPwSfF0bW9M=",
           "created": 14,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
           "quality": {
-            "score": 95,
+            "score": 92,
             "rating": 5,
             "passes": true
           }
@@ -3369,13 +3380,13 @@
         {
           "kind": "sequence",
           "name": "Seq - REST login",
-          "diagram": "AAAAAAGhDoc72hoVn0w=",
+          "diagram": "AAAAAAGhEPwTjF6E+Ao=",
           "created": 15,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
           "quality": {
-            "score": 93,
+            "score": 94,
             "rating": 5,
             "passes": true
           }
@@ -3383,8 +3394,8 @@
         {
           "kind": "usecase",
           "name": "Use Cases - Tenant Administrator",
-          "diagram": "AAAAAAGhDoc8pRuH4zI=",
-          "created": 33,
+          "diagram": "AAAAAAGhEPwUlF/8lSk=",
+          "created": 34,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
@@ -3397,13 +3408,13 @@
         {
           "kind": "usecase",
           "name": "Use Cases - Customer User",
-          "diagram": "AAAAAAGhDoc+OijMQ+Q=",
-          "created": 16,
+          "diagram": "AAAAAAGhEPwa7J0nthw=",
+          "created": 17,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
           "quality": {
-            "score": 94,
+            "score": 96,
             "rating": 5,
             "passes": true
           }
@@ -3411,22 +3422,50 @@
         {
           "kind": "usecase",
           "name": "Use Cases - Device",
-          "diagram": "AAAAAAGhDoc+xC1j9lM=",
-          "created": 20,
+          "diagram": "AAAAAAGhEPwb3KQNtt8=",
+          "created": 21,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
           "quality": {
-            "score": 92,
-            "rating": 5,
+            "score": 85,
+            "rating": 4,
             "passes": true
           }
         },
         {
           "kind": "usecase",
           "name": "Use Cases - System Administrator",
-          "diagram": "AAAAAAGhDoc/YTOIHLM=",
-          "created": 7,
+          "diagram": "AAAAAAGhEPwedbu0m1Q=",
+          "created": 8,
+          "updated": 0,
+          "unchanged": 0,
+          "deleted": 0,
+          "quality": {
+            "score": 98,
+            "rating": 5,
+            "passes": true
+          }
+        },
+        {
+          "kind": "statemachine",
+          "name": "State - Device lifecycle",
+          "diagram": "AAAAAAGhEPwe1b6NJek=",
+          "created": 21,
+          "updated": 0,
+          "unchanged": 0,
+          "deleted": 0,
+          "quality": {
+            "score": 85,
+            "rating": 4,
+            "passes": true
+          }
+        },
+        {
+          "kind": "statemachine",
+          "name": "State - Alarm lifecycle",
+          "diagram": "AAAAAAGhEPwvwsGjwZ0=",
+          "created": 13,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
@@ -3438,23 +3477,9 @@
         },
         {
           "kind": "statemachine",
-          "name": "State - Device lifecycle",
-          "diagram": "AAAAAAGhDoc/pDVWHow=",
-          "created": 21,
-          "updated": 0,
-          "unchanged": 0,
-          "deleted": 0,
-          "quality": {
-            "score": 87,
-            "rating": 4,
-            "passes": true
-          }
-        },
-        {
-          "kind": "statemachine",
-          "name": "State - Alarm lifecycle",
-          "diagram": "AAAAAAGhDodBQDcYdRU=",
-          "created": 13,
+          "name": "State - Rule node lifecycle",
+          "diagram": "AAAAAAGhEPwx08LZ940=",
+          "created": 20,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
@@ -3465,29 +3490,15 @@
           }
         },
         {
-          "kind": "statemachine",
-          "name": "State - Rule node lifecycle",
-          "diagram": "AAAAAAGhDodBwTgw8LE=",
-          "created": 20,
-          "updated": 0,
-          "unchanged": 0,
-          "deleted": 0,
-          "quality": {
-            "score": 83,
-            "rating": 4,
-            "passes": true
-          }
-        },
-        {
           "kind": "activity",
           "name": "Activity - Rule chain execution",
-          "diagram": "AAAAAAGhDodDCjnjb6Y=",
+          "diagram": "AAAAAAGhEPw7lcUwq+E=",
           "created": 41,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
           "quality": {
-            "score": 84,
+            "score": 82,
             "rating": 4,
             "passes": true
           }
@@ -3495,7 +3506,7 @@
         {
           "kind": "erd",
           "name": "ThingsBoard data model",
-          "diagram": "AAAAAAGhDodFnDyk6Ak=",
+          "diagram": "AAAAAAGhEPxH/sgvjIE=",
           "created": 38,
           "updated": 0,
           "unchanged": 0,
@@ -3509,13 +3520,13 @@
         {
           "kind": "c4",
           "name": "ThingsBoard containers",
-          "diagram": "AAAAAAGhDodN1UGJc8c=",
+          "diagram": "AAAAAAGhEPxbWM0YBPM=",
           "created": 42,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
           "quality": {
-            "score": 93,
+            "score": 90,
             "rating": 5,
             "passes": true
           }
@@ -3523,7 +3534,7 @@
         {
           "kind": "deployment",
           "name": "Deployment - Microservices",
-          "diagram": "AAAAAAGhDodSl0PaSIA=",
+          "diagram": "AAAAAAGhEPxifs9tDVg=",
           "created": 52,
           "updated": 0,
           "unchanged": 0,
@@ -3537,13 +3548,13 @@
         {
           "kind": "deployment",
           "name": "Deployment - Monolith",
-          "diagram": "AAAAAAGhDoddVWZD4FQ=",
+          "diagram": "AAAAAAGhEPx0mBR8oVk=",
           "created": 15,
           "updated": 0,
           "unchanged": 0,
-          "deleted": 0,
+          "deleted": 2,
           "quality": {
-            "score": 95,
+            "score": 94,
             "rating": 5,
             "passes": true
           }
@@ -3551,13 +3562,13 @@
         {
           "kind": "mindmap",
           "name": "ThingsBoard Features",
-          "diagram": "AAAAAAGhDodfGGo3tHs=",
+          "diagram": "AAAAAAGhEPx4Uh2iaPI=",
           "created": 109,
           "updated": 0,
           "unchanged": 0,
           "deleted": 0,
           "quality": {
-            "score": 84,
+            "score": 86,
             "rating": 4,
             "passes": true
           }
@@ -3565,13 +3576,13 @@
       ],
       "counts": {
         "diagrams": 25,
-        "created": 754,
+        "created": 758,
         "updated": 0,
         "unchanged": 0,
-        "deleted": 0
+        "deleted": 2
       },
       "quality": {
-        "min": 82,
+        "min": 81,
         "mean": 91,
         "passing": 25,
         "failing": []
@@ -3584,13 +3595,13 @@
       {
         "kind": "package",
         "name": "ThingsBoard packages",
-        "diagram": "AAAAAAGhDocXt7Ptr9k=",
+        "diagram": "AAAAAAGhEPvD/p3cHFg=",
         "created": 0,
         "updated": 0,
         "unchanged": 43,
         "deleted": 0,
         "quality": {
-          "score": 92,
+          "score": 90,
           "rating": 5,
           "passes": true
         }
@@ -3598,13 +3609,13 @@
       {
         "kind": "class",
         "name": "Class - Entities and DAO",
-        "diagram": "AAAAAAGhDocZ5bb/f7w=",
+        "diagram": "AAAAAAGhEPvGYqDvmQ0=",
         "created": 0,
         "updated": 0,
         "unchanged": 42,
         "deleted": 0,
         "quality": {
-          "score": 94,
+          "score": 93,
           "rating": 5,
           "passes": true
         }
@@ -3612,24 +3623,10 @@
       {
         "kind": "class",
         "name": "Class - Application Services",
-        "diagram": "AAAAAAGhDochQ9wqi3c=",
+        "diagram": "AAAAAAGhEPvaFv97WWQ=",
         "created": 0,
         "updated": 0,
         "unchanged": 17,
-        "deleted": 0,
-        "quality": {
-          "score": 91,
-          "rating": 5,
-          "passes": true
-        }
-      },
-      {
-        "kind": "class",
-        "name": "Class - Rule Engine",
-        "diagram": "AAAAAAGhDocjV95reek=",
-        "created": 0,
-        "updated": 0,
-        "unchanged": 34,
         "deleted": 0,
         "quality": {
           "score": 94,
@@ -3639,14 +3636,28 @@
       },
       {
         "kind": "class",
+        "name": "Class - Rule Engine",
+        "diagram": "AAAAAAGhEPvghAHulYM=",
+        "created": 0,
+        "updated": 0,
+        "unchanged": 34,
+        "deleted": 0,
+        "quality": {
+          "score": 93,
+          "rating": 5,
+          "passes": true
+        }
+      },
+      {
+        "kind": "class",
         "name": "Class - Transport",
-        "diagram": "AAAAAAGhDocn4eRbtXE=",
+        "diagram": "AAAAAAGhEPvsgwxEnMo=",
         "created": 0,
         "updated": 0,
         "unchanged": 30,
         "deleted": 0,
         "quality": {
-          "score": 82,
+          "score": 81,
           "rating": 4,
           "passes": true
         }
@@ -3654,10 +3665,52 @@
       {
         "kind": "class",
         "name": "Class - Actor System",
-        "diagram": "AAAAAAGhDocvmvXNrZI=",
+        "diagram": "AAAAAAGhEPv+9DGTmTI=",
         "created": 0,
         "updated": 0,
         "unchanged": 32,
+        "deleted": 0,
+        "quality": {
+          "score": 98,
+          "rating": 5,
+          "passes": true
+        }
+      },
+      {
+        "kind": "class",
+        "name": "Class - Security",
+        "diagram": "AAAAAAGhEPwEMk047cU=",
+        "created": 0,
+        "updated": 0,
+        "unchanged": 29,
+        "deleted": 0,
+        "quality": {
+          "score": 89,
+          "rating": 4,
+          "passes": true
+        }
+      },
+      {
+        "kind": "sequence",
+        "name": "Seq - Telemetry ingestion over MQTT",
+        "diagram": "AAAAAAGhEPwMvVZxf4g=",
+        "created": 0,
+        "updated": 0,
+        "unchanged": 25,
+        "deleted": 0,
+        "quality": {
+          "score": 94,
+          "rating": 5,
+          "passes": true
+        }
+      },
+      {
+        "kind": "sequence",
+        "name": "Seq - Rule chain processing",
+        "diagram": "AAAAAAGhEPwPKljGllA=",
+        "created": 0,
+        "updated": 0,
+        "unchanged": 25,
         "deleted": 0,
         "quality": {
           "score": 92,
@@ -3666,57 +3719,15 @@
         }
       },
       {
-        "kind": "class",
-        "name": "Class - Security",
-        "diagram": "AAAAAAGhDoczgg0DFAs=",
-        "created": 0,
-        "updated": 0,
-        "unchanged": 29,
-        "deleted": 0,
-        "quality": {
-          "score": 94,
-          "rating": 5,
-          "passes": true
-        }
-      },
-      {
-        "kind": "sequence",
-        "name": "Seq - Telemetry ingestion over MQTT",
-        "diagram": "AAAAAAGhDoc2kRIphsk=",
-        "created": 0,
-        "updated": 0,
-        "unchanged": 25,
-        "deleted": 0,
-        "quality": {
-          "score": 93,
-          "rating": 5,
-          "passes": true
-        }
-      },
-      {
-        "kind": "sequence",
-        "name": "Seq - Rule chain processing",
-        "diagram": "AAAAAAGhDoc4ThR09jw=",
-        "created": 0,
-        "updated": 0,
-        "unchanged": 25,
-        "deleted": 0,
-        "quality": {
-          "score": 94,
-          "rating": 5,
-          "passes": true
-        }
-      },
-      {
         "kind": "sequence",
         "name": "Seq - Device provisioning",
-        "diagram": "AAAAAAGhDoc5tBa78zo=",
+        "diagram": "AAAAAAGhEPwQ2VsX6G4=",
         "created": 0,
         "updated": 0,
         "unchanged": 21,
         "deleted": 0,
         "quality": {
-          "score": 95,
+          "score": 97,
           "rating": 5,
           "passes": true
         }
@@ -3724,13 +3735,13 @@
       {
         "kind": "sequence",
         "name": "Seq - Device claiming",
-        "diagram": "AAAAAAGhDoc7DRi1fqU=",
+        "diagram": "AAAAAAGhEPwSfF0bW9M=",
         "created": 0,
         "updated": 0,
         "unchanged": 14,
         "deleted": 0,
         "quality": {
-          "score": 95,
+          "score": 92,
           "rating": 5,
           "passes": true
         }
@@ -3738,13 +3749,13 @@
       {
         "kind": "sequence",
         "name": "Seq - REST login",
-        "diagram": "AAAAAAGhDoc72hoVn0w=",
+        "diagram": "AAAAAAGhEPwTjF6E+Ao=",
         "created": 0,
         "updated": 0,
         "unchanged": 15,
         "deleted": 0,
         "quality": {
-          "score": 93,
+          "score": 94,
           "rating": 5,
           "passes": true
         }
@@ -3752,10 +3763,10 @@
       {
         "kind": "usecase",
         "name": "Use Cases - Tenant Administrator",
-        "diagram": "AAAAAAGhDoc8pRuH4zI=",
+        "diagram": "AAAAAAGhEPwUlF/8lSk=",
         "created": 0,
         "updated": 0,
-        "unchanged": 33,
+        "unchanged": 34,
         "deleted": 0,
         "quality": {
           "score": 85,
@@ -3766,13 +3777,13 @@
       {
         "kind": "usecase",
         "name": "Use Cases - Customer User",
-        "diagram": "AAAAAAGhDoc+OijMQ+Q=",
+        "diagram": "AAAAAAGhEPwa7J0nthw=",
         "created": 0,
         "updated": 0,
-        "unchanged": 16,
+        "unchanged": 17,
         "deleted": 0,
         "quality": {
-          "score": 94,
+          "score": 96,
           "rating": 5,
           "passes": true
         }
@@ -3780,24 +3791,52 @@
       {
         "kind": "usecase",
         "name": "Use Cases - Device",
-        "diagram": "AAAAAAGhDoc+xC1j9lM=",
+        "diagram": "AAAAAAGhEPwb3KQNtt8=",
         "created": 0,
         "updated": 0,
-        "unchanged": 20,
+        "unchanged": 21,
         "deleted": 0,
         "quality": {
-          "score": 92,
-          "rating": 5,
+          "score": 85,
+          "rating": 4,
           "passes": true
         }
       },
       {
         "kind": "usecase",
         "name": "Use Cases - System Administrator",
-        "diagram": "AAAAAAGhDoc/YTOIHLM=",
+        "diagram": "AAAAAAGhEPwedbu0m1Q=",
         "created": 0,
         "updated": 0,
-        "unchanged": 7,
+        "unchanged": 8,
+        "deleted": 0,
+        "quality": {
+          "score": 98,
+          "rating": 5,
+          "passes": true
+        }
+      },
+      {
+        "kind": "statemachine",
+        "name": "State - Device lifecycle",
+        "diagram": "AAAAAAGhEPwe1b6NJek=",
+        "created": 0,
+        "updated": 0,
+        "unchanged": 21,
+        "deleted": 0,
+        "quality": {
+          "score": 85,
+          "rating": 4,
+          "passes": true
+        }
+      },
+      {
+        "kind": "statemachine",
+        "name": "State - Alarm lifecycle",
+        "diagram": "AAAAAAGhEPwvwsGjwZ0=",
+        "created": 0,
+        "updated": 0,
+        "unchanged": 13,
         "deleted": 0,
         "quality": {
           "score": 96,
@@ -3807,25 +3846,11 @@
       },
       {
         "kind": "statemachine",
-        "name": "State - Device lifecycle",
-        "diagram": "AAAAAAGhDoc/pDVWHow=",
+        "name": "State - Rule node lifecycle",
+        "diagram": "AAAAAAGhEPwx08LZ940=",
         "created": 0,
         "updated": 0,
-        "unchanged": 21,
-        "deleted": 0,
-        "quality": {
-          "score": 87,
-          "rating": 4,
-          "passes": true
-        }
-      },
-      {
-        "kind": "statemachine",
-        "name": "State - Alarm lifecycle",
-        "diagram": "AAAAAAGhDodBQDcYdRU=",
-        "created": 0,
-        "updated": 0,
-        "unchanged": 13,
+        "unchanged": 20,
         "deleted": 0,
         "quality": {
           "score": 92,
@@ -3834,29 +3859,15 @@
         }
       },
       {
-        "kind": "statemachine",
-        "name": "State - Rule node lifecycle",
-        "diagram": "AAAAAAGhDodBwTgw8LE=",
-        "created": 0,
-        "updated": 0,
-        "unchanged": 20,
-        "deleted": 0,
-        "quality": {
-          "score": 83,
-          "rating": 4,
-          "passes": true
-        }
-      },
-      {
         "kind": "activity",
         "name": "Activity - Rule chain execution",
-        "diagram": "AAAAAAGhDodDCjnjb6Y=",
+        "diagram": "AAAAAAGhEPw7lcUwq+E=",
         "created": 0,
         "updated": 0,
         "unchanged": 41,
         "deleted": 0,
         "quality": {
-          "score": 84,
+          "score": 82,
           "rating": 4,
           "passes": true
         }
@@ -3864,7 +3875,7 @@
       {
         "kind": "erd",
         "name": "ThingsBoard data model",
-        "diagram": "AAAAAAGhDodFnDyk6Ak=",
+        "diagram": "AAAAAAGhEPxH/sgvjIE=",
         "created": 0,
         "updated": 0,
         "unchanged": 38,
@@ -3878,13 +3889,13 @@
       {
         "kind": "c4",
         "name": "ThingsBoard containers",
-        "diagram": "AAAAAAGhDodN1UGJc8c=",
+        "diagram": "AAAAAAGhEPxbWM0YBPM=",
         "created": 0,
         "updated": 0,
         "unchanged": 42,
         "deleted": 0,
         "quality": {
-          "score": 93,
+          "score": 90,
           "rating": 5,
           "passes": true
         }
@@ -3892,7 +3903,7 @@
       {
         "kind": "deployment",
         "name": "Deployment - Microservices",
-        "diagram": "AAAAAAGhDodSl0PaSIA=",
+        "diagram": "AAAAAAGhEPxifs9tDVg=",
         "created": 0,
         "updated": 0,
         "unchanged": 52,
@@ -3906,13 +3917,13 @@
       {
         "kind": "deployment",
         "name": "Deployment - Monolith",
-        "diagram": "AAAAAAGhDoddVWZD4FQ=",
+        "diagram": "AAAAAAGhEPx0mBR8oVk=",
         "created": 0,
         "updated": 0,
         "unchanged": 15,
         "deleted": 0,
         "quality": {
-          "score": 95,
+          "score": 98,
           "rating": 5,
           "passes": true
         }
@@ -3920,13 +3931,13 @@
       {
         "kind": "mindmap",
         "name": "ThingsBoard Features",
-        "diagram": "AAAAAAGhDodfGGo3tHs=",
+        "diagram": "AAAAAAGhEPx4Uh2iaPI=",
         "created": 0,
         "updated": 0,
         "unchanged": 109,
         "deleted": 0,
         "quality": {
-          "score": 84,
+          "score": 86,
           "rating": 4,
           "passes": true
         }
@@ -3936,24 +3947,24 @@
       "diagrams": 25,
       "created": 0,
       "updated": 0,
-      "unchanged": 754,
+      "unchanged": 758,
       "deleted": 0
     },
     "quality": {
-      "min": 82,
+      "min": 81,
       "mean": 91,
       "passing": 25,
       "failing": []
     }
   },
   "drawn": {
-    "seconds": 28.8,
+    "seconds": 47.3,
     "calls": [
       {
         "args": {
           "kind": "package",
           "name": "ThingsBoard packages",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "packages": [
               {
@@ -4120,7 +4131,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDod4uqLlj88=",
+            "_id": "AAAAAAGhEPyQ0lcDj0Y=",
             "_type": "UMLPackageDiagram",
             "name": "ThingsBoard packages"
           },
@@ -4149,16 +4160,27 @@
               "package Angular UI (ui-ngx)",
               "package Microservice Packaging (msa)",
               "package Entity Data Query Service"
+            ],
+            "escaped": [
+              "Domain Model (common.data) -> Domain Model \\(common\\.data\\)",
+              "Messaging (common.message, common.queue) -> Messaging \\(common\\.message\\, common\\.queue\\)",
+              "Actor Framework (common.actor) -> Actor Framework \\(common\\.actor\\)",
+              "Persistence (dao) -> Persistence \\(dao\\)",
+              "Transport API (common.transport) -> Transport API \\(common\\.transport\\)",
+              "Actor System (application.actors) -> Actor System \\(application\\.actors\\)",
+              "REST and WebSocket API (application.controller) -> REST and WebSocket API \\(application\\.controller\\)",
+              "Angular UI (ui-ngx) -> Angular UI \\(ui-ngx\\)",
+              "Microservice Packaging (msa) -> Microservice Packaging \\(msa\\)"
             ]
           },
           "quality": {
-            "score": 92,
+            "score": 90,
             "rating": 5,
-            "before": 92,
+            "before": 90,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["trim"],
+            "steps": ["snap", "trim"],
             "findings": []
           }
         }
@@ -4167,7 +4189,7 @@
         "args": {
           "kind": "class",
           "name": "Class - Entities and DAO",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "classes": [
               {
@@ -4469,7 +4491,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDod7S6ZM7SA=",
+            "_id": "AAAAAAGhEPyT4VprWwI=",
             "_type": "UMLClassDiagram",
             "name": "Class - Entities and DAO"
           },
@@ -4484,22 +4506,13 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 73,
-            "rating": 3,
-            "before": 70,
+            "score": 81,
+            "rating": 4,
+            "before": 59,
             "target": 80,
-            "passes": false,
-            "iterations": 2,
-            "steps": [
-              "order ranks",
-              "dodge",
-              "autofix",
-              "snap",
-              "trim",
-              "order ranks",
-              "dodge",
-              "snap"
-            ],
+            "passes": true,
+            "iterations": 1,
+            "steps": ["order ranks", "dodge", "autofix", "snap", "trim", "place labels"],
             "findings": [
               {
                 "rule": "L004",
@@ -4521,7 +4534,7 @@
         "args": {
           "kind": "class",
           "name": "Class - Application Services",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "classes": [
               {
@@ -4624,7 +4637,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoeSWAAORKk=",
+            "_id": "AAAAAAGhEPyqnrQb16Q=",
             "_type": "UMLClassDiagram",
             "name": "Class - Application Services"
           },
@@ -4639,14 +4652,20 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 89,
-            "rating": 4,
-            "before": 89,
+            "score": 94,
+            "rating": 5,
+            "before": 92,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["order ranks", "trim"],
+            "steps": ["order ranks", "snap", "trim", "unstrip"],
             "findings": [
+              {
+                "rule": "L004",
+                "name": "edge-crosses-node",
+                "severity": "warning",
+                "count": 1
+              },
               {
                 "rule": "L006",
                 "name": "disconnected",
@@ -4661,7 +4680,7 @@
         "args": {
           "kind": "class",
           "name": "Class - Rule Engine",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "classes": [
               {
@@ -4842,7 +4861,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoeUqwLQ1DU=",
+            "_id": "AAAAAAGhEPyxB7cO+E0=",
             "_type": "UMLClassDiagram",
             "name": "Class - Rule Engine"
           },
@@ -4857,14 +4876,27 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 93,
-            "rating": 5,
-            "before": 93,
+            "score": 79,
+            "rating": 3,
+            "before": 92,
             "target": 80,
-            "passes": true,
+            "passes": false,
             "iterations": 1,
-            "steps": ["trim"],
-            "findings": []
+            "steps": ["trim", "unbundle", "unstrip", "unbundle"],
+            "findings": [
+              {
+                "rule": "L004",
+                "name": "edge-crosses-node",
+                "severity": "warning",
+                "count": 4
+              },
+              {
+                "rule": "L005",
+                "name": "label-overflow",
+                "severity": "warning",
+                "count": 11
+              }
+            ]
           }
         }
       },
@@ -4872,7 +4904,7 @@
         "args": {
           "kind": "class",
           "name": "Class - Transport",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "classes": [
               {
@@ -5030,7 +5062,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoeZgQl/bM4=",
+            "_id": "AAAAAAGhEPzCp8JMk+4=",
             "_type": "UMLClassDiagram",
             "name": "Class - Transport"
           },
@@ -5045,9 +5077,9 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 81,
+            "score": 83,
             "rating": 4,
-            "before": 80,
+            "before": 82,
             "target": 80,
             "passes": true,
             "iterations": 1,
@@ -5079,7 +5111,7 @@
         "args": {
           "kind": "class",
           "name": "Class - Actor System",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "classes": [
               {
@@ -5262,7 +5294,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoee8BX/tv0=",
+            "_id": "AAAAAAGhEPzP3NQPpyk=",
             "_type": "UMLClassDiagram",
             "name": "Class - Actor System"
           },
@@ -5278,13 +5310,13 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 96,
+            "score": 98,
             "rating": 5,
-            "before": 92,
+            "before": 94,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["dodge", "trim"],
+            "steps": ["dodge", "snap", "trim"],
             "findings": []
           }
         }
@@ -5293,7 +5325,7 @@
         "args": {
           "kind": "class",
           "name": "Class - Security",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "classes": [
               {
@@ -5436,7 +5468,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoei8yfPTPw=",
+            "_id": "AAAAAAGhEPzT3ugB3h8=",
             "_type": "UMLClassDiagram",
             "name": "Class - Security"
           },
@@ -5451,14 +5483,21 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 94,
-            "rating": 5,
+            "score": 88,
+            "rating": 4,
             "before": 93,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["order ranks", "trim"],
-            "findings": []
+            "steps": ["order ranks", "trim", "place labels", "unstrip"],
+            "findings": [
+              {
+                "rule": "L004",
+                "name": "edge-crosses-node",
+                "severity": "warning",
+                "count": 2
+              }
+            ]
           }
         }
       },
@@ -5466,7 +5505,7 @@
         "args": {
           "kind": "sequence",
           "name": "Seq - Telemetry ingestion over MQTT",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "participants": [
               {
@@ -5586,7 +5625,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoemQC05r2o=",
+            "_id": "AAAAAAGhEPzdYvIMX5I=",
             "_type": "UMLSequenceDiagram",
             "name": "Seq - Telemetry ingestion over MQTT"
           },
@@ -5600,19 +5639,19 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 96,
+            "score": 92,
             "rating": 5,
             "before": 88,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["fit labels", "lifelines"],
+            "steps": ["lifelines"],
             "findings": [
               {
                 "rule": "L005",
                 "name": "label-overflow",
                 "severity": "warning",
-                "count": 1
+                "count": 5
               }
             ]
           }
@@ -5622,7 +5661,7 @@
         "args": {
           "kind": "sequence",
           "name": "Seq - Rule chain processing",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "participants": [
               "RuleChainActor",
@@ -5745,7 +5784,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoeoGzAQOeM=",
+            "_id": "AAAAAAGhEPzfhvTlNaE=",
             "_type": "UMLSequenceDiagram",
             "name": "Seq - Rule chain processing"
           },
@@ -5759,9 +5798,9 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 95,
+            "score": 93,
             "rating": 5,
-            "before": 95,
+            "before": 92,
             "target": 80,
             "passes": true,
             "iterations": 1,
@@ -5774,7 +5813,7 @@
         "args": {
           "kind": "sequence",
           "name": "Seq - Device provisioning",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "participants": [
               {
@@ -5876,7 +5915,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoeqHDLpAdw=",
+            "_id": "AAAAAAGhEPzhm/fAMsY=",
             "_type": "UMLSequenceDiagram",
             "name": "Seq - Device provisioning"
           },
@@ -5890,9 +5929,9 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 97,
+            "score": 98,
             "rating": 5,
-            "before": 96,
+            "before": 98,
             "target": 80,
             "passes": true,
             "iterations": 1,
@@ -5905,7 +5944,7 @@
         "args": {
           "kind": "sequence",
           "name": "Seq - Device claiming",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "participants": [
               {
@@ -5978,7 +6017,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoer2DVr57o=",
+            "_id": "AAAAAAGhEPzjWPpDL50=",
             "_type": "UMLSequenceDiagram",
             "name": "Seq - Device claiming"
           },
@@ -5992,21 +6031,14 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 96,
+            "score": 95,
             "rating": 5,
-            "before": 97,
+            "before": 93,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["lifelines"],
-            "findings": [
-              {
-                "rule": "L005",
-                "name": "label-overflow",
-                "severity": "warning",
-                "count": 3
-              }
-            ]
+            "steps": ["fit labels", "lifelines"],
+            "findings": []
           }
         }
       },
@@ -6014,7 +6046,7 @@
         "args": {
           "kind": "sequence",
           "name": "Seq - REST login",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "participants": [
               {
@@ -6090,7 +6122,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoetVzdDB+Y=",
+            "_id": "AAAAAAGhEPzkv/wcA8Y=",
             "_type": "UMLSequenceDiagram",
             "name": "Seq - REST login"
           },
@@ -6104,9 +6136,9 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 94,
+            "score": 92,
             "rating": 5,
-            "before": 93,
+            "before": 85,
             "target": 80,
             "passes": true,
             "iterations": 1,
@@ -6126,7 +6158,7 @@
         "args": {
           "kind": "usecase",
           "name": "Use Cases - Tenant Administrator",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "allowDuplicateNames": true,
           "spec": {
             "actors": ["Tenant Administrator", "External System", "Device"],
@@ -6224,7 +6256,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoeu5zkutEM=",
+            "_id": "AAAAAAGhEPzmQP4IkBE=",
             "_type": "UMLUseCaseDiagram",
             "name": "Use Cases - Tenant Administrator"
           },
@@ -6239,19 +6271,19 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 85,
-            "rating": 4,
+            "score": 79,
+            "rating": 3,
             "before": 84,
             "target": 80,
-            "passes": true,
+            "passes": false,
             "iterations": 1,
-            "steps": ["dodge"],
+            "steps": ["dodge", "unstrip", "place labels"],
             "findings": [
               {
                 "rule": "L004",
                 "name": "edge-crosses-node",
                 "severity": "warning",
-                "count": 1
+                "count": 10
               }
             ]
           }
@@ -6261,7 +6293,7 @@
         "args": {
           "kind": "usecase",
           "name": "Use Cases - Customer User",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "allowDuplicateNames": true,
           "spec": {
             "actors": ["Customer User", "Device"],
@@ -6312,7 +6344,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoexJkOk9Ag=",
+            "_id": "AAAAAAGhEPzvSUmIvNQ=",
             "_type": "UMLUseCaseDiagram",
             "name": "Use Cases - Customer User"
           },
@@ -6328,14 +6360,21 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 94,
-            "rating": 5,
+            "score": 81,
+            "rating": 4,
             "before": 94,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": [],
-            "findings": []
+            "steps": ["unstrip"],
+            "findings": [
+              {
+                "rule": "L004",
+                "name": "edge-crosses-node",
+                "severity": "warning",
+                "count": 3
+              }
+            ]
           }
         }
       },
@@ -6343,7 +6382,7 @@
         "args": {
           "kind": "usecase",
           "name": "Use Cases - Device",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "allowDuplicateNames": true,
           "spec": {
             "actors": ["Device", "Gateway"],
@@ -6409,7 +6448,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoeyWEg8JKM=",
+            "_id": "AAAAAAGhEPzyPF6szMI=",
             "_type": "UMLUseCaseDiagram",
             "name": "Use Cases - Device"
           },
@@ -6425,14 +6464,21 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 91,
-            "rating": 5,
-            "before": 91,
+            "score": 86,
+            "rating": 4,
+            "before": 90,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": [],
-            "findings": []
+            "steps": ["place labels", "unstrip", "place labels"],
+            "findings": [
+              {
+                "rule": "L004",
+                "name": "edge-crosses-node",
+                "severity": "warning",
+                "count": 5
+              }
+            ]
           }
         }
       },
@@ -6440,7 +6486,7 @@
         "args": {
           "kind": "usecase",
           "name": "Use Cases - System Administrator",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "allowDuplicateNames": true,
           "spec": {
             "system": "Platform Administration",
@@ -6464,7 +6510,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoezrk6trrM=",
+            "_id": "AAAAAAGhEPz4n5G4dlI=",
             "_type": "UMLUseCaseDiagram",
             "name": "Use Cases - System Administrator"
           },
@@ -6479,13 +6525,13 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 97,
+            "score": 100,
             "rating": 5,
-            "before": 97,
+            "before": 100,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["boundary"],
+            "steps": [],
             "findings": []
           }
         }
@@ -6494,7 +6540,7 @@
         "args": {
           "kind": "statemachine",
           "name": "State - Device lifecycle",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "states": [
               {
@@ -6590,7 +6636,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoe0elEbn8M=",
+            "_id": "AAAAAAGhEPz5dpUYsoE=",
             "_type": "UMLStatechartDiagram",
             "name": "State - Device lifecycle"
           },
@@ -6605,13 +6651,13 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 87,
+            "score": 85,
             "rating": 4,
-            "before": 87,
+            "before": 75,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["trim"],
+            "steps": ["fit labels", "snap", "trim", "place labels", "unstrip", "place labels"],
             "findings": [
               {
                 "rule": "L005",
@@ -6627,7 +6673,7 @@
         "args": {
           "kind": "statemachine",
           "name": "State - Alarm lifecycle",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "states": [
               {
@@ -6686,7 +6732,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoe3A1OzbHE=",
+            "_id": "AAAAAAGhEP0Kvpms9aU=",
             "_type": "UMLStatechartDiagram",
             "name": "State - Alarm lifecycle"
           },
@@ -6701,14 +6747,21 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 92,
+            "score": 96,
             "rating": 5,
-            "before": 92,
+            "before": 94,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["fit labels", "snap", "trim"],
-            "findings": []
+            "steps": ["fit labels", "snap", "trim", "unstrip"],
+            "findings": [
+              {
+                "rule": "L005",
+                "name": "label-overflow",
+                "severity": "warning",
+                "count": 4
+              }
+            ]
           }
         }
       },
@@ -6716,7 +6769,7 @@
         "args": {
           "kind": "statemachine",
           "name": "State - Rule node lifecycle",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "states": [
               {
@@ -6805,7 +6858,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoe4XlWP1nI=",
+            "_id": "AAAAAAGhEP0M/Zr+lZk=",
             "_type": "UMLStatechartDiagram",
             "name": "State - Rule node lifecycle"
           },
@@ -6820,13 +6873,13 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 83,
-            "rating": 4,
-            "before": 83,
+            "score": 92,
+            "rating": 5,
+            "before": 80,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["trim"],
+            "steps": ["fit labels", "trim", "place labels", "unstrip", "place labels"],
             "findings": [
               {
                 "rule": "L005",
@@ -6842,7 +6895,7 @@
         "args": {
           "kind": "activity",
           "name": "Activity - Rule chain execution",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "lanes": ["Queue Consumer", "Rule Chain Actor", "Rule Node", "Services"],
             "nodes": [
@@ -7012,7 +7065,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoe6wFgTtjM=",
+            "_id": "AAAAAAGhEP0WM54mHGk=",
             "_type": "UMLActivityDiagram",
             "name": "Activity - Rule chain execution"
           },
@@ -7026,19 +7079,19 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 84,
+            "score": 82,
             "rating": 4,
-            "before": 70,
+            "before": 61,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["fit labels", "separate in lanes", "dodge"],
+            "steps": ["fit labels", "separate in lanes", "dodge", "fit lanes", "place labels"],
             "findings": [
               {
                 "rule": "L004",
                 "name": "edge-crosses-node",
                 "severity": "warning",
-                "count": 1
+                "count": 2
               }
             ]
           }
@@ -7048,7 +7101,7 @@
         "args": {
           "kind": "erd",
           "name": "ThingsBoard data model",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "entities": [
               {
@@ -7348,7 +7401,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDoe+NVt9r5c=",
+            "_id": "AAAAAAGhEP0dQKHOh18=",
             "_type": "ERDDiagram",
             "name": "ThingsBoard data model"
           },
@@ -7369,7 +7422,7 @@
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["dodge", "snap", "trim"],
+            "steps": ["dodge", "snap", "trim", "unbundle"],
             "findings": [
               {
                 "rule": "L006",
@@ -7385,7 +7438,7 @@
         "args": {
           "kind": "c4",
           "name": "ThingsBoard containers",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "elements": [
               {
@@ -7667,7 +7720,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDofIFWEL5r0=",
+            "_id": "AAAAAAGhEP0nf6ddhUY=",
             "_type": "C4Diagram",
             "name": "ThingsBoard containers"
           },
@@ -7682,13 +7735,13 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 93,
+            "score": 90,
             "rating": 5,
-            "before": 93,
+            "before": 90,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["fit labels", "trim"],
+            "steps": ["fit labels", "snap", "trim", "unbundle"],
             "findings": []
           }
         }
@@ -7697,7 +7750,7 @@
         "args": {
           "kind": "deployment",
           "name": "Deployment - Microservices",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "nodes": [
               {
@@ -7811,7 +7864,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDofOPGQFFNs=",
+            "_id": "AAAAAAGhEP0tO6pYXMM=",
             "_type": "UMLDeploymentDiagram",
             "name": "Deployment - Microservices"
           },
@@ -7828,23 +7881,17 @@
           "quality": {
             "score": 83,
             "rating": 4,
-            "before": 74,
+            "before": 68,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["dodge", "autofix", "trim"],
+            "steps": ["dodge", "trim", "place labels"],
             "findings": [
               {
                 "rule": "L004",
                 "name": "edge-crosses-node",
                 "severity": "warning",
-                "count": 2
-              },
-              {
-                "rule": "L005",
-                "name": "label-overflow",
-                "severity": "warning",
-                "count": 25
+                "count": 5
               }
             ]
           }
@@ -7854,7 +7901,7 @@
         "args": {
           "kind": "deployment",
           "name": "Deployment - Monolith",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "nodes": [
               {
@@ -7897,7 +7944,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDofa74iXQ2c=",
+            "_id": "AAAAAAGhEP0/1fGQjwk=",
             "_type": "UMLDeploymentDiagram",
             "name": "Deployment - Monolith"
           },
@@ -7913,13 +7960,13 @@
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 95,
+            "score": 98,
             "rating": 5,
-            "before": 90,
+            "before": 94,
             "target": 80,
             "passes": true,
             "iterations": 1,
-            "steps": ["dodge", "autofix", "trim"],
+            "steps": ["dodge", "autofix", "snap", "trim", "place labels"],
             "findings": [
               {
                 "rule": "L005",
@@ -7935,7 +7982,7 @@
         "args": {
           "kind": "mindmap",
           "name": "ThingsBoard Features",
-          "parent": "AAAAAAGhDod4r6Li8Yc=",
+          "parent": "AAAAAAGhEPyQyFcAju4=",
           "spec": {
             "root": {
               "name": "ThingsBoard Features",
@@ -8124,7 +8171,7 @@
         },
         "answer": {
           "diagram": {
-            "_id": "AAAAAAGhDofc0oyG53M=",
+            "_id": "AAAAAAGhEP1B+vca67Q=",
             "_type": "MMMindmapDiagram",
             "name": "ThingsBoard Features"
           },
@@ -8132,21 +8179,32 @@
           "upserted": false,
           "updated": 0,
           "unchanged": 0,
-          "layout": "engine",
-          "preset": "flow-right",
+          "layout": "placed",
           "created": 109,
           "style": {
             "profile": "uml-standard"
           },
           "quality": {
-            "score": 84,
+            "score": 86,
             "rating": 4,
-            "before": 84,
+            "before": 86,
             "target": 80,
             "passes": true,
             "iterations": 1,
             "steps": [],
             "findings": [
+              {
+                "rule": "L004",
+                "name": "edge-crosses-node",
+                "severity": "warning",
+                "count": 10
+              },
+              {
+                "rule": "L007",
+                "name": "dense",
+                "severity": "info",
+                "count": 2
+              },
               {
                 "rule": "L008",
                 "name": "too-many-elements",

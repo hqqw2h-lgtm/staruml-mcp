@@ -73,11 +73,11 @@
       }
     ]
   },
-  "diagramId": "AAAAAAGhC9QaH2XEvMo=",
+  "diagramId": "AAAAAAGhEP31PUdUbZY=",
   "png": {
-    "width": 1382,
+    "width": 1402,
     "height": 1342,
-    "bytes": 153229
+    "bytes": 153562
   },
   "dumpArgs": {
     "type": "UMLClassifier",
@@ -89,29 +89,29 @@
     "count": 6,
     "elements": [
       {
-        "_id": "AAAAAAGhC9QaWGXIFHM=",
+        "_id": "AAAAAAGhEP31R0dY9h4=",
         "_type": "UMLClass",
-        "_parent": "AAAAAAGhC9QaH2XDaOw=",
+        "_parent": "AAAAAAGhEP31PUdT9Ug=",
         "name": "Shopper",
         "ownedElements": [
           {
-            "_id": "AAAAAAGhC9Qg+GdVyhg=",
+            "_id": "AAAAAAGhEP310UjlTE8=",
             "_type": "UMLAssociation",
-            "_parent": "AAAAAAGhC9QaWGXIFHM=",
+            "_parent": "AAAAAAGhEP31R0dY9h4=",
             "name": "places",
             "ownedElements": [],
             "documentation": "",
             "tags": [],
             "end1": {
-              "_id": "AAAAAAGhC9Qg+GdWdeo=",
+              "_id": "AAAAAAGhEP310UjmdNU=",
               "_type": "UMLAssociationEnd",
-              "_parent": "AAAAAAGhC9Qg+GdVyhg=",
+              "_parent": "AAAAAAGhEP310UjlTE8=",
               "name": "",
               "ownedElements": [],
               "documentation": "",
               "tags": [],
               "reference": {
-                "$ref": "AAAAAAGhC9QaWGXIFHM="
+                "$ref": "AAAAAAGhEP31R0dY9h4="
               },
               "stereotype": "",
               "visibility": "public",
@@ -128,15 +128,15 @@
               "ownerAttribute": null
             },
             "end2": {
-              "_id": "AAAAAAGhC9Qg+GdXtP0=",
+              "_id": "AAAAAAGhEP310UjnS0g=",
               "_type": "UMLAssociationEnd",
-              "_parent": "AAAAAAGhC9Qg+GdVyhg=",
+              "_parent": "AAAAAAGhEP310UjlTE8=",
               "name": "",
               "ownedElements": [],
               "documentation": "",
               "tags": [],
               "reference": {
-                "$ref": "AAAAAAGhC9QbDGYNjfU="
+                "$ref": "AAAAAAGhEP31XUedtgY="
               },
               "stereotype": "",
               "visibility": "public",
@@ -164,9 +164,9 @@
         "templateParameters": [],
         "attributes": [
           {
-            "_id": "AAAAAAGhC9QaeGXxnXI=",
+            "_id": "AAAAAAGhEP31TEeBGbQ=",
             "_type": "UMLAttribute",
-            "_parent": "AAAAAAGhC9QaWGXIFHM=",
+            "_parent": "AAAAAAGhEP31R0dY9h4=",
             "name": "id",
             "ownedElements": [],
             "documentation": "",
@@ -188,9 +188,9 @@
             "isID": false
           },
           {
-            "_id": "AAAAAAGhC9QammX3wQA=",
+            "_id": "AAAAAAGhEP31UEeH4lY=",
             "_type": "UMLAttribute",
-            "_parent": "AAAAAAGhC9QaWGXIFHM=",
+            "_parent": "AAAAAAGhEP31R0dY9h4=",
             "name": "name",
             "ownedElements": [],
             "documentation": "",
@@ -212,9 +212,9 @@
             "isID": false
           },
           {
-            "_id": "AAAAAAGhC9QavWX9Vnk=",
+            "_id": "AAAAAAGhEP31VUeNjBY=",
             "_type": "UMLAttribute",
-            "_parent": "AAAAAAGhC9QaWGXIFHM=",
+            "_parent": "AAAAAAGhEP31R0dY9h4=",
             "name": "email",
             "ownedElements": [],
             "documentation": "",
@@ -238,9 +238,9 @@
         ],
         "operations": [
           {
-            "_id": "AAAAAAGhC9Qa4mYDY+A=",
+            "_id": "AAAAAAGhEP31WEeTXCc=",
             "_type": "UMLOperation",
-            "_parent": "AAAAAAGhC9QaWGXIFHM=",
+            "_parent": "AAAAAAGhEP31R0dY9h4=",
             "name": "placeOrder",
             "ownedElements": [],
             "documentation": "",
@@ -253,9 +253,9 @@
             "featureDirection": "provided",
             "parameters": [
               {
-                "_id": "AAAAAAGhC9Qa4mYEkDc=",
+                "_id": "AAAAAAGhEP31WEeUyEE=",
                 "_type": "UMLParameter",
-                "_parent": "AAAAAAGhC9Qa4mYDY+A=",
+                "_parent": "AAAAAAGhEP31WEeTXCc=",
                 "name": "cart",
                 "ownedElements": [],
                 "documentation": "",
@@ -275,9 +275,9 @@
                 "direction": "in"
               },
               {
-                "_id": "AAAAAAGhC9Qa4mYFVRc=",
+                "_id": "AAAAAAGhEP31WEeVzkQ=",
                 "_type": "UMLParameter",
-                "_parent": "AAAAAAGhC9Qa4mYDY+A=",
+                "_parent": "AAAAAAGhEP31WEeTXCc=",
                 "name": "",
                 "ownedElements": [],
                 "documentation": "",
@@ -315,34 +315,34 @@
         "isActive": false
       },
       {
-        "_id": "AAAAAAGhC9QbDGYNjfU=",
+        "_id": "AAAAAAGhEP31XUedtgY=",
         "_type": "UMLClass",
-        "_parent": "AAAAAAGhC9QaH2XDaOw=",
+        "_parent": "AAAAAAGhEP31PUdT9Ug=",
         "name": "PurchaseOrder",
         "ownedElements": [
           {
-            "_id": "AAAAAAGhC9QhTmebaPk=",
+            "_id": "AAAAAAGhEP312UkiCOg=",
             "_type": "UMLAssociation",
-            "_parent": "AAAAAAGhC9QbDGYNjfU=",
+            "_parent": "AAAAAAGhEP31XUedtgY=",
             "name": "",
             "ownedElements": [],
             "documentation": "",
             "tags": [],
             "end1": {
-              "_id": "AAAAAAGhC9QhTmecXDA=",
+              "_id": "AAAAAAGhEP312UkjncQ=",
               "_type": "UMLAssociationEnd",
-              "_parent": "AAAAAAGhC9QhTmebaPk=",
+              "_parent": "AAAAAAGhEP312UkiCOg=",
               "name": "",
               "ownedElements": [],
               "documentation": "",
               "tags": [],
               "reference": {
-                "$ref": "AAAAAAGhC9QbDGYNjfU="
+                "$ref": "AAAAAAGhEP31XUedtgY="
               },
               "stereotype": "",
               "visibility": "public",
               "navigable": "unspecified",
-              "aggregation": "none",
+              "aggregation": "composite",
               "multiplicity": "",
               "defaultValue": "",
               "isReadOnly": false,
@@ -354,20 +354,20 @@
               "ownerAttribute": null
             },
             "end2": {
-              "_id": "AAAAAAGhC9QhTmed/dM=",
+              "_id": "AAAAAAGhEP312UkkC2I=",
               "_type": "UMLAssociationEnd",
-              "_parent": "AAAAAAGhC9QhTmebaPk=",
+              "_parent": "AAAAAAGhEP312UkiCOg=",
               "name": "",
               "ownedElements": [],
               "documentation": "",
               "tags": [],
               "reference": {
-                "$ref": "AAAAAAGhC9QcfmZYrpY="
+                "$ref": "AAAAAAGhEP31dkfoox8="
               },
               "stereotype": "",
               "visibility": "public",
               "navigable": "unspecified",
-              "aggregation": "composite",
+              "aggregation": "none",
               "multiplicity": "1..*",
               "defaultValue": "",
               "isReadOnly": false,
@@ -383,23 +383,23 @@
             "isDerived": false
           },
           {
-            "_id": "AAAAAAGhC9QisGhR+bE=",
+            "_id": "AAAAAAGhEP3180mrcOY=",
             "_type": "UMLAssociation",
-            "_parent": "AAAAAAGhC9QbDGYNjfU=",
+            "_parent": "AAAAAAGhEP31XUedtgY=",
             "name": "",
             "ownedElements": [],
             "documentation": "",
             "tags": [],
             "end1": {
-              "_id": "AAAAAAGhC9QisGhSf0w=",
+              "_id": "AAAAAAGhEP3180ms3Lo=",
               "_type": "UMLAssociationEnd",
-              "_parent": "AAAAAAGhC9QisGhR+bE=",
+              "_parent": "AAAAAAGhEP3180mrcOY=",
               "name": "",
               "ownedElements": [],
               "documentation": "",
               "tags": [],
               "reference": {
-                "$ref": "AAAAAAGhC9QbDGYNjfU="
+                "$ref": "AAAAAAGhEP31XUedtgY="
               },
               "stereotype": "",
               "visibility": "public",
@@ -416,15 +416,15 @@
               "ownerAttribute": null
             },
             "end2": {
-              "_id": "AAAAAAGhC9QisGhTs1Q=",
+              "_id": "AAAAAAGhEP3180mtKHo=",
               "_type": "UMLAssociationEnd",
-              "_parent": "AAAAAAGhC9QisGhR+bE=",
+              "_parent": "AAAAAAGhEP3180mrcOY=",
               "name": "",
               "ownedElements": [],
               "documentation": "",
               "tags": [],
               "reference": {
-                "$ref": "AAAAAAGhC9QeeGbQJOc="
+                "$ref": "AAAAAAGhEP31nEhgSpk="
               },
               "stereotype": "",
               "visibility": "public",
@@ -445,18 +445,18 @@
             "isDerived": false
           },
           {
-            "_id": "AAAAAAGhC9Qi5mjBhT4=",
+            "_id": "AAAAAAGhEP31+0n3MTs=",
             "_type": "UMLDependency",
-            "_parent": "AAAAAAGhC9QbDGYNjfU=",
+            "_parent": "AAAAAAGhEP31XUedtgY=",
             "name": "",
             "ownedElements": [],
             "documentation": "",
             "tags": [],
             "source": {
-              "$ref": "AAAAAAGhC9QbDGYNjfU="
+              "$ref": "AAAAAAGhEP31XUedtgY="
             },
             "target": {
-              "$ref": "AAAAAAGhC9QfwGcNRek="
+              "$ref": "AAAAAAGhEP31sUidHcU="
             },
             "stereotype": null,
             "visibility": "public",
@@ -470,9 +470,9 @@
         "templateParameters": [],
         "attributes": [
           {
-            "_id": "AAAAAAGhC9QbSmY2IuE=",
+            "_id": "AAAAAAGhEP31YUfGJv8=",
             "_type": "UMLAttribute",
-            "_parent": "AAAAAAGhC9QbDGYNjfU=",
+            "_parent": "AAAAAAGhEP31XUedtgY=",
             "name": "id",
             "ownedElements": [],
             "documentation": "",
@@ -494,9 +494,9 @@
             "isID": false
           },
           {
-            "_id": "AAAAAAGhC9QbiWY8SOM=",
+            "_id": "AAAAAAGhEP31ZkfMgtE=",
             "_type": "UMLAttribute",
-            "_parent": "AAAAAAGhC9QbDGYNjfU=",
+            "_parent": "AAAAAAGhEP31XUedtgY=",
             "name": "status",
             "ownedElements": [],
             "documentation": "",
@@ -518,9 +518,9 @@
             "isID": false
           },
           {
-            "_id": "AAAAAAGhC9QbxmZCNFQ=",
+            "_id": "AAAAAAGhEP31akfS6BE=",
             "_type": "UMLAttribute",
-            "_parent": "AAAAAAGhC9QbDGYNjfU=",
+            "_parent": "AAAAAAGhEP31XUedtgY=",
             "name": "createdAt",
             "ownedElements": [],
             "documentation": "",
@@ -544,9 +544,9 @@
         ],
         "operations": [
           {
-            "_id": "AAAAAAGhC9Qb+2ZIk90=",
+            "_id": "AAAAAAGhEP31bkfYXAY=",
             "_type": "UMLOperation",
-            "_parent": "AAAAAAGhC9QbDGYNjfU=",
+            "_parent": "AAAAAAGhEP31XUedtgY=",
             "name": "total",
             "ownedElements": [],
             "documentation": "",
@@ -559,9 +559,9 @@
             "featureDirection": "provided",
             "parameters": [
               {
-                "_id": "AAAAAAGhC9Qb+2ZJGZc=",
+                "_id": "AAAAAAGhEP31bkfZJTY=",
                 "_type": "UMLParameter",
-                "_parent": "AAAAAAGhC9Qb+2ZIk90=",
+                "_parent": "AAAAAAGhEP31bkfYXAY=",
                 "name": "",
                 "ownedElements": [],
                 "documentation": "",
@@ -591,9 +591,9 @@
             "postconditions": []
           },
           {
-            "_id": "AAAAAAGhC9QcRGZQ2gI=",
+            "_id": "AAAAAAGhEP31ckfgS0U=",
             "_type": "UMLOperation",
-            "_parent": "AAAAAAGhC9QbDGYNjfU=",
+            "_parent": "AAAAAAGhEP31XUedtgY=",
             "name": "cancel",
             "ownedElements": [],
             "documentation": "",
@@ -606,9 +606,9 @@
             "featureDirection": "provided",
             "parameters": [
               {
-                "_id": "AAAAAAGhC9QcRGZRRUY=",
+                "_id": "AAAAAAGhEP31ckfh7jk=",
                 "_type": "UMLParameter",
-                "_parent": "AAAAAAGhC9QcRGZQ2gI=",
+                "_parent": "AAAAAAGhEP31ckfgS0U=",
                 "name": "",
                 "ownedElements": [],
                 "documentation": "",
@@ -646,29 +646,29 @@
         "isActive": false
       },
       {
-        "_id": "AAAAAAGhC9QcfmZYrpY=",
+        "_id": "AAAAAAGhEP31dkfoox8=",
         "_type": "UMLClass",
-        "_parent": "AAAAAAGhC9QaH2XDaOw=",
+        "_parent": "AAAAAAGhEP31PUdT9Ug=",
         "name": "PurchaseLine",
         "ownedElements": [
           {
-            "_id": "AAAAAAGhC9Qhv2ftBNE=",
+            "_id": "AAAAAAGhEP315ElijNk=",
             "_type": "UMLAssociation",
-            "_parent": "AAAAAAGhC9QcfmZYrpY=",
+            "_parent": "AAAAAAGhEP31dkfoox8=",
             "name": "",
             "ownedElements": [],
             "documentation": "",
             "tags": [],
             "end1": {
-              "_id": "AAAAAAGhC9Qhv2fupv0=",
+              "_id": "AAAAAAGhEP315EljV3M=",
               "_type": "UMLAssociationEnd",
-              "_parent": "AAAAAAGhC9Qhv2ftBNE=",
+              "_parent": "AAAAAAGhEP315ElijNk=",
               "name": "",
               "ownedElements": [],
               "documentation": "",
               "tags": [],
               "reference": {
-                "$ref": "AAAAAAGhC9QcfmZYrpY="
+                "$ref": "AAAAAAGhEP31dkfoox8="
               },
               "stereotype": "",
               "visibility": "public",
@@ -685,15 +685,15 @@
               "ownerAttribute": null
             },
             "end2": {
-              "_id": "AAAAAAGhC9Qhv2fv3bc=",
+              "_id": "AAAAAAGhEP315Elknnw=",
               "_type": "UMLAssociationEnd",
-              "_parent": "AAAAAAGhC9Qhv2ftBNE=",
+              "_parent": "AAAAAAGhEP315ElijNk=",
               "name": "",
               "ownedElements": [],
               "documentation": "",
               "tags": [],
               "reference": {
-                "$ref": "AAAAAAGhC9QdcmaVAo8="
+                "$ref": "AAAAAAGhEP31iUglGCg="
               },
               "stereotype": "",
               "visibility": "public",
@@ -721,9 +721,9 @@
         "templateParameters": [],
         "attributes": [
           {
-            "_id": "AAAAAAGhC9QcwGaBscI=",
+            "_id": "AAAAAAGhEP31e0gR8iM=",
             "_type": "UMLAttribute",
-            "_parent": "AAAAAAGhC9QcfmZYrpY=",
+            "_parent": "AAAAAAGhEP31dkfoox8=",
             "name": "quantity",
             "ownedElements": [],
             "documentation": "",
@@ -745,9 +745,9 @@
             "isID": false
           },
           {
-            "_id": "AAAAAAGhC9Qc8maHBCI=",
+            "_id": "AAAAAAGhEP31gEgX4Fo=",
             "_type": "UMLAttribute",
-            "_parent": "AAAAAAGhC9QcfmZYrpY=",
+            "_parent": "AAAAAAGhEP31dkfoox8=",
             "name": "unitPrice",
             "ownedElements": [],
             "documentation": "",
@@ -771,9 +771,9 @@
         ],
         "operations": [
           {
-            "_id": "AAAAAAGhC9QdQGaNj0k=",
+            "_id": "AAAAAAGhEP31hEgdUFY=",
             "_type": "UMLOperation",
-            "_parent": "AAAAAAGhC9QcfmZYrpY=",
+            "_parent": "AAAAAAGhEP31dkfoox8=",
             "name": "subtotal",
             "ownedElements": [],
             "documentation": "",
@@ -786,9 +786,9 @@
             "featureDirection": "provided",
             "parameters": [
               {
-                "_id": "AAAAAAGhC9QdQGaObHA=",
+                "_id": "AAAAAAGhEP31hEgeA8w=",
                 "_type": "UMLParameter",
-                "_parent": "AAAAAAGhC9QdQGaNj0k=",
+                "_parent": "AAAAAAGhEP31hEgdUFY=",
                 "name": "",
                 "ownedElements": [],
                 "documentation": "",
@@ -826,9 +826,9 @@
         "isActive": false
       },
       {
-        "_id": "AAAAAAGhC9QdcmaVAo8=",
+        "_id": "AAAAAAGhEP31iUglGCg=",
         "_type": "UMLClass",
-        "_parent": "AAAAAAGhC9QaH2XDaOw=",
+        "_parent": "AAAAAAGhEP31PUdT9Ug=",
         "name": "CatalogItem",
         "ownedElements": [],
         "documentation": "",
@@ -838,9 +838,9 @@
         "templateParameters": [],
         "attributes": [
           {
-            "_id": "AAAAAAGhC9Qdt2a+U7s=",
+            "_id": "AAAAAAGhEP31jkhOP4s=",
             "_type": "UMLAttribute",
-            "_parent": "AAAAAAGhC9QdcmaVAo8=",
+            "_parent": "AAAAAAGhEP31iUglGCg=",
             "name": "sku",
             "ownedElements": [],
             "documentation": "",
@@ -862,9 +862,9 @@
             "isID": false
           },
           {
-            "_id": "AAAAAAGhC9Qd8WbEUNw=",
+            "_id": "AAAAAAGhEP31k0hULLY=",
             "_type": "UMLAttribute",
-            "_parent": "AAAAAAGhC9QdcmaVAo8=",
+            "_parent": "AAAAAAGhEP31iUglGCg=",
             "name": "name",
             "ownedElements": [],
             "documentation": "",
@@ -886,9 +886,9 @@
             "isID": false
           },
           {
-            "_id": "AAAAAAGhC9QeSWbK1gU=",
+            "_id": "AAAAAAGhEP31mEha4GE=",
             "_type": "UMLAttribute",
-            "_parent": "AAAAAAGhC9QdcmaVAo8=",
+            "_parent": "AAAAAAGhEP31iUglGCg=",
             "name": "price",
             "ownedElements": [],
             "documentation": "",
@@ -919,9 +919,9 @@
         "isActive": false
       },
       {
-        "_id": "AAAAAAGhC9QeeGbQJOc=",
+        "_id": "AAAAAAGhEP31nEhgSpk=",
         "_type": "UMLClass",
-        "_parent": "AAAAAAGhC9QaH2XDaOw=",
+        "_parent": "AAAAAAGhEP31PUdT9Ug=",
         "name": "Settlement",
         "ownedElements": [],
         "documentation": "",
@@ -931,9 +931,9 @@
         "templateParameters": [],
         "attributes": [
           {
-            "_id": "AAAAAAGhC9Qew2b5HnM=",
+            "_id": "AAAAAAGhEP31oUiJXws=",
             "_type": "UMLAttribute",
-            "_parent": "AAAAAAGhC9QeeGbQJOc=",
+            "_parent": "AAAAAAGhEP31nEhgSpk=",
             "name": "amount",
             "ownedElements": [],
             "documentation": "",
@@ -955,9 +955,9 @@
             "isID": false
           },
           {
-            "_id": "AAAAAAGhC9Qe8mb/bCM=",
+            "_id": "AAAAAAGhEP31p0iPp6E=",
             "_type": "UMLAttribute",
-            "_parent": "AAAAAAGhC9QeeGbQJOc=",
+            "_parent": "AAAAAAGhEP31nEhgSpk=",
             "name": "method",
             "ownedElements": [],
             "documentation": "",
@@ -981,9 +981,9 @@
         ],
         "operations": [
           {
-            "_id": "AAAAAAGhC9QfYmcFz7k=",
+            "_id": "AAAAAAGhEP31rEiVQcI=",
             "_type": "UMLOperation",
-            "_parent": "AAAAAAGhC9QeeGbQJOc=",
+            "_parent": "AAAAAAGhEP31nEhgSpk=",
             "name": "authorize",
             "ownedElements": [],
             "documentation": "",
@@ -996,9 +996,9 @@
             "featureDirection": "provided",
             "parameters": [
               {
-                "_id": "AAAAAAGhC9QfYmcGXkg=",
+                "_id": "AAAAAAGhEP31rEiWtc0=",
                 "_type": "UMLParameter",
-                "_parent": "AAAAAAGhC9QfYmcFz7k=",
+                "_parent": "AAAAAAGhEP31rEiVQcI=",
                 "name": "",
                 "ownedElements": [],
                 "documentation": "",
@@ -1036,9 +1036,9 @@
         "isActive": false
       },
       {
-        "_id": "AAAAAAGhC9QfwGcNRek=",
+        "_id": "AAAAAAGhEP31sUidHcU=",
         "_type": "UMLEnumeration",
-        "_parent": "AAAAAAGhC9QaH2XDaOw=",
+        "_parent": "AAAAAAGhEP31PUdT9Ug=",
         "name": "PurchaseStatus",
         "ownedElements": [],
         "documentation": "",
@@ -1055,9 +1055,9 @@
         "isLeaf": false,
         "literals": [
           {
-            "_id": "AAAAAAGhC9Qf72c6bcc=",
+            "_id": "AAAAAAGhEP31t0jKQIg=",
             "_type": "UMLEnumerationLiteral",
-            "_parent": "AAAAAAGhC9QfwGcNRek=",
+            "_parent": "AAAAAAGhEP31sUidHcU=",
             "name": "NEW",
             "ownedElements": [],
             "documentation": "",
@@ -1067,9 +1067,9 @@
             "templateParameters": []
           },
           {
-            "_id": "AAAAAAGhC9QgS2dAQe0=",
+            "_id": "AAAAAAGhEP31vUjQVEE=",
             "_type": "UMLEnumerationLiteral",
-            "_parent": "AAAAAAGhC9QfwGcNRek=",
+            "_parent": "AAAAAAGhEP31sUidHcU=",
             "name": "PAID",
             "ownedElements": [],
             "documentation": "",
@@ -1079,9 +1079,9 @@
             "templateParameters": []
           },
           {
-            "_id": "AAAAAAGhC9QggGdGvBs=",
+            "_id": "AAAAAAGhEP31w0jWxTc=",
             "_type": "UMLEnumerationLiteral",
-            "_parent": "AAAAAAGhC9QfwGcNRek=",
+            "_parent": "AAAAAAGhEP31sUidHcU=",
             "name": "SHIPPED",
             "ownedElements": [],
             "documentation": "",
@@ -1091,9 +1091,9 @@
             "templateParameters": []
           },
           {
-            "_id": "AAAAAAGhC9QgxGdM0pc=",
+            "_id": "AAAAAAGhEP31yUjcFAI=",
             "_type": "UMLEnumerationLiteral",
-            "_parent": "AAAAAAGhC9QfwGcNRek=",
+            "_parent": "AAAAAAGhEP31sUidHcU=",
             "name": "CANCELLED",
             "ownedElements": [],
             "documentation": "",
@@ -1109,35 +1109,35 @@
   },
   "describe": {
     "diagram": {
-      "_id": "AAAAAAGhC9QaH2XEvMo=",
+      "_id": "AAAAAAGhEP31PUdUbZY=",
       "_type": "UMLClassDiagram",
       "name": "Ordering"
     },
     "nodes": 6,
     "edges": 5,
-    "text": "UMLClassDiagram \"Ordering\" in \"Model3\": 6 nodes, 5 edges\nNodes:\n- UMLClass \"Shopper\" { +id: UUID; +name: String; +email: String; +placeOrder(cart: Cart): PurchaseOrder }\n- UMLClass \"PurchaseOrder\" { +id: UUID; +status: PurchaseStatus; +createdAt: Instant; +total(): Money; +cancel(): void }\n- UMLClass \"PurchaseLine\" { +quantity: int; +unitPrice: Money; +subtotal(): Money }\n- UMLClass \"CatalogItem\" { +sku: String; +name: String; +price: Money }\n- UMLClass \"Settlement\" { +amount: Money; +method: String; +authorize(): boolean }\n- UMLEnumeration \"PurchaseStatus\" { NEW; PAID; SHIPPED; CANCELLED }\nEdges:\n- \"Shopper\" -[UMLAssociation \"places\"]-> \"PurchaseOrder\"\n- \"PurchaseOrder\" -[UMLAssociation]-> \"PurchaseLine\"\n- \"PurchaseLine\" -[UMLAssociation]-> \"CatalogItem\"\n- \"PurchaseOrder\" -[UMLAssociation]-> \"Settlement\"\n- \"PurchaseOrder\" -[UMLDependency]-> \"PurchaseStatus\"",
+    "text": "UMLClassDiagram \"Ordering\" in \"Model1\": 6 nodes, 5 edges\nNodes:\n- UMLClass \"Shopper\" { +id: UUID; +name: String; +email: String; +placeOrder(cart: Cart): PurchaseOrder }\n- UMLClass \"PurchaseOrder\" { +id: UUID; +status: PurchaseStatus; +createdAt: Instant; +total(): Money; +cancel(): void }\n- UMLClass \"PurchaseLine\" { +quantity: int; +unitPrice: Money; +subtotal(): Money }\n- UMLClass \"CatalogItem\" { +sku: String; +name: String; +price: Money }\n- UMLClass \"Settlement\" { +amount: Money; +method: String; +authorize(): boolean }\n- UMLEnumeration \"PurchaseStatus\" { NEW; PAID; SHIPPED; CANCELLED }\nEdges:\n- \"Shopper\" -[UMLAssociation \"places\"]-> (0..*) \"PurchaseOrder\"\n- \"PurchaseOrder\" (composite) -[UMLAssociation]-> (1..*) \"PurchaseLine\"\n- \"PurchaseLine\" -[UMLAssociation]-> \"CatalogItem\"\n- \"PurchaseOrder\" -[UMLAssociation]-> (0..1) \"Settlement\"\n- \"PurchaseOrder\" -[UMLDependency]-> \"PurchaseStatus\"",
     "truncated": false
   },
   "mermaid": {
     "diagram": {
-      "_id": "AAAAAAGhC9QaH2XEvMo=",
+      "_id": "AAAAAAGhEP31PUdUbZY=",
       "_type": "UMLClassDiagram",
       "name": "Ordering"
     },
     "kind": "class",
     "format": "mermaid",
-    "text": "---\ntitle: \"Ordering\"\n---\nclassDiagram\n  class Shopper {\n    +id: UUID\n    +name: String\n    +email: String\n    +placeOrder(cart: Cart): PurchaseOrder\n  }\n  class PurchaseOrder {\n    +id: UUID\n    +status: PurchaseStatus\n    +createdAt: Instant\n    +total(): Money\n    +cancel(): void\n  }\n  class PurchaseLine {\n    +quantity: int\n    +unitPrice: Money\n    +subtotal(): Money\n  }\n  class CatalogItem {\n    +sku: String\n    +name: String\n    +price: Money\n  }\n  class Settlement {\n    +amount: Money\n    +method: String\n    +authorize(): boolean\n  }\n  class PurchaseStatus {\n    <<enumeration>>\n    NEW\n    PAID\n    SHIPPED\n    CANCELLED\n  }\n  Shopper -- \"0..*\" PurchaseOrder : places\n  PurchaseLine \"1..*\" *-- PurchaseOrder\n  PurchaseLine --> CatalogItem\n  PurchaseOrder -- \"0..1\" Settlement\n  PurchaseOrder ..> PurchaseStatus\n",
+    "text": "---\ntitle: \"Ordering\"\n---\nclassDiagram\n  class Shopper {\n    +id: UUID\n    +name: String\n    +email: String\n    +placeOrder(cart: Cart): PurchaseOrder\n  }\n  class PurchaseOrder {\n    +id: UUID\n    +status: PurchaseStatus\n    +createdAt: Instant\n    +total(): Money\n    +cancel(): void\n  }\n  class PurchaseLine {\n    +quantity: int\n    +unitPrice: Money\n    +subtotal(): Money\n  }\n  class CatalogItem {\n    +sku: String\n    +name: String\n    +price: Money\n  }\n  class Settlement {\n    +amount: Money\n    +method: String\n    +authorize(): boolean\n  }\n  class PurchaseStatus {\n    <<enumeration>>\n    NEW\n    PAID\n    SHIPPED\n    CANCELLED\n  }\n  Shopper -- \"0..*\" PurchaseOrder : places\n  PurchaseOrder *-- \"1..*\" PurchaseLine\n  PurchaseLine --> CatalogItem\n  PurchaseOrder -- \"0..1\" Settlement\n  PurchaseOrder ..> PurchaseStatus\n",
     "warnings": []
   },
   "plantuml": {
     "diagram": {
-      "_id": "AAAAAAGhC9QaH2XEvMo=",
+      "_id": "AAAAAAGhEP31PUdUbZY=",
       "_type": "UMLClassDiagram",
       "name": "Ordering"
     },
     "kind": "class",
     "format": "plantuml",
-    "text": "@startuml\ntitle Ordering\nclass \"Shopper\" as C0 {\n  +id: UUID\n  +name: String\n  +email: String\n  +placeOrder(cart: Cart): PurchaseOrder\n}\nclass \"PurchaseOrder\" as C1 {\n  +id: UUID\n  +status: PurchaseStatus\n  +createdAt: Instant\n  +total(): Money\n  +cancel(): void\n}\nclass \"PurchaseLine\" as C2 {\n  +quantity: int\n  +unitPrice: Money\n  +subtotal(): Money\n}\nclass \"CatalogItem\" as C3 {\n  +sku: String\n  +name: String\n  +price: Money\n}\nclass \"Settlement\" as C4 {\n  +amount: Money\n  +method: String\n  +authorize(): boolean\n}\nenum \"PurchaseStatus\" as C5 {\n  NEW\n  PAID\n  SHIPPED\n  CANCELLED\n}\nC0 -- \"0..*\" C1 : places\nC2 \"1..*\" *-- C1\nC2 --> C3\nC1 -- \"0..1\" C4\nC1 ..> C5\n@enduml\n",
+    "text": "@startuml\ntitle Ordering\nclass \"Shopper\" as C0 {\n  +id: UUID\n  +name: String\n  +email: String\n  +placeOrder(cart: Cart): PurchaseOrder\n}\nclass \"PurchaseOrder\" as C1 {\n  +id: UUID\n  +status: PurchaseStatus\n  +createdAt: Instant\n  +total(): Money\n  +cancel(): void\n}\nclass \"PurchaseLine\" as C2 {\n  +quantity: int\n  +unitPrice: Money\n  +subtotal(): Money\n}\nclass \"CatalogItem\" as C3 {\n  +sku: String\n  +name: String\n  +price: Money\n}\nclass \"Settlement\" as C4 {\n  +amount: Money\n  +method: String\n  +authorize(): boolean\n}\nenum \"PurchaseStatus\" as C5 {\n  NEW\n  PAID\n  SHIPPED\n  CANCELLED\n}\nC0 -- \"0..*\" C1 : places\nC1 *-- \"1..*\" C2\nC2 --> C3\nC1 -- \"0..1\" C4\nC1 ..> C5\n@enduml\n",
     "warnings": []
   }
 }

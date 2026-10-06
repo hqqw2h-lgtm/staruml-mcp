@@ -217,7 +217,8 @@ export function modelFirst(state: CatalogState, args: ModelFirstArgs): GetPrompt
         "knows), the actors and their use cases, the collaborations worth a sequence diagram and " +
         "the lifecycles worth a state machine. Write that as a build_model spec with system " +
         `"${system}".`,
-      `2. ${call("build_model", "{spec, dryRun: true}")}: check every path it would create and ` +
+      `2. ${call("build_model", "{spec, dryRun: true}")}: check the paths it would create (the ` +
+        'first 20 of each kind, the rest counted in omitted; detail: "full" lists all) and ' +
         "that each relationship verb points the right way (from is the whole, the client, the " +
         "specific kind or the side that navigates).",
       `3. ${call("build_model", "{spec}")} builds the model in one undo step. classViews and ` +

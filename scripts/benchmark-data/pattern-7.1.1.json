@@ -179,7 +179,7 @@
       "roles": {
         "Context": [
           {
-            "_id": "AAAAAAGhDWbC8pAbqn0=",
+            "_id": "AAAAAAGhEP1U7TeCsps=",
             "path": "Shipping/Order",
             "created": false
           }
@@ -193,12 +193,12 @@
         ],
         "ConcreteStrategy": [
           {
-            "_id": "AAAAAAGhDWbDb5AeUj4=",
+            "_id": "AAAAAAGhEP1U7jeFpXE=",
             "path": "Shipping/FlatRate",
             "created": false
           },
           {
-            "_id": "AAAAAAGhDWbD65AhMTo=",
+            "_id": "AAAAAAGhEP1U8DeIbqI=",
             "path": "Shipping/ByWeight",
             "created": false
           }
@@ -300,7 +300,7 @@
             "as": "m0",
             "body": {
               "type": "UMLInterface",
-              "parent": "AAAAAAGhDWbCe5AYIyk=",
+              "parent": "AAAAAAGhEP1U6zd/jtk=",
               "name": "ShippingPolicy",
               "field": "ownedElements"
             }
@@ -309,7 +309,7 @@
             "path": "/add_operation",
             "as": "m1",
             "body": {
-              "ref": "AAAAAAGhDWbC8pAbqn0=",
+              "ref": "AAAAAAGhEP1U7TeCsps=",
               "name": "setStrategy",
               "parameters": [
                 {
@@ -326,7 +326,7 @@
             "path": "/add_operation",
             "as": "m2",
             "body": {
-              "ref": "AAAAAAGhDWbC8pAbqn0=",
+              "ref": "AAAAAAGhEP1U7TeCsps=",
               "name": "contextInterface"
             }
           },
@@ -343,7 +343,7 @@
             "path": "/add_operation",
             "as": "m4",
             "body": {
-              "ref": "AAAAAAGhDWbDb5AeUj4=",
+              "ref": "AAAAAAGhEP1U7jeFpXE=",
               "name": "execute"
             }
           },
@@ -351,7 +351,7 @@
             "path": "/add_operation",
             "as": "m5",
             "body": {
-              "ref": "AAAAAAGhDWbD65AhMTo=",
+              "ref": "AAAAAAGhEP1U8DeIbqI=",
               "name": "execute"
             }
           },
@@ -360,7 +360,7 @@
             "as": "m6",
             "body": {
               "type": "UMLAssociation",
-              "tail": "AAAAAAGhDWbC8pAbqn0=",
+              "tail": "AAAAAAGhEP1U7TeCsps=",
               "head": "$m0",
               "tailEnd": {
                 "navigable": "notNavigable",
@@ -378,7 +378,7 @@
             "as": "m7",
             "body": {
               "type": "UMLInterfaceRealization",
-              "tail": "AAAAAAGhDWbDb5AeUj4=",
+              "tail": "AAAAAAGhEP1U7jeFpXE=",
               "head": "$m0"
             }
           },
@@ -387,7 +387,7 @@
             "as": "m8",
             "body": {
               "type": "UMLInterfaceRealization",
-              "tail": "AAAAAAGhDWbD65AhMTo=",
+              "tail": "AAAAAAGhEP1U8DeIbqI=",
               "head": "$m0"
             }
           }
@@ -458,26 +458,26 @@
       "roles": {
         "Context": [
           {
-            "_id": "AAAAAAGhDWbC8pAbqn0=",
+            "_id": "AAAAAAGhEP1U7TeCsps=",
             "path": "Shipping/Order",
             "created": false
           }
         ],
         "Strategy": [
           {
-            "_id": "AAAAAAGhDWbFqJAtgp8=",
+            "_id": "AAAAAAGhEP1U/zeUuS8=",
             "path": "Shipping/ShippingPolicy",
             "created": true
           }
         ],
         "ConcreteStrategy": [
           {
-            "_id": "AAAAAAGhDWbDb5AeUj4=",
+            "_id": "AAAAAAGhEP1U7jeFpXE=",
             "path": "Shipping/FlatRate",
             "created": false
           },
           {
-            "_id": "AAAAAAGhDWbD65AhMTo=",
+            "_id": "AAAAAAGhEP1U8DeIbqI=",
             "path": "Shipping/ByWeight",
             "created": false
           }
@@ -532,7 +532,7 @@
           "path": "Shipping/Order#setStrategy().strategy",
           "field": "type",
           "value": {
-            "$ref": "AAAAAAGhDWbFqJAtgp8="
+            "$ref": "AAAAAAGhEP1U/zeUuS8="
           }
         },
         {
@@ -580,27 +580,28 @@
       "detections": [
         {
           "pattern": "Strategy",
+          "variant": "abstract-class",
           "confidence": 1,
           "roles": {
             "Strategy": [
               {
-                "_id": "AAAAAAGhDWbFqJAtgp8=",
+                "_id": "AAAAAAGhEP1U/zeUuS8=",
                 "path": "Shipping/ShippingPolicy"
               }
             ],
             "Context": [
               {
-                "_id": "AAAAAAGhDWbC8pAbqn0=",
+                "_id": "AAAAAAGhEP1U7TeCsps=",
                 "path": "Shipping/Order"
               }
             ],
             "ConcreteStrategy": [
               {
-                "_id": "AAAAAAGhDWbDb5AeUj4=",
+                "_id": "AAAAAAGhEP1U7jeFpXE=",
                 "path": "Shipping/FlatRate"
               },
               {
-                "_id": "AAAAAAGhDWbD65AhMTo=",
+                "_id": "AAAAAAGhEP1U8DeIbqI=",
                 "path": "Shipping/ByWeight"
               }
             ]
@@ -617,7 +618,7 @@
         "as": "m0",
         "body": {
           "type": "UMLInterface",
-          "parent": "AAAAAAGhDWbCe5AYIyk=",
+          "parent": "AAAAAAGhEP1U6zd/jtk=",
           "name": "ShippingPolicy",
           "field": "ownedElements"
         }
@@ -626,7 +627,7 @@
         "path": "/add_operation",
         "as": "m1",
         "body": {
-          "ref": "AAAAAAGhDWbC8pAbqn0=",
+          "ref": "AAAAAAGhEP1U7TeCsps=",
           "name": "setStrategy",
           "parameters": [
             {
@@ -643,7 +644,7 @@
         "path": "/add_operation",
         "as": "m2",
         "body": {
-          "ref": "AAAAAAGhDWbC8pAbqn0=",
+          "ref": "AAAAAAGhEP1U7TeCsps=",
           "name": "contextInterface"
         }
       },
@@ -660,7 +661,7 @@
         "path": "/add_operation",
         "as": "m4",
         "body": {
-          "ref": "AAAAAAGhDWbDb5AeUj4=",
+          "ref": "AAAAAAGhEP1U7jeFpXE=",
           "name": "execute"
         }
       },
@@ -668,7 +669,7 @@
         "path": "/add_operation",
         "as": "m5",
         "body": {
-          "ref": "AAAAAAGhDWbD65AhMTo=",
+          "ref": "AAAAAAGhEP1U8DeIbqI=",
           "name": "execute"
         }
       },
@@ -677,7 +678,7 @@
         "as": "m6",
         "body": {
           "type": "UMLAssociation",
-          "tail": "AAAAAAGhDWbC8pAbqn0=",
+          "tail": "AAAAAAGhEP1U7TeCsps=",
           "head": "$m0",
           "tailEnd": {
             "navigable": "notNavigable",
@@ -695,7 +696,7 @@
         "as": "m7",
         "body": {
           "type": "UMLInterfaceRealization",
-          "tail": "AAAAAAGhDWbDb5AeUj4=",
+          "tail": "AAAAAAGhEP1U7jeFpXE=",
           "head": "$m0"
         }
       },
@@ -704,7 +705,7 @@
         "as": "m8",
         "body": {
           "type": "UMLInterfaceRealization",
-          "tail": "AAAAAAGhDWbD65AhMTo=",
+          "tail": "AAAAAAGhEP1U8DeIbqI=",
           "head": "$m0"
         }
       }
@@ -718,37 +719,37 @@
           "path": "/create_element",
           "as": "m0",
           "success": true,
-          "id": "AAAAAAGhDWbJ/pBiwlg="
+          "id": "AAAAAAGhEP1VHDfJpsw="
         },
         {
           "path": "/add_operation",
           "as": "m1",
           "success": true,
-          "id": "AAAAAAGhDWbKdpBlTUs="
+          "id": "AAAAAAGhEP1VHjfMViA="
         },
         {
           "path": "/add_operation",
           "as": "m2",
           "success": true,
-          "id": "AAAAAAGhDWbK8ZBqj/c="
+          "id": "AAAAAAGhEP1VIDfRyGY="
         },
         {
           "path": "/add_operation",
           "as": "m3",
           "success": true,
-          "id": "AAAAAAGhDWbLbJBtC1c="
+          "id": "AAAAAAGhEP1VITfUPEI="
         },
         {
           "path": "/add_operation",
           "as": "m4",
           "success": true,
-          "id": "AAAAAAGhDWbL5pBwDWM="
+          "id": "AAAAAAGhEP1VIzfXnxY="
         },
         {
           "path": "/add_operation",
           "as": "m5",
           "success": true,
-          "id": "AAAAAAGhDWbMYJBzTiw="
+          "id": "AAAAAAGhEP1VJTfa9QQ="
         },
         {
           "path": "/create_relationship",
@@ -772,27 +773,28 @@
       "detections": [
         {
           "pattern": "Strategy",
+          "variant": "abstract-class",
           "confidence": 1,
           "roles": {
             "Strategy": [
               {
-                "_id": "AAAAAAGhDWbJ/pBiwlg=",
+                "_id": "AAAAAAGhEP1VHDfJpsw=",
                 "path": "Shipping/ShippingPolicy"
               }
             ],
             "Context": [
               {
-                "_id": "AAAAAAGhDWbC8pAbqn0=",
+                "_id": "AAAAAAGhEP1U7TeCsps=",
                 "path": "Shipping/Order"
               }
             ],
             "ConcreteStrategy": [
               {
-                "_id": "AAAAAAGhDWbDb5AeUj4=",
+                "_id": "AAAAAAGhEP1U7jeFpXE=",
                 "path": "Shipping/FlatRate"
               },
               {
-                "_id": "AAAAAAGhDWbD65AhMTo=",
+                "_id": "AAAAAAGhEP1U8DeIbqI=",
                 "path": "Shipping/ByWeight"
               }
             ]

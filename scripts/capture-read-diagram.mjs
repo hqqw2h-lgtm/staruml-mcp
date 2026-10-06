@@ -81,7 +81,13 @@ function pngSize(base64) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20), bytes: bytes.length };
 }
 
-const built = await ext("/build_diagram", { kind: "class", name: "Ordering", spec: SPEC });
+// Since extension #35 the answer is terse unless it asks for the ids.
+const built = await ext("/build_diagram", {
+  kind: "class",
+  name: "Ordering",
+  spec: SPEC,
+  result: "ids",
+});
 const diagramId = built.diagram._id;
 try {
   const png = pngSize(await post(58321, "/get_diagram_image_by_id", { diagramId }));

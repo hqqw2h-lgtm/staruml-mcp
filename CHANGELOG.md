@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-06
+
+Built against staruml-mcp-extension 0.3.0 as finished (extension phase 1j: the quality metric
+calibrated against human ratings with hard limits, summary dry runs, sectioned `explain_model`,
+`detect_patterns` at 0.8 by default, object verbs only in an object spec). In short, by phase:
+
+- **2m** (#4, #19): the final manifest sync, its new answers handled, and the exact live
+  contract back; the ThingsBoard acceptance re-run through the `oo` tier.
+
+The core tier lists 19 tools in 1,998 tokens, the `oo` tier 13 in 1,217, `--tools all` 110 in
+14,385 (o200k_base); the four modelling scenarios cost 11,560 and 6,114 tokens, as in 0.9.0.
+ThingsBoard through `--tools oo` (`scripts/acceptance-oo.mjs`): `build_model` and
+`derive_diagrams` in 2 calls and 1,436 result tokens; the 25 class-view diagrams score 81–98, the
+per-package set's 30 score 77–100 with `Rule Engine API` (77) the one the extension reports short;
+no diagram breaks a hard limit; 55 images to disk for 826 tokens of answers. Load (one session,
+eleven paths, two runs each at 50 and 200): 0 errors. Soak, four runs: RSS +6.5 to +8.4%, heap
+after GC +2.9 to +3.4%, 0 errors. Mutation 94.95% of 4,135 mutants. Live: 178 of 178.
+
+### Changed
+- The bundled manifest is the extension's final one; ten endpoints changed their descriptions or schemas since 0.9.0 (#4).
+- `diagram_quality` answers, and every compacted `quality` report keeps, a non-empty `failures`: the hard limits (aspect past the profile's `maxAspect` on a diagram larger than the page, more boxes than `maxNodes`) that cap a score at 59. Its one-line description names it (#19).
+- A dry run of `build_model` or `apply_pattern` now answers a summary unless `detail: "full"`: its op count adds the extension's `omitted.ops`, so it is what applying runs either way, and `omitted` keeps only the counts of lists the answer still has. `build_model`'s `dryRun` line names `detail`, which passes unlisted. ThingsBoard's 646-op dry run is 914 tokens as a summary, 20,131 in full (#19).
+- `explain_model` (`oo`) lists `sections` and `cursor`; the extension writes its own cut marker with the cursor to read on, so this server adds its marker only to an older build's cut answer without `next` (#19).
+- `detect_patterns` (`oo`) lists `minConfidence`, now 0.8 by default (#19).
+- `build_diagram`'s `dryRun` and `mermaid` lines are shorter, which keeps the core tier at 1,998 tokens (#19).
+- The `model-first` prompt's dry-run step says the answer lists the first 20 changes of each kind and that `detail: "full"` lists all (#19).
+- The live contract is exact again: the running manifest equals the bundled one endpoint for endpoint and schema for schema; every ThingsBoard class-view diagram must score 80 or more with no failing one, and the per-package set too except `Rule Engine API`, asserted at 77; `layout_diagram`'s fit resizes a view sized off its content (#4, #19).
+
+### Added
+- `scripts/acceptance-oo.mjs`: ThingsBoard through the built server under `--tools oo` over stdio, per diagram `diagram_quality` and `view_diagram` to disk, both class-diagram policies, every call counted, into `scripts/benchmark-data/oo-acceptance-7.1.1.json` (#19).
+- Live: a whole-model dry run as a summary and in full; `explain_model` by section and read on with the cursor; `detect_patterns` at its 0.8 default and lower; the per-package derivation (#19).
+
+### Fixed
+- `scripts/capture-read-diagram.mjs` asks `build_diagram` for `result: "ids"`, without which the terse answer since extension #35 has none (#19).
+
+### Known
+- The first `derive_diagrams` answer gives `Deployment - Monolith` the loop's 94 while the stored diagram, and every later derive, read 98 with nothing changed: an extension 0.3.0 quirk the live suite names.
+
 ## [0.9.0] - 2026-10-06
 
 Built against staruml-mcp-extension 0.3.0 (103 endpoints); the enforcement fixes from the `oo`
@@ -362,7 +400,8 @@ The original 4 Mermaid/diagram tools continue to work without the extension.
 - Inspired by [`staruml/staruml-mcp-server`](https://github.com/staruml/staruml-mcp-server) by Minkyu Lee (StarUML creator).
 - Reimplemented with multi-transport support to work around stdio MCP registration issues in some clients (e.g., [Claude Code #36914](https://github.com/anthropics/claude-code/issues/36914)).
 
-[Unreleased]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.6.0...v0.7.0

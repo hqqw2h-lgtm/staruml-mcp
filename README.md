@@ -302,8 +302,8 @@ default and reaches every other extension endpoint through two generic tools:
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
 | `core` (default) | the 7 above; `find_elements`, `quick_find`, `get_element_by_id`, `update_element`, `batch`, `build_diagram`, `export_diagram`, `build_model`, `diagram_quality`, `improve_diagram`; `describe_endpoints`, `call_endpoint` | 1,998 |
-| `oo` | model-first only: `build_model`, `derive_diagrams`, `explain_model`, `model_lint`, `apply_pattern`, `detect_patterns`, `validate_model`, `diagram_quality`; `view_diagram`, `diagram_as_text`, `doctor`; `describe_endpoints`, `call_endpoint` | 1,119 |
-| `all` | the 7 above and one tool per manifest endpoint | 14,294 |
+| `oo` | model-first only: `build_model`, `derive_diagrams`, `explain_model`, `model_lint`, `apply_pattern`, `detect_patterns`, `validate_model`, `diagram_quality`; `view_diagram`, `diagram_as_text`, `doctor`; `describe_endpoints`, `call_endpoint` | 1,217 |
+| `all` | the 7 above and one tool per manifest endpoint | 14,385 |
 | `core,create_diagram,…` | the 7 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
 Token counts include the server instructions (o200k_base, extension 0.3.0 with 103 endpoints, `npm run
@@ -321,7 +321,10 @@ and adds `quick_find` (51); `apply_pattern` (112) moves to the `patterns` group,
 the `oo` tier and reached by the `apply-pattern` prompt through `call_endpoint`, and
 `delete_element` (53) leaves too, a deletion being one `batch` op or `call_endpoint` away.
 `--tools core,lint_diagram,search_types,describe_diagram,validate_model,apply_pattern,delete_element`
-lists them again. Pick the tier with `--tools`, or `STARUML_MCP_TOOLS` for clients that pass
+lists them again. 0.9.1 lists `explain_model`'s `sections` and `cursor` and `detect_patterns`'
+`minConfidence` under `oo` (98 tokens, which the tier's 1,500 budget has room for); the core tier
+paid for `diagram_quality`'s `failures` and `build_model`'s `detail` hint with shorter
+`build_diagram` lines and stays at 1,998. Pick the tier with `--tools`, or `STARUML_MCP_TOOLS` for clients that pass
 environment but no arguments; the flag wins. An agent can change it at runtime with
 `doctor({tools: "all"})`; the server then sends `notifications/tools/list_changed`, as it does when
 `doctor` finds a manifest with other endpoints. Names that are neither endpoints nor tools are
@@ -841,6 +844,40 @@ warm-up requests, stub upstream, load average 10–16 from other agents' work, 0
 | `lint_diagram` | 50 | 1348–1446 | 32–36 ms | 61–67 ms |
 | `lint_diagram` | 200 | 1063–1681 | 110–163 ms | 186–445 ms |
 
+Re-run for 0.9.1 in one session, as for 0.9.0 below, two runs per path, 5000 requests per level
+after 500 warm-up requests, stub upstream, load average about 10, 0 errors throughout. 0.9.1
+changes no request path; the dry-run answers' `omitted` count and the kept `failures` are a few
+object spreads per call:
+
+| Tool | Concurrency | req/s | p50 | p99 |
+|---|---|---|---|---|
+| `get_all_diagrams_info` | 50 | 1596–1631 | 29–30 ms | 55–59 ms |
+| `get_all_diagrams_info` | 200 | 2073–2088 | 83–84 ms | 153–154 ms |
+| `call_endpoint` | 50 | 1503–1508 | 31–32 ms | 56–57 ms |
+| `call_endpoint` | 200 | 1925–1952 | 86–90 ms | 170–245 ms |
+| `batch` (4 ops) | 50 | 826–1383 | 34–39 ms | 60–173 ms |
+| `batch` (4 ops) | 200 | 1740–1805 | 96–102 ms | 166–702 ms |
+| `build_diagram` | 50 | 741–1644 | 29–66 ms | 52–179 ms |
+| `build_diagram` | 200 | 1910–2027 | 89–93 ms | 164–179 ms |
+| `lint_diagram` | 50 | 1629–1631 | 29 ms | 53 ms |
+| `lint_diagram` | 200 | 1981–2016 | 92–94 ms | 155–156 ms |
+| `build_model` (dry run) | 50 | 1521–1530 | 31 ms | 52–55 ms |
+| `build_model` (dry run) | 200 | 1795–1842 | 103–105 ms | 151–161 ms |
+| `apply_pattern` (dry run) | 50 | 1399–1541 | 31–32 ms | 55–113 ms |
+| `apply_pattern` (dry run) | 200 | 1851–1860 | 88–103 ms | 153–603 ms |
+| `diagram_quality` | 50 | 1686–1690 | 28 ms | 49–51 ms |
+| `diagram_quality` | 200 | 1942–2093 | 86–93 ms | 142–155 ms |
+| `improve_diagram` (dry run) | 50 | 1555–1679 | 28–31 ms | 52–56 ms |
+| `improve_diagram` (dry run) | 200 | 1995–2013 | 87–90 ms | 165–194 ms |
+| `derive_diagrams` (dry run, `oo`) | 50 | 1133–1142 | 41–42 ms | 70–78 ms |
+| `derive_diagrams` (dry run, `oo`) | 200 | 1283–1288 | 145–148 ms | 248–251 ms |
+| `quick_find` | 50 | 1333–1551 | 31–35 ms | 56–64 ms |
+| `quick_find` | 200 | 762–1941 | 93–260 ms | 160–359 ms |
+
+On a quieter machine than 0.9.0's every path's faster run is within 1% of the top of 0.9.0's
+range; the slow outliers (`build_diagram`, `batch`, `quick_find` once each) are single runs
+another process interrupted.
+
 Re-run for 0.9.0 in one session, as for 0.8.0 below, two runs per path, 5000 requests per level
 after 500 warm-up requests, stub upstream, with other agents' test runs on the machine (load
 average 18–58), 0 errors throughout. `derive_diagrams` under `oo` now reads the style profile
@@ -1006,6 +1043,16 @@ of the last 200 calls exceeds the first 200 by more than 25%, or any call fails;
 also exceed 2 ms to count, since the p99 of 200 calls of about 1 ms is their second slowest and
 doubles on one scheduler stall. The live workflow runs it.
 
+Four runs for 0.9.1, the same rotation (load average about 9), 0 errors, all within budget:
+
+| Window | RSS | Live heap after GC | p50 | p99 |
+|---|---|---|---|---|
+| first 200 | 156.6–164.0 MB | 25.7–25.8 MB | 0.67–0.77 ms | 1.24–1.47 ms |
+| last 200 | 166.8–174.6 MB | 26.6 MB | 0.56–0.66 ms | 1.28–1.80 ms |
+| growth | 6.5–8.4% | 2.9–3.4% | | −8.8% to +44.9% |
+
+The first run's p99 rose 0.56 ms, under the 2 ms floor.
+
 Four runs for 0.9.0, the same rotation (load average 18–58 from other agents' work), 0 errors, all
 within budget:
 
@@ -1145,8 +1192,8 @@ session is 11.9% below #5 and 36.2% below pre-#5. The refactor scenario grew 29 
 scenario, whose `get_all_commands` result alone is 1947 tokens of the 322 command ids; neither is
 touched by diagram building. The `batch` and `build_diagram` answers here are recorded in the
 extension's full form; since its phase 1g it answers each op's success and id, and a build's
-counts, unless asked for more, so both cost less against it. `--tools all` lists 110 tools for 14294 tokens (all scenarios (a)
-60257, (b) 17820). Generated descriptions stay one line of at most 100 characters (a test enforces
+counts, unless asked for more, so both cost less against it. `--tools all` lists 110 tools for 14385 tokens (all scenarios (a)
+60621, (b) 17911). Generated descriptions stay one line of at most 100 characters (a test enforces
 it on every listed tool), and a test keeps the core listing within 2,000 tokens.
 
 ### Reading a diagram back
@@ -1158,16 +1205,16 @@ composition, a directed association and a dependency). The upstream answers are 
 returned for it, recorded by `scripts/capture-read-diagram.mjs` into
 `scripts/benchmark-data/read-diagram-7.1.1.json`. Each read is one call; the table counts the call,
 its result text and, for the PNG, an estimate of its image tokens (width × height / 750 after
-Anthropic's downscaling to 1568 px on the long edge and about 1,600 tokens; the 1382×1342 PNG is
+Anthropic's downscaling to 1568 px on the long edge and about 1,600 tokens; the 1402×1342 PNG is
 scaled down, so its member text arrives smaller than StarUML drew it).
 
 | Read | Call | Result text | Image (est.) | Total | vs PNG |
 |---|---|---|---|---|---|
-| PNG (`get_diagram_image_by_id`) | 29 | 0 | 1600 | 1629 | |
-| Element dump (`find_elements`, `summary: false`, `depth: 2`) | 27 | 4425 | 0 | 4452 | +173.3% |
-| `describe_diagram` (through `call_endpoint` since 0.6.0) | 33 | 260 | 0 | 293 | −82.0% |
-| `diagram_as_text` (Mermaid) | 25 | 242 | 0 | 267 | −83.6% |
-| `diagram_as_text` (PlantUML) | 30 | 253 | 0 | 283 | −82.6% |
+| PNG (`get_diagram_image_by_id`) | 27 | 0 | 1600 | 1627 | |
+| Element dump (`find_elements`, `summary: false`, `depth: 2`) | 27 | 4288 | 0 | 4315 | +165.2% |
+| `describe_diagram` (through `call_endpoint` since 0.6.0) | 31 | 277 | 0 | 308 | −81.1% |
+| `diagram_as_text` (Mermaid) | 23 | 242 | 0 | 265 | −83.7% |
+| `diagram_as_text` (PlantUML) | 28 | 253 | 0 | 281 | −82.7% |
 
 What each carries for an explanation: the PNG has the layout and nothing machine-readable; the
 element dump has every saved attribute and the ids, but relationships are association ends that
@@ -1175,14 +1222,14 @@ reference classes by id; `describe_diagram` has the members and every edge with 
 name, but not multiplicities, aggregation or navigability; Mermaid and PlantUML have all of that
 in a notation the model already reads, and the Mermaid can be edited and rebuilt with
 `build_diagram`. Reading the diagram as Mermaid instead of a PNG saves about 1,360 tokens per read,
-and about 4,190 against the dump.
+and about 4,050 against the dump (recaptured from the extension's phase 1j build for 0.9.1).
 
 ### Fixing a messy diagram
 
 A sixth scenario, "fix a messy diagram", also on the current server only, fixes one class diagram
 drawn as an agent placing views by hand leaves it: five classes with long names, three stacked at
 one point and two overlapping, four associations. `scripts/capture-messy-diagram.mjs` drew it in
-StarUML 7.1.1 with the extension's phase 1h build and recorded three ways of fixing it from the
+StarUML 7.1.1 with the extension's phase 1j build and recorded three ways of fixing it from the
 same start into `scripts/benchmark-data/messy-diagram-7.1.1.json`. "By eye" is the way without
 the lint: look at the PNG, run Format > Layout through `call_endpoint` after reading its schema,
 look again. The lint loop is the #13 way: `lint_diagram`, every autofix in one `batch`,
@@ -1193,17 +1240,19 @@ finds after each and `diagram_quality`'s score against the profile's target of 8
 
 | Plan | Calls | Call tokens | Result text | Images (est.) | Total | Findings left | Score |
 |---|---|---|---|---|---|---|---|
-| By eye: PNG, layout, PNG | 4 | 99 | 478 | 1306 | 1883 | 0 | 58 → 97 |
-| Lint loop: lint, batch of autofixes, lint, PNG | 4 | 307 | 985 | 1054 | 2346 | 0 | 58 → 95 |
-| Quality loop: PNG, `diagram_quality`, `improve_diagram`, PNG | 4 | 100 | 92 | 1595 | 1787 | 0 | 58 → 98 |
+| By eye: PNG, layout, PNG | 4 | 96 | 477 | 1306 | 1879 | 0 | 73 → 99 |
+| Lint loop: lint, batch of autofixes, lint, PNG | 4 | 297 | 972 | 1054 | 2323 | 0 | 73 → 98 |
+| Quality loop: PNG, `diagram_quality`, `improve_diagram`, PNG | 4 | 96 | 92 | 1595 | 1783 | 0 | 73 → 99 |
 
-Messy diagram → quality ≥ 80: the quality loop gets there in two calls whose text costs 192
-tokens (100 for the calls, 92 for the answers: the score with the penalties that cost points, then
-the score reached), against 1,292 for the lint loop's text, and scores highest. Its two looks are
+Messy diagram → quality ≥ 80: the quality loop gets there in two calls whose text costs 188
+tokens (96 for the calls, 92 for the answers: the score with the penalties that cost points, then
+the score reached), against 1,269 for the lint loop's text, and scores as high as any. Extension
+#38's calibrated metric scores the messy start 73 where 0.8.0's scored it 58: it weighs what a
+reader sees, and stacked boxes with readable labels lose fewer points than before. Its two looks are
 the rest of its cost; they are what the prompt asks for and can be left out. Since the phase 1h
 build `layout_diagram` runs the quality loop as well, so "by eye" now clears the stacked views
-and the long names too; under 0.6.0's build it left five findings. The lint loop's text is 839
-tokens for the seven findings with their paths, fix lines and autofix requests.
+and the long names too; under 0.6.0's build it left five findings. Most of the lint loop's text
+is the seven findings with their paths, fix lines and autofix requests.
 
 ### Applying a design pattern
 
@@ -1221,13 +1270,13 @@ parameter of `setStrategy`). It is not charged for knowing those. The last colum
 
 | Plan | Calls | Call tokens | Result text | Total | Detect confidence |
 |---|---|---|---|---|---|
-| `apply_pattern`: `describe_pattern`, apply | 2 | 71 | 717 | 788 | 1 |
-| `apply_pattern` with a dry run first | 3 | 127 | 982 | 1109 | 1 |
-| `batch`: 3 schemas, 9 ops | 2 | 430 | 1646 | 2076 | 1 |
+| `apply_pattern`: `describe_pattern`, apply | 2 | 71 | 718 | 789 | 1 |
+| `apply_pattern` with a dry run first | 3 | 127 | 983 | 1110 | 1 |
+| `batch`: 3 schemas, 9 ops | 2 | 427 | 1643 | 2070 | 1 |
 
-`apply_pattern` costs 62% less, 47% with the dry run, and the model writes 71 tokens instead of
-430; since 0.8.0 the core tier calls it through `call_endpoint`, which adds 8 tokens per call. Its answer is 276 tokens against the extension's 504: roles and elements by path, the
-properties grouped by path; a dry run's is 265 against 1,098, its `/batch` ops counted. Most of
+`apply_pattern` costs 62% less, 46% with the dry run, and the model writes 71 tokens instead of
+427; since 0.8.0 the core tier calls it through `call_endpoint`, which adds 8 tokens per call. Its answer is 281 tokens against the extension's 505: roles and elements by path, the
+properties grouped by path; a dry run's is 274 against 1,094, its `/batch` ops counted. Most of
 the batch way's cost is reading the schemas (1,489 tokens of `describe_endpoints`) before
 writing the ops.
 
@@ -1237,7 +1286,7 @@ An eighth scenario turns one domain into diagrams two ways: ThingsBoard, the obj
 extension's validation (`tests/fixtures/thingsboard.oo.json`: 93 classifiers in 15 contexts, 95
 relationships, 6 actors, 21 use cases, 5 collaborations, 3 lifecycles, and the activity, ERD, C4,
 deployment and mind map sections). `scripts/capture-oo.mjs` recorded both from StarUML 7.1.1 and
-the extension's phase 1h build into `scripts/benchmark-data/oo-thingsboard-7.1.1.json`. The `oo`
+the extension's phase 1j build into `scripts/benchmark-data/oo-thingsboard-7.1.1.json`. The `oo`
 tier way is the `model-first` prompt's: `build_model` with the spec, then `derive_diagrams`. The
 drawing way is one `build_diagram` per diagram under the core tier, each spec written from the
 same domain (every class with its members, every relation with its multiplicities, every message,
@@ -1246,23 +1295,103 @@ counted once ("total") and, for a client without prompt caching, once per call.
 
 | Plan | Calls | Definitions | Call tokens | Result text | Total | Definitions each turn | Diagrams | Scores | Below 80 |
 |---|---|---|---|---|---|---|---|---|---|
-| `oo` tier: `build_model`, `derive_diagrams` | 2 | 1119 | 14758 | 1255 | 17132 | 18251 | 25 | 82–96 | 0 |
-| Drawing: 25 `build_diagram` calls | 25 | 1998 | 12385 | 2402 | 16785 | 64737 | 25 | 73–97 | 1 |
+| `oo` tier: `build_model`, `derive_diagrams` | 2 | 1217 | 14758 | 1449 | 17424 | 18641 | 25 | 81–98 | 0 |
+| Drawing: 25 `build_diagram` calls | 25 | 1998 | 12385 | 2642 | 17025 | 64977 | 25 | 79–100 | 2 |
 
 Both write the domain once, and that dominates: the spec is 14,758 tokens, the 25 drawing specs
 12,385 (they leave out what only the model holds: responsibilities, collaborations' contexts,
-`knows`/`does`), so with prompt caching the two cost the same within 2% (17,132 against 16,785).
-Everything around it differs: 2 calls against 25, 1,255 tokens of answers against 2,402 (the
-extension's own are 357 for the build, 1,505 for the derivation and 3,314 for the 25 builds; each
+`knows`/`does`), so with prompt caching the two cost the same within 3% (17,424 against 17,025).
+Everything around it differs: 2 calls against 25, 1,449 tokens of answers against 2,642 (the
+extension's own are 523 for the build, 1,529 for the derivation and 3,715 for the 25 builds; each
 derived diagram keeps its id, since a derived sequence diagram is named like its collaboration
-and interaction), a tier listing 879 tokens shorter, and without prompt caching, where every turn
-resends the definitions, 18,251 against 64,737 tokens. Every
-derived diagram reaches the profile's target and one drawn diagram does not; the derived ones
+and interaction), a tier listing 781 tokens shorter, and without prompt caching, where every turn
+resends the definitions, 18,641 against 64,977 tokens. Every
+derived diagram reaches the profile's target and two drawn diagrams do not; the derived ones
 show the model's own elements, so a change to the model is a `build_model` upsert and one
 `derive_diagrams` (a second derivation of the unchanged model created, updated and deleted
 nothing), where the drawn ones are 25 more calls. The extension's validation drew the same 25
 diagrams by hand in 156 calls with about 55,000 result tokens (its README).
-Live, the two calls took 23 s on an idle StarUML; drawing took 29 s.
+Live, the two calls took 50 s and drawing 47 s; extension #38's layouts that fit a page cost
+both about twice what the phase 1h build took (23 s and 29 s).
+
+### ThingsBoard acceptance through the `oo` tier
+
+`scripts/acceptance-oo.mjs` runs the same domain the way a client of this server does: the built
+server started with `--tools oo` over stdio, `build_model` with the spec, `derive_diagrams`, then
+for every diagram `diagram_quality` (the score and extension #38's hard-limit `failures`) and
+`view_diagram` with `path`, which writes the PNG to disk. It derives the class diagrams per class
+view (the spec's default) and again per package (`policy: {classDiagrams: "perPackage"}`), the
+two sets the extension's reviewers rated, and records every call into
+`scripts/benchmark-data/oo-acceptance-7.1.1.json` (StarUML 7.1.1, extension 0.3.0 phase 1j,
+0.9.1 of this server).
+
+| Step | Calls | Call tokens | Result tokens |
+|---|---|---|---|
+| `build_model` + `derive_diagrams` (class views) | 2 | 14,743 | 1,436 (518 + 918) |
+| per diagram `diagram_quality` + `view_diagram` to disk, 25 diagrams | 50 | | 1,763 (376 for the images) |
+| `derive_diagrams` per package, then the same for 30 diagrams | 61 | | 3,203 |
+| Whole run | 113 | 19,080 | 6,402 |
+
+The images are 3.2 MB (class views) and 3.7 MB (per package) of PNG on disk and 376 and 450
+tokens of answers; inline, the 25 would be about 29,200 vision tokens (section "Image size"). The
+run took 85 s.
+
+Class-view set, every diagram 80 or more, none failing a hard limit (the live suite asserts both):
+
+| Diagram | Kind | Score | Loop's score | Failures |
+|---|---|---|---|---|
+| ThingsBoard packages | package | 90 | 90 | none |
+| Class - Entities and DAO | class | 93 | 93 | none |
+| Class - Application Services | class | 94 | 94 | none |
+| Class - Rule Engine | class | 93 | 93 | none |
+| Class - Transport | class | 81 | 81 | none |
+| Class - Actor System | class | 98 | 98 | none |
+| Class - Security | class | 89 | 89 | none |
+| Seq - Telemetry ingestion over MQTT | sequence | 94 | 94 | none |
+| Seq - Rule chain processing | sequence | 92 | 92 | none |
+| Seq - Device provisioning | sequence | 97 | 97 | none |
+| Seq - Device claiming | sequence | 92 | 92 | none |
+| Seq - REST login | sequence | 94 | 94 | none |
+| Use Cases - Tenant Administrator | usecase | 85 | 85 | none |
+| Use Cases - Customer User | usecase | 96 | 96 | none |
+| Use Cases - Device | usecase | 85 | 85 | none |
+| Use Cases - System Administrator | usecase | 98 | 98 | none |
+| State - Device lifecycle | statemachine | 85 | 85 | none |
+| State - Alarm lifecycle | statemachine | 96 | 96 | none |
+| State - Rule node lifecycle | statemachine | 92 | 92 | none |
+| Activity - Rule chain execution | activity | 82 | 82 | none |
+| ThingsBoard data model | erd | 94 | 94 | none |
+| ThingsBoard containers | c4 | 90 | 90 | none |
+| Deployment - Microservices | deployment | 83 | 83 | none |
+| Deployment - Monolith | deployment | 98 | 94 | none |
+| ThingsBoard Features | mindmap | 86 | 86 | none |
+
+`Class - Rule Engine` is drawn at aspect 3.14, past the profile's 3:1, and still fails nothing: the
+limit applies to a diagram larger than the page. The loop's score in the `derive_diagrams` answer
+is the score `diagram_quality` reads afterwards for every diagram but `Deployment - Monolith`
+(94 in the answer, 98 read back and in every later derive with nothing changed), an extension
+0.3.0 quirk the live suite names.
+
+The per-package set has the same 18 other diagrams with the same scores and these class diagrams:
+
+| Class diagram (per package) | Score | Failures |
+|---|---|---|
+| Domain Model (common.data) | 98 | none |
+| Messaging (common.message, common.queue) | 100 | none |
+| Actor Framework (common.actor) | 99 | none |
+| Persistence (dao) | 94 | none |
+| Rule Engine API | 77 | none |
+| Rule Node Library | 81 | none |
+| Transport API (common.transport) | 98 | none |
+| Protocol Transports | 94 | none |
+| Actor System (application.actors) | 98 | none |
+| Application Services | 82 | none |
+| Security | 89 | none |
+
+`Rule Engine API` is the one the extension's own #38 report lists short: eight rule nodes each
+depend on the same three services, and every drawing of them within 3:1 scores 69 to 77. It
+breaks no hard limit, so the score is not capped; `quality.failing` names it as `Rule Engine API
+77`, and the live suite asserts it is the only diagram below 80.
 
 ## Architecture
 
