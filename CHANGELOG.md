@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-06
+
+Built against staruml-mcp-extension 0.3.0 as finished (extension phase 1i: every diagram
+family, preferences, fragments, XMI, templates, quick find, performance diagnostics), 103
+endpoints. In short, by phase:
+
+- **2k** (#15): the final 103-endpoint manifest with an exact live contract; `build_diagram`
+  lists the manifest's 29 kinds; `quick_find` in the core tier; the new endpoints in the
+  `project`, `io` and `perf` groups; `diagram_as_text` reads the diagram families back as spec;
+  the skill's "Diagram families" and "The project" sections.
+
+The core tier lists 19 tools in 1,996 tokens, the `oo` tier 13 in 1,113, `--tools all` 110 in
+14,292 (o200k_base). The token benchmark's four modelling scenarios cost 11,552 tokens counting
+the definitions once per scenario and 6,112 with prompt caching, 61 and 75 more than 0.7.0: the
+refactor scenario's deletion now reads `delete_element`'s schema and goes through
+`call_endpoint`.
+
+### Changed
+- `apply_pattern` and `delete_element` leave the core tier, which `build_diagram`'s kind enum
+  (111 tokens) would otherwise have pushed past 2,000. `apply_pattern` stays listed in the `oo`
+  tier and is reached through `call_endpoint` under `core`, as the `apply-pattern` prompt, the
+  skill and the token benchmark now do; a deletion is a `/delete_element` op in a `batch` or
+  `call_endpoint`. `--tools core,apply_pattern,delete_element` lists both again (#15).
+- `build_diagram` lists `kind` with the manifest's enum, so the kinds a model may name follow the
+  running extension, and its `spec` description names the sixteen families' shared shape once
+  (`other kinds{nodes[{name,type,in}],edges[{from,to,type,name}]}`); the families' node and edge
+  types are left to `describe_endpoints` and the skill (#15).
+- The live contract test is exact again: the running extension must publish the bundled
+  manifest, endpoint for endpoint and schema for schema, now that the extension is final (#15).
+- The `review-diagram` prompt reads the diagram families with `format: "spec"` (#15).
+
+### Added
+- Bundled manifest synced from the extension's phase 1i build with 103 endpoints: `/quick_find`, `/get_preference`, `/set_preference`, `/get_project_metadata`, `/set_project_metadata`, `/list_templates`, `/new_from_template`, `/list_extensions`, `/list_working_diagrams`, `/close_diagrams`, `/export_fragment`, `/import_fragment`, `/export_xmi`, `/import_xmi` and `/performance_stats`; sixteen diagram families in `/build_diagram` (composite, object, communication, timing, overview, infoflow, profile, dfd, bdd, ibd, parametric, bpmn, wireframe, aws, azure, gcp) and `format: "spec"` on `/export_text` (#15).
+- `quick_find` in the core tier (#15): elements whose name, documentation or tag values contain a text, in any case, each with its path, the field that matched and the text around it. It lists `text` alone (51 tokens); `limit` passes unlisted. The `oo` tier reaches it through `call_endpoint`.
+- `describe_endpoints` groups the new endpoints: `project` (metadata, preferences, templates, extensions, the editor's tabs), `io` (fragments and XMI) and `perf` (`performance_stats`); `divide_fragment` stays in `diagram` (#15).
+- `diagram_as_text` takes `format: "spec"`, the `build_diagram` spec of a diagram family, sent on one line (64 tokens instead of 130 indented for a three-node data flow diagram) (#15).
+- The skill's section 4, "Diagram families": the shared node and edge shape, a section per family with its node and edge types, its defaults and one example, and reading a family back as spec; section 14, "The project": `quick_find`, project metadata, preferences, templates, editor tabs, fragments, XMI and `performance_stats`. Sections from 4 on are renumbered. Every example runs offline and live (#15, #12).
+- Live tests for every new endpoint through `call_endpoint`, and a round trip per family: the spec `diagram_as_text` writes builds a copy whose spec is the same. The round trip found what extension 0.3.0 does not carry back, which the skill now says: `documentation` and `properties` are not in the spec, a composite structure's class lists its parts and ports among its attributes as well, and an upsert of the spec into its own diagram adds parts, messages, timing states and segments and an overview's unnamed control nodes again for composite, communication, timing and overview diagrams (#15).
+- `scripts/load-test.mjs --quick-find`; the soak rotation adds `quick_find`, `get_preference` and `performance_stats` (#14, #15).
+
 ## [0.7.0] - 2026-10-06
 
 Built against staruml-mcp-extension 0.3.0 with 88 endpoints (extension phase 1h: the style
@@ -284,7 +324,8 @@ The original 4 Mermaid/diagram tools continue to work without the extension.
 - Inspired by [`staruml/staruml-mcp-server`](https://github.com/staruml/staruml-mcp-server) by Minkyu Lee (StarUML creator).
 - Reimplemented with multi-transport support to work around stdio MCP registration issues in some clients (e.g., [Claude Code #36914](https://github.com/anthropics/claude-code/issues/36914)).
 
-[Unreleased]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.4.0...v0.5.0

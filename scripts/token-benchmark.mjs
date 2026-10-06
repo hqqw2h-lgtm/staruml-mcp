@@ -866,7 +866,8 @@ console.table(await measureFixes());
 // changes as ops: the ops of apply_pattern's own dry run, the best a model writing them can do
 // (every property Strategy prescribes), after reading the schemas of the endpoints they use.
 // It is not charged for knowing what the pattern prescribes. The last column is what
-// /detect_patterns found afterwards.
+// /detect_patterns found afterwards. Since 0.8.0 the core tier reaches apply_pattern through
+// call_endpoint, as the apply-pattern prompt does.
 const strategy = JSON.parse(
   readFileSync(new URL("benchmark-data/pattern-7.1.1.json", import.meta.url), "utf8"),
 );
@@ -877,7 +878,7 @@ const describeStep = fixStep(
   { name: "describe_pattern", body: { name: "Strategy" } },
   [["extension", "/describe_pattern", strategy.viaPattern.describe]],
 );
-const applyStep = fixStep("apply_pattern", strategy.apply, [
+const applyStep = fixStep("call_endpoint", { name: "apply_pattern", body: strategy.apply }, [
   ["extension", "/apply_pattern", strategy.viaPattern.applied],
 ]);
 const opEndpoints = [...new Set(strategy.byHand.ops.map((op) => op.path.slice(1)))];
@@ -892,9 +893,11 @@ const patternPlans = [
     confidence: confidence(strategy.viaPattern.detect),
     steps: [
       describeStep,
-      fixStep("apply_pattern", { ...strategy.apply, dryRun: true }, [
-        ["extension", "/apply_pattern", strategy.viaPattern.dryRun],
-      ]),
+      fixStep(
+        "call_endpoint",
+        { name: "apply_pattern", body: { ...strategy.apply, dryRun: true } },
+        [["extension", "/apply_pattern", strategy.viaPattern.dryRun]],
+      ),
       applyStep,
     ],
   },

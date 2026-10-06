@@ -17,7 +17,7 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 ```
   AI Agent  ──MCP──►  staruml-mcp (this package)  ──HTTP──►  StarUML
                                                   :58321 (built-in, 4 tools)
-                                                  :58322 (extension 0.3.x, 88 endpoints
+                                                  :58322 (extension 0.3.x, 103 endpoints
                                                           from its manifest: core ones as
                                                           tools, the rest via call_endpoint)
 ```
@@ -25,10 +25,10 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 | Package | What it is | Where it runs |
 |---|---|---|
 | **`staruml-mcp`** (this repo) | MCP server for AI agents | your machine via `npx -y staruml-mcp` |
-| **[`staruml-mcp-extension`](https://github.com/hqqw2h-lgtm/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 88 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
+| **[`staruml-mcp-extension`](https://github.com/hqqw2h-lgtm/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 103 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
 
 - Using only Mermaid-based diagram tools? Install `staruml-mcp` only. The 4 built-in tools, `doctor` and `view_diagram` (as a PNG) work.
-- Want the extension's 88 endpoints (whole diagrams from a spec or Mermaid in one call, models from an object spec with every diagram derived from them, a project style profile and a quality loop that scores and re-lays out diagrams, elements addressed by path instead of id, diagram and UML lint with fixes, diffs and snapshots, diagrams read back as Mermaid, PlantUML or a text summary, type search, model validation, project save/open, element CRUD, relationships, attributes and operations, layout presets and edge routing, styling, export, undo, batches, code generation, any StarUML command)? Install **both**.
+- Want the extension's 103 endpoints (whole diagrams from a spec or Mermaid in one call, 29 diagram kinds from class and sequence to SysML, BPMN, timing, wireframes and AWS/Azure/GCP, models from an object spec with every diagram derived from them, a project style profile and a quality loop that scores and re-lays out diagrams, elements addressed by path instead of id, diagram and UML lint with fixes, diffs and snapshots, diagrams read back as Mermaid, PlantUML or a text summary, type search, model validation, project save/open, element CRUD, relationships, attributes and operations, layout presets and edge routing, styling, export, undo, batches, code generation, quick find, preferences, templates, model fragments, XMI, any StarUML command)? Install **both**.
 
 ## Prerequisites
 
@@ -160,12 +160,16 @@ Point your MCP client at `npx -y staruml-mcp` (stdio) or `http://localhost:58323
 ### Agent skill and plugins
 
 `plugins/` packages a `staruml` agent skill that teaches the workflow: `doctor` first, the
-`build_diagram` spec of each diagram kind with an example, the build and lint loop, model first
+`build_diagram` spec of each diagram kind with an example, a section per diagram family
+(composite structure, object, communication, timing, interaction overview, information flow,
+profile, DFD, SysML block, internal block and parametric, BPMN, wireframe, AWS, Azure, GCP) with
+an example and the spec read-back, the build and lint loop, model first
 (`build_model` with the relationship verbs, responsibilities as documentation), design patterns
 with every property they prescribe (`apply_pattern` bound by path, `detect_patterns` to
 confirm), when Mermaid goes where, `batch` and its
-`$name` references, `describe_endpoints` / `call_endpoint`, viewing and exporting, keeping tokens
-down, and the access token. The Claude Code plugin also registers this server over stdio
+`$name` references, `describe_endpoints` / `call_endpoint`, viewing and exporting, the project
+features (`quick_find`, metadata, preferences, templates, editor tabs, fragments, XMI,
+`performance_stats`), keeping tokens down, and the access token. The Claude Code plugin also registers this server over stdio
 (`npx -y staruml-mcp`, passing `STARUML_EXT_TOKEN` through when it is set).
 
 ```bash
@@ -221,8 +225,8 @@ node         ok    22.23.3
 staruml api  ok    http://localhost:58321
 extension    ok    0.3.0 at http://localhost:58322
 staruml      ok    7.1.1
-manifest     ok    88 endpoints from the live manifest
-tier         ok    core: 11 extension tools listed, 50 endpoints through call_endpoint
+manifest     ok    103 endpoints from the live manifest
+tier         ok    core: 10 extension tools listed, 93 endpoints through call_endpoint
 ```
 
 A failing check is followed by a `fix` line: start StarUML, enable `apiServer` in StarUML's
@@ -257,7 +261,7 @@ extension    fail  http://localhost:58322 refused the request: Missing or wrong 
 | `get_current_diagram_info` | Get metadata of the currently focused diagram. |
 | `get_diagram_image_by_id` | Export a diagram as PNG by its ID. |
 | `view_diagram` | Show `diagram` (an id or a path; default the current one): an interactive SVG viewer in clients that render MCP Apps, the `get_diagram_image_by_id` PNG otherwise ([below](#inline-viewer-mcp-apps)). The SVG comes from the extension, which also resolves a path to the id the PNG needs. `annotate: "paths"` or `"ids"` labels every view with its element on the picture (never on the model); a labelled PNG comes from the extension's `export_diagram`, since the built-in PNG has no labels. |
-| `diagram_as_text` | `diagram` (an id or a path; default the current one) as Mermaid, or PlantUML with `format: "plantuml"`, through the extension's `export_text`: the text in a block of its own, then `{id?, kind, warnings?}`. The Mermaid is the form `build_diagram` reads back. |
+| `diagram_as_text` | `diagram` (an id or a path; default the current one) as Mermaid, or PlantUML with `format: "plantuml"`, or with `format: "spec"` as the `build_diagram` spec of the sixteen diagram families neither has (sent on one line), through the extension's `export_text`: the text in a block of its own, then `{id?, kind, warnings?}`. Each is a form `build_diagram` reads back. |
 | `doctor` | Check Node, both StarUML ports, the extension and StarUML versions; reloads the extension's tools and, given `tools`, switches the tier. |
 
 ### generate_diagram routing
@@ -293,12 +297,12 @@ default and reaches every other extension endpoint through two generic tools:
 
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
-| `core` (default) | the 7 above; `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`, `build_model`, `apply_pattern`, `diagram_quality`, `improve_diagram`; `describe_endpoints`, `call_endpoint` | 1,995 |
-| `oo` | model-first only: `build_model`, `derive_diagrams`, `explain_model`, `model_lint`, `apply_pattern`, `detect_patterns`, `validate_model`, `diagram_quality`; `view_diagram`, `diagram_as_text`, `doctor`; `describe_endpoints`, `call_endpoint` | 1,111 |
-| `all` | the 7 above and one tool per manifest endpoint | 13,071 |
+| `core` (default) | the 7 above; `find_elements`, `quick_find`, `get_element_by_id`, `update_element`, `batch`, `build_diagram`, `export_diagram`, `build_model`, `diagram_quality`, `improve_diagram`; `describe_endpoints`, `call_endpoint` | 1,996 |
+| `oo` | model-first only: `build_model`, `derive_diagrams`, `explain_model`, `model_lint`, `apply_pattern`, `detect_patterns`, `validate_model`, `diagram_quality`; `view_diagram`, `diagram_as_text`, `doctor`; `describe_endpoints`, `call_endpoint` | 1,113 |
+| `all` | the 7 above and one tool per manifest endpoint | 14,292 |
 | `core,create_diagram,…` | the 7 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
-Token counts include the server instructions (o200k_base, extension 0.3.0 with 88 endpoints, `npm run
+Token counts include the server instructions (o200k_base, extension 0.3.0 with 103 endpoints, `npm run
 benchmark:tokens`). 0.6.0 added `build_model` and `apply_pattern` (237 tokens) to the core tier
 and, to stay under 2,000, moved four endpoints out: `introspect` (`doctor` reports the versions),
 `describe_diagram` (`diagram_as_text`, always listed, reads a diagram in as many tokens),
@@ -308,8 +312,12 @@ and, to stay under 2,000, moved four endpoints out: `introspect` (`doctor` repor
 `improve_diagram` applies its autofixes in its loop and `diagram_quality` reports what it still
 finds by rule. `update_element`'s `op`, `export_diagram`'s `format` and `generate_diagram`'s `kind`
 list their values in the description only (the request schemas still check them), which paid for
-the rest. `--tools core,lint_diagram,search_types,describe_diagram,validate_model` lists them
-again. Pick the tier with `--tools`, or `STARUML_MCP_TOOLS` for clients that pass
+the rest. 0.8.0 lists `build_diagram`'s `kind` with the manifest's enum, now 29 kinds (111 tokens),
+and adds `quick_find` (51); `apply_pattern` (112) moves to the `patterns` group, still listed by
+the `oo` tier and reached by the `apply-pattern` prompt through `call_endpoint`, and
+`delete_element` (53) leaves too, a deletion being one `batch` op or `call_endpoint` away.
+`--tools core,lint_diagram,search_types,describe_diagram,validate_model,apply_pattern,delete_element`
+lists them again. Pick the tier with `--tools`, or `STARUML_MCP_TOOLS` for clients that pass
 environment but no arguments; the flag wins. An agent can switch it at runtime with
 `doctor({tools: "all"})`; the server then sends `notifications/tools/list_changed`, as it does when
 `doctor` finds a manifest with other endpoints. Names that are neither endpoints nor tools are
@@ -336,8 +344,10 @@ name to the tier; `oo` with `core` or `all` is open again. The prompts follow th
   validation, `diff_diagram` and the quality loop; `history`: snapshots, undo and redo;
   `patterns`: the pattern library, detection and presets; `model`: diagrams derived from a model,
   its text explanation, messages checked against and synced into operations; `style`: the style
-  profile, themes and view styles; `project`, `command`, `meta`, `feature`, `editor`, `code`,
-  `diagram`, `element`; grouped by name, since the manifest has none), one line
+  profile, themes and view styles; `project`: the file, metadata, templates, preferences, the
+  extensions StarUML loads and the open editor tabs; `io`: model fragments and XMI; `perf`:
+  `performance_stats`; `command`, `meta`, `feature`, `editor`, `code`, `diagram`, `element`;
+  grouped by name, since the manifest has none), one line
   each. `describe_endpoints({names: [...]})` or `({group})` returns their full description, `readOnly`
   / `destructive` flags and request schema as `tools/list` would show it. Named endpoints may be
   listed ones.
@@ -386,7 +396,7 @@ project down, or only the trailing steps when they name one element), `Order.tot
 with `AMBIGUOUS_REF` and the candidates' ids and paths. Element summaries carry the `path` each
 element resolves by.
 
-A copy of the 0.3.0 manifest (88 endpoints) is bundled (`src/extension-manifest.json`), so `tools/list` is
+A copy of the 0.3.0 manifest (103 endpoints) is bundled (`src/extension-manifest.json`), so `tools/list` is
 complete while StarUML is closed; calls then fail with `EXTENSION_UNREACHABLE` and an install hint.
 `npm run sync:manifest` refreshes the copy from a running extension (`-- --url <base>`) or from a
 recorded `/introspect` response (`-- --from <file>`). When the running extension's version is
@@ -404,15 +414,19 @@ the core tier):
 | `get_style_profile` / `set_style_profile` / `apply_style_profile` / `explain_style_violation` | The project's style profile (naming rules, visuals, layout presets, quality thresholds, `strict`, `blockSaveOnErrors`; built-ins `uml-standard`, `minimal`, `presentation`, `print`) / store one, a built-in or a patch / bring existing names and views in line with it / which rule an element breaks, or whether a name would pass, with a fix. |
 | `diagram_quality` / `improve_diagram` | A diagram's score 0–100 from its geometry (overlap, edges through nodes, crossings, length variation, bends, alignment, whitespace, aspect, page size) against the profile's target / the quality loop on an existing diagram in one undo step: the profile's layout preset, post-processing, lint autofixes, each step kept only when it raises the score. |
 | `sync_operations` / `check_messages` / `describe_type` / `apply_theme` | Add the operations a sequence diagram's messages name to their receivers / list the messages that name none / a metamodel type's properties and their UML meaning / colour a diagram by a theme preset. |
-| `build_diagram` | A whole diagram in one call and one undo step, from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap, requirement, c4, package, component, deployment) or from Mermaid, PlantUML, SQL DDL or JSON Schema text; laid out with a `layout` preset (default by kind), optionally upserted into the diagram of the same name (`prune` deletes what the spec lacks); elements named like existing ones are shown again, not copied (`reuse`); `dryRun` answers the plan and changes nothing; answers the diagram and counts, with `result: "ids"` the model and view ids by node name. |
+| `build_diagram` | A whole diagram in one call and one undo step, from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap, requirement, c4, package, component, deployment, and the sixteen families composite, object, communication, timing, overview, infoflow, profile, dfd, bdd, ibd, parametric, bpmn, wireframe, aws, azure and gcp, which share one shape of typed nodes nested with `in` and typed edges) or from Mermaid, PlantUML, SQL DDL or JSON Schema text; laid out with a `layout` preset (default by kind), optionally upserted into the diagram of the same name (`prune` deletes what the spec lacks); elements named like existing ones are shown again, not copied (`reuse`); `dryRun` answers the plan and changes nothing; answers the diagram and counts, with `result: "ids"` the model and view ids by node name. |
 | `lint_diagram` / `uml_lint` | How a diagram reads (stacked, overlapping or off-canvas views, edges through nodes, names wider than their box, unconnected nodes, crowding), each finding with an `autofix` request / modelling mistakes StarUML's validation skips (association ends without multiplicity or navigability, untyped attributes, abstract classes without subclasses, unrealized interfaces, messages naming no operation, use cases without actors, state machines without initial or final state, entities without a key, naming conventions), each with a fix line. |
 | `diff_diagram` / `snapshot` / `diff_since` / `restore_snapshot` | What a spec or diagram text would change on a diagram / a model checkpoint / what changed since one / undo back to one in a single step. |
 | `create_view_of` / `divide_fragment` | Show an existing element on another diagram / set where a combined fragment's operands begin. |
-| `export_text` / `describe_diagram` | A diagram as Mermaid (the form `build_diagram` reads back) or PlantUML, with warnings for what the text cannot carry / a bounded text summary of its nodes, members and edges. |
+| `export_text` / `describe_diagram` | A diagram as Mermaid or PlantUML, or a family's diagram as its `build_diagram` spec (`format: "spec"`), each a form `build_diagram` reads back, with warnings for what the text cannot carry / a bounded text summary of its nodes, members and edges. |
 | `search_types` / `validate_model` | Fuzzy search over metamodel types, palette items, relationship kinds and commands, each hit with an example request / StarUML's validation rules over the open model, problems with element and rule ids. |
 | `get_all_commands` / `describe_commands` / `execute_command` | List command ids / their arguments and whether they open a dialog / run any StarUML command. |
 | `get_project_info` / `new_project` / `open_project` / `save_project` / `save_project_as` | Project lifecycle. |
-| `get_element_by_id` / `find_elements` | Read elements; `find_elements` pages with `limit`/`cursor`. |
+| `get_project_metadata` / `set_project_metadata` / `list_templates` / `new_from_template` | The project's name, author, company, copyright, version and documentation / the File > New From Template projects / a new project from one. |
+| `get_preference` / `set_preference` / `list_extensions` | A StarUML preference with its default and type / change one (view, editor, theme, validation and the diagram extensions' defaults; never who may call the server) / the extensions StarUML loads and the commands each adds. |
+| `export_fragment` / `import_fragment` / `export_xmi` / `import_xmi` | An element and what it owns to a `.mfj` file / one read into any project / XMI 2.1 out and in through the staruml-xmi extension (`NOT_FOUND` without it). |
+| `list_working_diagrams` / `close_diagrams` / `performance_stats` | The open editor tabs / close several / the write path's counters: listeners per event, undo depth, elements, tabs, heap. |
+| `get_element_by_id` / `find_elements` / `quick_find` | Read elements; `find_elements` pages with `limit`/`cursor`; `quick_find` finds a text in names, documentation and tag values, in any case, as Edit > Find does. |
 | `create_element` / `update_element` / `delete_element` | Model elements without views; `update_element` sets, adds, removes, reorders or relocates. |
 | `create_element_with_view` / `create_edge_with_view` / `create_relationship` | Elements and relationships drawn on a diagram; `create_relationship` also sets association ends. |
 | `add_attribute` / `add_operation` / `add_parameter` / `add_enumeration_literal` / `add_template_parameter` / `add_slot` / `add_tag` | Features of classifiers and instances. |
@@ -455,9 +469,10 @@ StarUML is rolled back and reported with the failing op's code; the extension's
 above, and the text adds `Details: {"index": n}` (the results name elements the rollback removed).
 
 `build_diagram` lists a hand-written description and nine parameters (`kind`, `spec`, `mermaid`,
-`name`, `upsert`, `prune`, `dryRun`, `direction`, `layout`, 331 tokens); the manifest's own description of `spec` alone is ~400
-tokens, so `spec` lists a one-line grammar per kind and `describe_endpoints({names:
-["build_diagram"]})` serves the full one. The unlisted `parent` (an id or a path), `text`, `format`, `reuse`, `allowDuplicateNames` and `autoLayout` are accepted, and
+`name`, `upsert`, `prune`, `dryRun`, `direction`, `layout`, 442 tokens); `kind` lists the
+manifest's enum, so the 29 kinds follow the running extension. The manifest's own description of
+`spec` alone is 1,805 tokens, so `spec` lists a one-line grammar per kind, the families' shared
+shape once, and `describe_endpoints({names: ["build_diagram"]})` serves the full one. The unlisted `parent` (an id or a path), `text`, `format`, `reuse`, `allowDuplicateNames` and `autoLayout` are accepted, and
 every body is checked against the manifest's whole request schema before it is sent, as for `batch`.
 
 `export_diagram` lists a hand-written description and shorter parameter descriptions (154 tokens
@@ -486,8 +501,9 @@ the loop's compacted report. `set_style_profile` answers the profile's name, `st
 findings, and those of `uml_lint`, `model_lint` and `diff_diagram`, come back with the checked diagram as its path and without the ids
 a finding's paths already name (a view of no model keeps its id); each lint `autofix` is a
 `{path, body}` request, the shape of a `batch` op, so every autofix of an answer goes into one
-`batch`. `get_element_by_id` and `delete_element` list `ref` and a whole one-line description,
-which the manifest's run past 100 characters.
+`batch`. `get_element_by_id` and `delete_element` (when named in `--tools`) list `ref` and a
+whole one-line description, which the manifest's run past 100 characters. `quick_find` lists
+`text` alone in 51 tokens; `limit` (default 50) passes unlisted.
 
 `find_elements`, `update_element`, `search_types`, `describe_diagram` and `validate_model` list
 hand-written descriptions too, in 95, 186, 86, 67 and 59 tokens (the last three when named in
@@ -500,8 +516,9 @@ request schema, keep the manifest's `required`, and, like every listing, leave o
 summary text alone, whose first line already names the diagram and counts its nodes and edges.
 
 `build_model` lists `spec` (one line naming the sections and the relationship verbs), `upsert`
-and `dryRun` in 125 tokens against the manifest's 488; `apply_pattern` lists `pattern`,
-`bindings`, `diagram` and `dryRun` in 112 against 454, `bindings` without its two nested unions.
+and `dryRun` in 125 tokens against the manifest's 488; `apply_pattern` (under `oo`, or named in
+`--tools`) lists `pattern`, `bindings`, `diagram` and `dryRun` in 112 against 454, `bindings`
+without its two nested unions.
 `parent`, `result`, `variant`, `sequence` and `upsert` pass unlisted, and every body is checked
 against the whole request schema first, so a bad binding is `INVALID_ARGUMENT` before StarUML sees
 it. Their answers, and those of `apply_preset`, `detect_patterns`, `sync_operations` and
@@ -553,10 +570,10 @@ Clients that surface MCP prompts (as slash commands in Claude Code, for instance
 | Prompt | Arguments | Workflow |
 |---|---|---|
 | `model-codebase` | `path`, `language`, `description`, `name` (all optional) | `doctor`; with a source directory, `list_code_generators` and `reverse_code` (StarUML's Java reverse adds type hierarchy and package overview diagrams by default); otherwise one `build_diagram` of the central classes from the code or the description; then `describe_diagram` and `validate_model` on the result. |
-| `review-diagram` | `diagram`, an id or a path (default `@current`) | `describe_diagram`, `validate_model` scoped to the diagram's owner, `diagram_as_text`; then a review with a concrete fix per finding, changing nothing until asked. |
+| `review-diagram` | `diagram`, an id or a path (default `@current`) | `describe_diagram`, `validate_model` scoped to the diagram's owner, `diagram_as_text` (`format: "spec"` for the diagram families); then a review with a concrete fix per finding, changing nothing until asked. |
 | `improve-diagram` | `diagram`, an id or a path (default `@current`) | `view_diagram`; `diagram_quality` (score, target, penalties); `improve_diagram` (the profile's layout and the lint autofixes in one undo step, each step kept only when the score rises); `view_diagram` again; below target, split a diagram past the profile's `maxElements`, try another preset, `uml_lint` for the model; never placing views by hand. |
 | `model-first` | `system`, `description` (both optional) | Explain the domain back as contexts, classes with responsibilities, relationship verbs, actors, collaborations and lifecycles; `build_model` with `dryRun`, then for real; `derive_diagrams`; `view_diagram`, `diagram_as_text`, `explain_model`; `model_lint`, fixes in the spec, `build_model` upsert and `derive_diagrams` again, at most three rounds. Never places views. |
-| `apply-pattern` | `pattern`, `scope` (the package holding the classes), `diagram` (all optional) | `staruml://patterns` when no pattern is named; `describe_pattern`; bindings by path; `apply_pattern` with `dryRun`, then for real into `scope`; `view_diagram` with `annotate: "paths"`; `detect_patterns` to confirm confidence 1 and nothing missing. |
+| `apply-pattern` | `pattern`, `scope` (the package holding the classes), `diagram` (all optional) | `staruml://patterns` when no pattern is named; `describe_pattern`; bindings by path; `apply_pattern` (through `call_endpoint` under `core`) with `dryRun`, then for real into `scope`; `view_diagram` with `annotate: "paths"`; `detect_patterns` to confirm confidence 1 and nothing missing. |
 
 The text names each endpoint as a tool when the current tier lists it and as `call_endpoint`
 otherwise, so it is right under `--tools` selections too.
@@ -633,7 +650,7 @@ npm run test:coverage  # same, failing below 100% lines/branches/functions/state
 npm run test:live      # STARUML_LIVE=1: every tool and endpoint against a running StarUML + extension
 npm run load-test      # HTTP transport load test (needs npm run build)
 npm run soak-test      # 2000 calls over stdio: RSS, live heap and p99 must not grow (needs npm run build)
-npm run test:mutation  # Stryker over src/, fails below 85% of mutants killed (94.96% now)
+npm run test:mutation  # Stryker over src/, fails below 85% of mutants killed (94.82% now)
 npm run benchmark:tokens # four scenarios under two accountings vs. 56864ca, 0cfc06b, 45bedd4; reading a diagram five ways
 npm run sync:manifest  # refresh src/extension-manifest.json from a running extension
 node scripts/capture-read-diagram.mjs # re-record the read-a-diagram benchmark data from StarUML
@@ -661,14 +678,15 @@ path it prints.
 `--batch` a `batch` of four read-only ops, one of them with a `"$p.project"` reference, which adds
 the per-op schema checks, `--build` a `build_diagram` of a three-class Mermaid diagram with
 `upsert`, which adds the check against the whole request schema, `--lint` a `lint_diagram`
-of the current diagram, whose findings are reshaped, and `--model` and `--pattern` dry runs of
-`build_model` and `apply_pattern`, whose answers are reshaped by path. StarUML and the extension are
+of the current diagram, whose findings are reshaped, `--model` and `--pattern` dry runs of
+`build_model` and `apply_pattern`, whose answers are reshaped by path, and `--quick-find` a
+`quick_find`. StarUML and the extension are
 replaced by an in-process stub, which serves the bundled 0.3.0 manifest, so the numbers measure
 this server and a local StarUML does not change them. By default no request carries a session
 id, so each builds a fresh `McpServer` (the stateless fallback), which dominates the cost;
 `--session` initializes once and sends every request in that session, as an MCP client does. Any
 failed request makes the script exit non-zero; `--max-p99-ms` and `--min-rps` add budgets, and CI
-runs the default, `--session`, `--batch`, `--build`, `--lint --session`, `--model --session` and `--pattern --session` paths with
+runs the default, `--session`, `--batch`, `--build`, `--lint --session`, `--model --session`, `--pattern --session`, `--quality --session`, `--improve --session`, `--derive --session` and `--quick-find --session` paths with
 `--requests 2000 --max-p99-ms 4000 --min-rps 100`.
 
 Measured on an Intel i9-9980HK (8 cores / 16 threads), macOS, Node 22.23.3, 5000 requests per
@@ -746,6 +764,41 @@ warm-up requests, stub upstream, load average 10–16 from other agents' work, 0
 | `build_diagram` | 200 | 1675–1870 | 98–101 ms | 171–319 ms |
 | `lint_diagram` | 50 | 1348–1446 | 32–36 ms | 61–67 ms |
 | `lint_diagram` | 200 | 1063–1681 | 110–163 ms | 186–445 ms |
+
+Re-run for 0.8.0 in one session (core tier of 19 tools, the 103-endpoint manifest; `lint_diagram`
+under `--tools core,lint_diagram`, `apply_pattern` under `core,apply_pattern`, `derive_diagrams`
+under `oo`), two runs per path, 5000 requests per level after 500 warm-up requests, stub upstream,
+load average 8–17 from other agents' work, 0 errors throughout:
+
+| Tool | Concurrency | req/s | p50 | p99 |
+|---|---|---|---|---|
+| `get_all_diagrams_info` | 50 | 705–1603 | 30–67 ms | 55–126 ms |
+| `get_all_diagrams_info` | 200 | 1876–2069 | 85–86 ms | 149–318 ms |
+| `call_endpoint` | 50 | 757–1539 | 32–63 ms | 57–125 ms |
+| `call_endpoint` | 200 | 1330–1980 | 89–109 ms | 169–365 ms |
+| `batch` (4 ops) | 50 | 1378–1411 | 34–35 ms | 62–64 ms |
+| `batch` (4 ops) | 200 | 1715–1727 | 104–109 ms | 169–191 ms |
+| `build_diagram` | 50 | 913–1491 | 32–48 ms | 58–159 ms |
+| `build_diagram` | 200 | 1379–1889 | 95–101 ms | 161–386 ms |
+| `lint_diagram` | 50 | 955–1596 | 30–45 ms | 52–123 ms |
+| `lint_diagram` | 200 | 1312–1951 | 97–104 ms | 156–397 ms |
+| `build_model` (dry run) | 50 | 1528–1529 | 31 ms | 54–55 ms |
+| `build_model` (dry run) | 200 | 1831–1840 | 97–103 ms | 164–204 ms |
+| `apply_pattern` (dry run) | 50 | 1529–1580 | 30–31 ms | 50–52 ms |
+| `apply_pattern` (dry run) | 200 | 1857–1874 | 101–102 ms | 145–146 ms |
+| `diagram_quality` | 50 | 1721–1722 | 27–28 ms | 50 ms |
+| `diagram_quality` | 200 | 2069–2114 | 85–86 ms | 150–151 ms |
+| `improve_diagram` (dry run) | 50 | 1700–1706 | 28 ms | 48–53 ms |
+| `improve_diagram` (dry run) | 200 | 2058–2071 | 84–87 ms | 167–183 ms |
+| `derive_diagrams` (dry run, `oo`) | 50 | 1498–1675 | 28–31 ms | 52–58 ms |
+| `derive_diagrams` (dry run, `oo`) | 200 | 1948–2006 | 91–94 ms | 154–165 ms |
+| `quick_find` | 50 | 1537–1708 | 28–32 ms | 50–55 ms |
+| `quick_find` | 200 | 1960–2053 | 84–89 ms | 212–405 ms |
+
+Each path's slower run at 50 (the plain call's and `build_diagram`'s first, `call_endpoint`'s
+and `lint_diagram`'s second) ran at a load-average peak; its other run matches the rest. Against StarUML
+7.1.1 with the extension's phase 1i build (`--live --session --requests 1000 --concurrency 50`,
+0 errors): `get_all_diagrams_info` 1055 req/s, p99 78 ms; `quick_find` 1082 req/s, p99 77 ms.
 
 Re-run for 0.7.0 in one session (core tier of 20 tools, the 88-endpoint manifest; `derive_diagrams`
 under `--tools oo`), two runs per path, 5000 requests per level after 500 warm-up requests, stub
@@ -834,12 +887,27 @@ invalidation path.
 ### Soak
 
 `scripts/soak-test.mjs` starts `dist/index.js` over stdio against the stub, makes 2,000 warm-up
-calls, then 2,000 measured calls rotating `get_all_diagrams_info`, `call_endpoint`, a two-op `batch`,
+calls, then 2,000 measured calls rotating `get_all_diagrams_info`, `quick_find`, `get_preference` and
+`performance_stats` through `call_endpoint`, `call_endpoint`, a two-op `batch`,
 `build_diagram`, `lint_diagram` through `call_endpoint`, `diagram_quality` and dry runs of
 `improve_diagram`, `build_model`, `apply_pattern` and `derive_diagrams`, and fails when the mean RSS, the live heap after a full GC or the p99 latency
 of the last 200 calls exceeds the first 200 by more than 25%, or any call fails; a p99 increase must
 also exceed 2 ms to count, since the p99 of 200 calls of about 1 ms is their second slowest and
 doubles on one scheduler stall. The live workflow runs it.
+
+Four runs for 0.8.0, `quick_find`, `get_preference` and `performance_stats` added to the rotation
+and `apply_pattern` through `call_endpoint` (load average 6–9), 0 errors:
+
+| Window | RSS | Live heap after GC | p50 | p99 |
+|---|---|---|---|---|
+| first 200 | 157.1–160.4 MB | 25.6–25.8 MB | 0.70–1.49 ms | 1.38–4.77 ms |
+| last 200 | 169.4–171.8 MB | 26.4–26.5 MB | 0.53–0.76 ms | 1.34–3.75 ms |
+| growth | 6.3–7.8% | 2.4–3.5% | | −67% to +171% |
+
+RSS and heap stay within budget in every run. The second run's p99 rose 2.37 ms (1.38 to 3.75
+ms), just over the 2 ms floor, and failed the p99 budget; the other three moved −67% to −1% with
+the same code, the third falling from a slow first window. As in 0.7.0, one window of 200 calls
+of about 1 ms decides it.
 
 Four runs for 0.7.0, the quality loop and `derive_diagrams` added to the rotation (load average
 about 21), 0 errors:
@@ -883,7 +951,7 @@ offline. Upstream responses are shaped like StarUML 7.1.1 + extension 0.3.0 outp
 summaries; the command list is the 322 ids captured from 7.1.1 in `scripts/benchmark-data/`). Four
 servers see the same data: `56864ca` (before issue #5), `0cfc06b` (issue #5, the last hand-written
 tool set, 21 tools), `45bedd4` (phase 2a, one tool per manifest endpoint, 34 tools) and the current
-one with the default core tier (20 tools). The first three are loaded with `git show` and run on
+one with the default core tier (19 tools). The first three are loaded with `git show` and run on
 the current dependencies (zod 4 lists schemas about 100 tokens shorter than zod 3 did, so #5's
 definitions measure 1831 here, 1930 when it was committed). When a step's tool is not listed, the
 scenario calls it through `call_endpoint` and first asks `describe_endpoints` for every such
@@ -908,18 +976,18 @@ Two accountings, side by side:
 
 | | pre-#5 | #5 | phase 2a | now batch | now (core) |
 |---|---|---|---|---|---|
-| Tools listed | 21 | 21 | 34 | 20 | 20 |
-| Definitions + instructions | 3011 | 1831 | 6154 | 1997 | 1997 |
+| Tools listed | 21 | 21 | 34 | 19 | 19 |
+| Definitions + instructions | 3011 | 1831 | 6154 | 1996 | 1996 |
 
 (a) Definitions once per scenario, plus results:
 
 | Scenario | Calls before / now | pre-#5 | #5 | phase 2a | now batch | now | vs pre-#5 | vs #5 |
 |---|---|---|---|---|---|---|---|---|
-| Mermaid class diagram + preview | 4 / 4 | 3197 | 1951 | 6274 | 2117 | 2117 | −33.8% | +8.5% |
-| Native use-case diagram | 11 / 2 | 3982 | 2497 | 6820 | 3981 | 2366 | −40.6% | −5.2% |
-| Inspect and refactor a class model | 8 / 8 | 6227 | 4234 | 8557 | 4632 | 4632 | −25.6% | +9.4% |
-| Native class diagram + export | 11 / 3 | 3917 | 2458 | 6781 | 3987 | 2376 | −39.3% | −3.3% |
-| All scenarios | 34 / 17 | 17323 | 11140 | 28432 | 14717 | 11491 | −33.7% | +3.2% |
+| Mermaid class diagram + preview | 4 / 4 | 3197 | 1951 | 6274 | 2116 | 2116 | −33.8% | +8.5% |
+| Native use-case diagram | 11 / 2 | 3982 | 2497 | 6820 | 3980 | 2365 | −40.6% | −5.3% |
+| Inspect and refactor a class model | 8 / 8 | 6227 | 4234 | 8557 | 4696 | 4696 | −24.6% | +10.9% |
+| Native class diagram + export | 11 / 3 | 3917 | 2458 | 6781 | 3986 | 2375 | −39.4% | −3.4% |
+| All scenarios | 34 / 17 | 17323 | 11140 | 28432 | 14778 | 11552 | −33.3% | +3.7% |
 
 (b) Definitions once per session, plus results and calls:
 
@@ -927,33 +995,35 @@ Two accountings, side by side:
 |---|---|---|---|---|---|---|---|
 | Mermaid class diagram + preview | 282 | 216 | 216 | 216 | 216 | −23.4% | 0.0% |
 | Native use-case diagram | 1490 | 1185 | 1185 | 2449 | 478 | −67.9% | −59.7% |
-| Inspect and refactor a class model | 3369 | 2556 | 2556 | 2834 | 2834 | −15.9% | +10.9% |
+| Inspect and refactor a class model | 3369 | 2556 | 2556 | 2910 | 2910 | −13.6% | +13.8% |
 | Native class diagram + export | 1434 | 1155 | 1155 | 2472 | 512 | −64.3% | −55.7% |
-| Definitions, once | 3011 | 1831 | 6154 | 1997 | 1997 | | |
-| Session | 9586 | 6943 | 11266 | 9968 | 6037 | −37.0% | −13.0% |
+| Definitions, once | 3011 | 1831 | 6154 | 1996 | 1996 | | |
+| Session | 9586 | 6943 | 11266 | 10043 | 6112 | −36.2% | −12.0% |
 
 Targets of issues #5 and #8, under each accounting:
 
 | Target | (a) per scenario | (b) per session |
 |---|---|---|
-| #5 / #8: 60% below pre-#5, first three scenarios | not met: 9115 against ≤ 5362 (−32.0%) | not met: 5525 against ≤ 3260 (−32.2%) |
-| #5 / #8: 60% below pre-#5, all four scenarios | not met: 11491 against ≤ 6929 (−33.7%) | not met: 6037 against ≤ 3834 (−37.0%) |
-| #8: core definitions ≤ 2,000 | met: 1997 | met: 1997 |
-| #8: all scenarios below #5 | not met: 11491 against 11140 (+3.2%) | met: 6037 against 6943 (−13.0%) |
+| #5 / #8: 60% below pre-#5, first three scenarios | not met: 9177 against ≤ 5362 (−31.5%) | not met: 5600 against ≤ 3260 (−31.3%) |
+| #5 / #8: 60% below pre-#5, all four scenarios | not met: 11552 against ≤ 6929 (−33.3%) | not met: 6112 against ≤ 3834 (−36.2%) |
+| #8: core definitions ≤ 2,000 | met: 1996 | met: 1996 |
+| #8: all scenarios below #5 | not met: 11552 against 11140 (+3.7%) | met: 6112 against 6943 (−12.0%) |
 
 `build_diagram` does what it is for: a native diagram costs 478 and 512 tokens of results and calls
 (the spec it is given included; its answer carries the style and quality reports since 0.7.0),
 against 1185 and 1155 for #5's one call per element and 2449 and 2472 for one `batch`, whose ops repeat every parent and diagram id, whose results now carry each
 element's path, and which needs `describe_endpoints` for four endpoint schemas. Under (a) that
-saving is hidden by the definitions, counted four times (7988 of 11491 tokens); under (b) the
-session is 13.0% below #5 and 37.0% below pre-#5. The refactor scenario grew 29 tokens since 0.6.0:
-`save_project`'s schema, which `describe_endpoints` returns, gained `override`. What keeps
-(b) above the 60% target is the fixed definitions (1997, a third of the session) and the refactor
+saving is hidden by the definitions, counted four times (7984 of 11552 tokens); under (b) the
+session is 12.0% below #5 and 36.2% below pre-#5. The refactor scenario grew 29 tokens in 0.7.0:
+`save_project`'s schema, which `describe_endpoints` returns, gained `override`; and 64 (76 under
+(b)) in 0.8.0, since its deletion goes through `call_endpoint` after `describe_endpoints` reads
+`delete_element`'s schema. What keeps
+(b) above the 60% target is the fixed definitions (1996, a third of the session) and the refactor
 scenario, whose `get_all_commands` result alone is 1947 tokens of the 322 command ids; neither is
 touched by diagram building. The `batch` and `build_diagram` answers here are recorded in the
 extension's full form; since its phase 1g it answers each op's success and id, and a build's
-counts, unless asked for more, so both cost less against it. `--tools all` lists 95 tools for 13071 tokens (all scenarios (a)
-55365, (b) 16597). Generated descriptions stay one line of at most 100 characters (a test enforces
+counts, unless asked for more, so both cost less against it. `--tools all` lists 110 tools for 14292 tokens (all scenarios (a)
+60249, (b) 17818). Generated descriptions stay one line of at most 100 characters (a test enforces
 it on every listed tool), and a test keeps the core listing within 2,000 tokens.
 
 ### Reading a diagram back
@@ -1028,12 +1098,12 @@ parameter of `setStrategy`). It is not charged for knowing those. The last colum
 
 | Plan | Calls | Call tokens | Result text | Total | Detect confidence |
 |---|---|---|---|---|---|
-| `apply_pattern`: `describe_pattern`, apply | 2 | 63 | 717 | 780 | 1 |
-| `apply_pattern` with a dry run first | 3 | 111 | 982 | 1093 | 1 |
+| `apply_pattern`: `describe_pattern`, apply | 2 | 71 | 717 | 788 | 1 |
+| `apply_pattern` with a dry run first | 3 | 127 | 982 | 1109 | 1 |
 | `batch`: 3 schemas, 9 ops | 2 | 430 | 1646 | 2076 | 1 |
 
-`apply_pattern` costs 62% less, 47% with the dry run, and the model writes 63 tokens instead of
-430. Its answer is 276 tokens against the extension's 504: roles and elements by path, the
+`apply_pattern` costs 62% less, 47% with the dry run, and the model writes 71 tokens instead of
+430; since 0.8.0 the core tier calls it through `call_endpoint`, which adds 8 tokens per call. Its answer is 276 tokens against the extension's 504: roles and elements by path, the
 properties grouped by path; a dry run's is 265 against 1,098, its `/batch` ops counted. Most of
 the batch way's cost is reading the schemas (1,489 tokens of `describe_endpoints`) before
 writing the ops.
@@ -1053,17 +1123,17 @@ counted once ("total") and, for a client without prompt caching, once per call.
 
 | Plan | Calls | Definitions | Call tokens | Result text | Total | Definitions each turn | Diagrams | Scores | Below 80 |
 |---|---|---|---|---|---|---|---|---|---|
-| `oo` tier: `build_model`, `derive_diagrams` | 2 | 1111 | 14758 | 1255 | 17124 | 18235 | 25 | 82–96 | 0 |
-| Drawing: 25 `build_diagram` calls | 25 | 1997 | 12385 | 2402 | 16784 | 64712 | 25 | 73–97 | 1 |
+| `oo` tier: `build_model`, `derive_diagrams` | 2 | 1113 | 14758 | 1255 | 17126 | 18239 | 25 | 82–96 | 0 |
+| Drawing: 25 `build_diagram` calls | 25 | 1996 | 12385 | 2402 | 16783 | 64687 | 25 | 73–97 | 1 |
 
 Both write the domain once, and that dominates: the spec is 14,758 tokens, the 25 drawing specs
 12,385 (they leave out what only the model holds: responsibilities, collaborations' contexts,
-`knows`/`does`), so with prompt caching the two cost the same within 2% (17,124 against 16,784).
+`knows`/`does`), so with prompt caching the two cost the same within 2% (17,126 against 16,783).
 Everything around it differs: 2 calls against 25, 1,255 tokens of answers against 2,402 (the
 extension's own are 357 for the build, 1,505 for the derivation and 3,314 for the 25 builds; each
 derived diagram keeps its id, since a derived sequence diagram is named like its collaboration
-and interaction), a tier listing 886 tokens shorter, and without prompt caching, where every turn
-resends the definitions, 18,235 against 64,712 tokens. Every
+and interaction), a tier listing 883 tokens shorter, and without prompt caching, where every turn
+resends the definitions, 18,239 against 64,687 tokens. Every
 derived diagram reaches the profile's target and one drawn diagram does not; the derived ones
 show the model's own elements, so a change to the model is a `build_model` upsert and one
 `derive_diagrams` (a second derivation of the unchanged model created, updated and deleted

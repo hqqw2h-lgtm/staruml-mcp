@@ -42,6 +42,7 @@ jobs:
           npm run load-test -- --live --session --pattern --requests ${{ inputs.requests }} --concurrency ${{ inputs.concurrency }}
           npm run load-test -- --live --session --quality --requests ${{ inputs.requests }} --concurrency ${{ inputs.concurrency }}
           npm run load-test -- --live --session --improve --requests ${{ inputs.requests }} --concurrency ${{ inputs.concurrency }}
+          npm run load-test -- --live --session --quick-find --requests ${{ inputs.requests }} --concurrency ${{ inputs.concurrency }}
 
       - name: Soak test (2000 calls over stdio)
         run: npm run soak-test
