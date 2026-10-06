@@ -1,14 +1,19 @@
 /**
  * Client side of extension #23's `/build_model` (src/handlers/model.ts there): a model made or
- * updated from an object-level spec, without diagrams. Listed in the core tier with a short
- * schema; the body is still checked against the entry's whole request schema before it is sent.
+ * updated from an object-level spec, without diagrams, and of extension #33's `/derive_diagrams`
+ * and `/explain_model` (src/handlers/oo.ts): the diagrams the model implies, drawn by rule, and the
+ * model as text. Listed with short schemas (build_model in the core and `oo` tiers, the other two
+ * in `oo`); bodies are still checked against the entry's whole request schema before they are
+ * sent.
  */
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { z } from "zod";
 import { shortInput, type ManifestEntry } from "./manifest.js";
-import { jsonResult } from "./tool-result.js";
+import { jsonResult, textResult } from "./tool-result.js";
 
 export const BUILD_MODEL = "build_model";
+export const DERIVE_DIAGRAMS = "derive_diagrams";
+export const EXPLAIN_MODEL = "explain_model";
 export const SYNC_OPERATIONS = "sync_operations";
 export const APPLY_THEME = "apply_theme";
 
@@ -73,5 +78,90 @@ function withoutPlaceholders(value: unknown): unknown {
     Object.entries(value)
       .filter(([key, item]) => !(key === "_id" && typeof item === "string" && item.startsWith("$")))
       .map(([key, item]) => [key, withoutPlaceholders(item)]),
+  );
+}
+
+/** The extension's description is 820 characters, the rules for each kind. */
+export const DERIVE_DIAGRAMS_DESCRIPTION =
+  "Draw every diagram a model implies, laid out by the style profile, in one undo step.";
+
+export const EXPLAIN_MODEL_DESCRIPTION =
+  "The model as compact text: classes, responsibilities, relationships, operations, flows.";
+
+export function deriveDiagramsInput(entry: ManifestEntry): z.ZodObject {
+  return shortInput(
+    entry,
+    {
+      scope: "The model, or a package of it.",
+      kinds:
+        "Only these: package|class|sequence|usecase|statemachine|activity|erd|c4|deployment|mindmap.",
+      dryRun: "Change nothing; answer what each diagram would change.",
+    },
+    // The kinds enum is in the description; policy, a profile patch, passes unlisted.
+    new Set(["kinds", "dryRun"]),
+  );
+}
+
+export function explainModelInput(entry: ManifestEntry): z.ZodObject {
+  return shortInput(
+    entry,
+    { scope: "Model or package; default the project.", maxChars: "Default 20000." },
+    new Set(["maxChars"]),
+  );
+}
+
+/** Counts a derived diagram answers; a zero says nothing a missing count does not. */
+const COUNTS = ["created", "updated", "unchanged", "deleted", "ops"] as const;
+
+interface Derived {
+  kind?: unknown;
+  name?: unknown;
+  quality?: { score?: unknown };
+  [field: string]: unknown;
+}
+
+/**
+ * A /derive_diagrams answer for the model: each diagram as its kind, its name, its id and its
+ * non-zero counts, with the score its quality loop reached; the rating and `passes` are left out
+ * (the totals' `quality.failing` names every diagram below its target). The id stays: a derived
+ * sequence diagram is named like the collaboration and the interaction it shows, so its name
+ * alone is an AMBIGUOUS_REF (extension 0.3.0, phase 1h). A dry run's "$diagram" placeholder is
+ * dropped.
+ */
+export function deriveResult(data: unknown, input: Json): CallToolResult {
+  const diagrams = (data as { diagrams?: unknown } | null)?.diagrams;
+  if (!Array.isArray(diagrams)) return jsonResult(data, input);
+  return jsonResult(
+    {
+      ...(data as Json),
+      diagrams: diagrams.map((d: Derived) => {
+        if (typeof d !== "object" || d === null) return d;
+        const counts = COUNTS.filter((c) => typeof d[c] === "number" && d[c] !== 0);
+        const id =
+          typeof d.diagram === "string" && !d.diagram.startsWith("$") ? d.diagram : undefined;
+        return {
+          kind: d.kind,
+          name: d.name,
+          ...(id === undefined ? {} : { diagram: id }),
+          ...Object.fromEntries(counts.map((c) => [c, d[c]])),
+          ...(typeof d.quality?.score === "number" ? { score: d.quality.score } : {}),
+        };
+      }),
+    },
+    input,
+  );
+}
+
+/**
+ * The explanation as plain text: as a JSON string every quote and line break in it would be
+ * escaped. A cut text says so on a last line.
+ */
+export function explainResult(data: unknown, input: Json): CallToolResult {
+  const answer = data as { text?: unknown; truncated?: unknown } | null;
+  if (typeof answer?.text !== "string") return jsonResult(data, input);
+  return textResult(
+    answer.truncated === true
+      ? `${answer.text}\n[cut at maxChars; raise it or narrow scope]`
+      : answer.text,
   );
 }

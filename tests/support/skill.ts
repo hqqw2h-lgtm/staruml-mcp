@@ -8,6 +8,8 @@ export const SKILL_PATH = new URL(
 export interface SkillExample {
   tool: string;
   args: Record<string, unknown>;
+  /** The tier the example is written for (```` ```json derive_diagrams oo ````); default core. */
+  tools: string;
   /** 1-based line of the opening fence, for failure messages. */
   line: number;
 }
@@ -16,14 +18,18 @@ export function readSkill(): string {
   return readFileSync(SKILL_PATH, "utf8");
 }
 
-/** The `json <tool>` blocks of the skill: every one is a tool call an agent may copy. */
+/**
+ * The `json <tool> [tier]` blocks of the skill: every one is a tool call an agent may copy, under
+ * the tier it names (`oo` for section 7) or the default one.
+ */
 export function skillExamples(source = readSkill()): SkillExample[] {
   const examples: SkillExample[] = [];
-  for (const match of source.matchAll(/^```json ([a-z_]+)\n([\s\S]*?)^```$/gm)) {
+  for (const match of source.matchAll(/^```json ([a-z_]+)(?: ([a-z_,]+))?\n([\s\S]*?)^```$/gm)) {
     const line = source.slice(0, match.index).split("\n").length;
     examples.push({
       tool: match[1]!,
-      args: JSON.parse(match[2]!) as Record<string, unknown>,
+      args: JSON.parse(match[3]!) as Record<string, unknown>,
+      tools: match[2] ?? "core",
       line,
     });
   }

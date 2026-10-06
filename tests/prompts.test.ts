@@ -6,6 +6,7 @@ import {
   IMPROVE_DIAGRAM,
   invocation,
   MODEL_CODEBASE,
+  MODEL_FIRST,
   REVIEW_DIAGRAM,
 } from "../src/prompts.js";
 import { parseToolSelection } from "../src/tiers.js";
@@ -33,7 +34,7 @@ async function promptText(
 }
 
 describe("prompts/list", () => {
-  it("offers model-codebase, review-diagram, improve-diagram and apply-pattern with optional arguments", async () => {
+  it("offers model-codebase, review-diagram, improve-diagram, apply-pattern and model-first with optional arguments", async () => {
     const { prompts } = await mcp.client.listPrompts();
 
     expect(prompts).toEqual([
@@ -112,7 +113,86 @@ describe("prompts/list", () => {
           },
         ],
       },
+      {
+        name: MODEL_FIRST,
+        title: "Model a domain object-first",
+        description:
+          "State a domain as objects, dry-run and build the model, derive every diagram, review.",
+        arguments: [
+          {
+            name: "system",
+            description: "Name of the system, which names the model.",
+            required: false,
+          },
+          { name: "description", description: "What the domain is and does.", required: false },
+        ],
+      },
     ]);
+  });
+
+  it("hides a prompt whose endpoints the tier cannot reach, and lists it again after", async () => {
+    const catalog = new CatalogState(bundledCatalog(), parseToolSelection("oo"));
+    const oo = await connect({ catalog });
+    try {
+      const listed = async () => (await oo.client.listPrompts()).prompts.map((p) => p.name);
+      // model-codebase draws with build_diagram, which the oo tier does not reach.
+      expect(await listed()).toEqual([
+        REVIEW_DIAGRAM,
+        IMPROVE_DIAGRAM,
+        APPLY_PATTERN_PROMPT,
+        MODEL_FIRST,
+      ]);
+      await expect(oo.client.getPrompt({ name: MODEL_CODEBASE })).rejects.toThrow(
+        /Prompt model-codebase not found/,
+      );
+
+      catalog.update(catalog.current, parseToolSelection("core"));
+      expect(await listed()).toContain(MODEL_CODEBASE);
+      catalog.update(catalog.current, parseToolSelection("oo"));
+      expect(await listed()).not.toContain(MODEL_CODEBASE);
+    } finally {
+      await oo.close();
+    }
+  });
+});
+
+describe("model-first", () => {
+  it("states the domain, dry-runs and builds the model, derives, looks and reviews (core tier)", async () => {
+    expect(
+      await promptText(MODEL_FIRST, { system: "Lending", description: "A library's loans." }),
+    ).toBe(
+      [
+        "Model Lending object-first: state it as objects and let StarUML derive and lay out every diagram. Do not place, size or colour views.",
+        "About it: A library's loans.",
+        "",
+        '1. Explain the domain back in a few sentences: its bounded contexts, the main classes with one responsibility each, how they relate (owns, has, uses, isA, implements, knows), the actors and their use cases, the collaborations worth a sequence diagram and the lifecycles worth a state machine. Write that as a build_model spec with system "Lending".',
+        "2. build_model({spec, dryRun: true}): check every path it would create and that each relationship verb points the right way (from is the whole, the client, the specific kind or the side that navigates).",
+        "3. build_model({spec}) builds the model in one undo step. classViews and useCaseViews in the spec group the class and use case diagrams as the user wants them.",
+        '4. call_endpoint({name: "derive_diagrams", body: {scope: "Lending"}}) draws every diagram the model implies, each laid out by the style profile and run through the quality loop; quality.failing names any below its target.',
+        '5. view_diagram({diagram: "<a derived diagram\'s name>"}) for the diagrams that matter most, diagram_as_text for their content, call_endpoint({name: "explain_model", body: {scope: "Lending"}}) for the whole model as text.',
+        '6. call_endpoint({name: "model_lint", body: {scope: "Lending"}}) reviews the object design. Fix what it reports in the spec, then build_model({spec, upsert: true}) and call_endpoint({name: "derive_diagrams", body: {scope: "Lending"}}) again: both update in place. Repeat until it reports no error or warning, at most three rounds.',
+        "",
+        "Report the model in a few sentences, the diagrams derived with their scores, and what model_lint still reports.",
+      ].join("\n"),
+    );
+  });
+
+  it("names the oo tier's own tools under --tools oo, and a placeholder system", async () => {
+    const oo = await connect({
+      catalog: new CatalogState(bundledCatalog(), parseToolSelection("oo")),
+    });
+    try {
+      const text = await promptText(MODEL_FIRST, {}, oo);
+
+      expect(text).toMatch(/^Model the system described below object-first/);
+      expect(text).not.toContain("About it:");
+      expect(text).toContain('4. derive_diagrams({scope: "<system>"})');
+      expect(text).toContain('explain_model({scope: "<system>"})');
+      expect(text).toContain('6. model_lint({scope: "<system>"})');
+      expect(text).not.toContain("call_endpoint");
+    } finally {
+      await oo.close();
+    }
   });
 });
 

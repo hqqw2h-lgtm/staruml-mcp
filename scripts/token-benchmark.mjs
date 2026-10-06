@@ -959,3 +959,107 @@ console.log(
     `definitions left out. apply_pattern's answer is ${rawApplied} tokens as the extension sends it:`,
 );
 console.table(await measurePlans(patternPlans));
+
+// --- Model a domain: the oo tier against drawing ------------------------------------------------
+
+// What StarUML 7.1.1 and the extension answered while the ThingsBoard domain of the extension's
+// validation (93 classifiers, 95 relationships, actors, use cases, collaborations, lifecycles,
+// activity, ERD, C4, deployment and mind map sections) became diagrams two ways, recorded by
+// scripts/capture-oo.mjs in benchmark-data/oo-thingsboard-7.1.1.json. "oo tier" is the #17 way
+// under --tools oo: build_model with the spec, derive_diagrams of the model. "Drawing" is one
+// build_diagram per diagram under the core tier, each spec written from the same domain: classes
+// with their members, relations with multiplicities, messages, states, nodes. Both write the
+// domain once or more, so the call tokens are counted; the definitions are each tier's listing.
+const oo = JSON.parse(
+  readFileSync(new URL("benchmark-data/oo-thingsboard-7.1.1.json", import.meta.url), "utf8"),
+);
+
+async function measureDomain() {
+  const plans = [
+    {
+      name: "oo tier: build_model, derive_diagrams",
+      tools: "oo",
+      steps: [
+        ["build_model", { spec: oo.spec }, "/build_model", oo.oo.build],
+        ["derive_diagrams", oo.oo.derive, "/derive_diagrams", oo.oo.derived],
+      ],
+      diagrams: oo.oo.derived.counts.diagrams,
+      scores: oo.oo.derived.diagrams.map((d) => d.quality?.score).filter((s) => s !== undefined),
+    },
+    {
+      name: `Drawing: ${oo.drawn.calls.length} build_diagram calls`,
+      tools: "core",
+      steps: oo.drawn.calls.map(({ args, answer }) => [
+        "build_diagram",
+        args,
+        "/build_diagram",
+        answer,
+      ]),
+      diagrams: oo.drawn.calls.length,
+      scores: oo.drawn.calls
+        .map(({ answer }) => answer.quality?.score)
+        .filter((s) => s !== undefined),
+    },
+  ];
+  const rows = [];
+  for (const plan of plans) {
+    const builtin = await new UpstreamFixture().start();
+    const extension = await new UpstreamFixture().start();
+    const server = withTools(plan.tools)({
+      apiHost: "http://127.0.0.1",
+      apiPort: builtin.port,
+      extPort: extension.port,
+    });
+    const client = new Client({ name: "token-benchmark", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const { tools } = await client.listTools();
+      const definitions =
+        countTokens(
+          JSON.stringify(
+            tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+          ),
+        ) + countTokens(client.getInstructions() ?? "");
+      let calls = 0;
+      let results = 0;
+      for (const [tool, args, slug, data] of plan.steps) {
+        extension.reply(slug, { body: ok(data) });
+        const result = await client.callTool({ name: tool, arguments: args });
+        if (result.isError) throw new Error(`${plan.name}: ${JSON.stringify(result.content)}`);
+        calls += callTokens(tool, args);
+        results += textTokens(result);
+      }
+      rows.push({
+        plan: plan.name,
+        calls: plan.steps.length,
+        definitions,
+        "call tokens": calls,
+        "result text": results,
+        total: definitions + calls + results,
+        // A client without prompt caching resends the definitions with every turn.
+        "definitions each turn": definitions * plan.steps.length + calls + results,
+        diagrams: plan.diagrams,
+        scores: `${Math.min(...plan.scores)}-${Math.max(...plan.scores)}`,
+        "below 80": plan.scores.filter((score) => score < 80).length,
+      });
+    } finally {
+      await client.close();
+      await server.close();
+      await builtin.stop();
+      await extension.stop();
+    }
+  }
+  return rows;
+}
+
+const rawDerived = countTokens(JSON.stringify(oo.oo.derived));
+console.log(
+  `\nModel a domain: ${oo.spec.system}, ${oo.spec.classes.length} classifiers, ` +
+    `${oo.spec.relationships.length} relationships (StarUML ${oo.versions.staruml.version}, ` +
+    `extension ${oo.versions.extension.version}); each tier's definitions once, calls and results ` +
+    `counted. derive_diagrams answers ${rawDerived} tokens as the extension sends it; derived again ` +
+    `it created ${oo.again.counts.created}, updated ${oo.again.counts.updated} and deleted ` +
+    `${oo.again.counts.deleted}:`,
+);
+console.table(await measureDomain());

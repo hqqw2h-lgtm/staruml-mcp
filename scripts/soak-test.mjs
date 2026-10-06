@@ -2,7 +2,8 @@
 // Soak test over stdio: starts the built server (dist/index.js) against an in-process stub of both
 // StarUML ports, sends tool calls one after another through the MCP SDK client (a rotation of
 // get_all_diagrams_info, call_endpoint find_elements, batch, build_diagram, lint_diagram through
-// call_endpoint, diagram_quality, and dry runs of improve_diagram, build_model and apply_pattern),
+// call_endpoint, diagram_quality, and dry runs of improve_diagram, build_model, apply_pattern and
+// derive_diagrams through call_endpoint),
 // and compares the first and the last --window of --calls
 // measured calls. The server's resident set
 // size is sampled with ps every --sample calls, and its live heap after a full GC is read at the
@@ -81,6 +82,10 @@ const ROTATION = [
   { name: "call_endpoint", arguments: { name: "lint_diagram", body: { diagram: "soak" } } },
   { name: "diagram_quality", arguments: { ref: "soak" } },
   { name: "improve_diagram", arguments: { ref: "soak", dryRun: true } },
+  {
+    name: "call_endpoint",
+    arguments: { name: "derive_diagrams", body: { scope: "Soak", dryRun: true } },
+  },
   {
     name: "build_model",
     arguments: { spec: { system: "Soak", classes: [{ name: "Order" }] }, dryRun: true },
@@ -282,6 +287,23 @@ async function startStub() {
         steps: ["snap", "trim"],
         findings: [],
       },
+      dryRun: true,
+    }),
+    "POST /derive_diagrams": ok({
+      model: "Soak",
+      diagrams: [
+        {
+          kind: "class",
+          name: "Soak",
+          diagram: "$diagram",
+          created: 1,
+          updated: 0,
+          unchanged: 0,
+          deleted: 0,
+          ops: 2,
+        },
+      ],
+      counts: { diagrams: 1, created: 1, updated: 0, unchanged: 0, deleted: 0 },
       dryRun: true,
     }),
     "POST /lint_diagram": ok({

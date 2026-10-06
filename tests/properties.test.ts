@@ -33,7 +33,11 @@ import {
   CORE_ENDPOINTS,
   ENDPOINT_GROUPS,
   endpointGroup,
+  listsHandWritten,
+  OO_REACHABLE,
+  OO_TOOLS,
   parseToolSelection,
+  reaches,
   selects,
 } from "../src/tiers.js";
 
@@ -180,19 +184,72 @@ describe("tiers.ts", () => {
     );
   });
 
-  it("a selection selects exactly its names, core expanded, and all selects everything", () => {
+  const TIER: Record<string, readonly string[]> = { core: CORE_ENDPOINTS, oo: OO_TOOLS };
+  /** Names, tiers, and the tools the tiers expand to, so probes hit both sides of every check. */
+  const TOKEN = fc.oneof(
+    NAME,
+    fc.constantFrom("core", "oo", "all"),
+    fc.constantFrom(...OO_TOOLS, ...OO_REACHABLE, "build_diagram", "move_views", "batch"),
+  );
+  const PROBE = fc.oneof(
+    NAME,
+    fc.constantFrom(...OO_TOOLS, ...OO_REACHABLE, ...CORE_ENDPOINTS, "generate_diagram"),
+  );
+
+  it("a selection selects exactly its names, tiers expanded, and all selects everything", () => {
     fc.assert(
-      fc.property(
-        fc.array(fc.oneof(NAME, fc.constant("core")), { minLength: 1 }),
-        NAME,
-        (tokens, probe) => {
-          const selection = parseToolSelection(tokens.join(","));
-          const expected = new Set(tokens.flatMap((t) => (t === "core" ? CORE_ENDPOINTS : [t])));
-          expect(selection.names).toEqual(expected);
-          expect(selects(selection, probe)).toBe(expected.has("all") || expected.has(probe));
-          expect(selects(parseToolSelection(`all,${tokens.join(",")}`), probe)).toBe(true);
-        },
-      ),
+      fc.property(fc.array(TOKEN, { minLength: 1 }), PROBE, (tokens, probe) => {
+        const selection = parseToolSelection(tokens.join(","));
+        const expected = new Set(tokens.flatMap((t) => (Object.hasOwn(TIER, t) ? TIER[t]! : [t])));
+        expect(selection.names).toEqual(expected);
+        expect(selects(selection, probe)).toBe(expected.has("all") || expected.has(probe));
+        expect(selects(parseToolSelection(`all,${tokens.join(",")}`), probe)).toBe(true);
+      }),
+    );
+  });
+
+  it("only oo without core or all closes a selection, which lists and reaches its own names", () => {
+    fc.assert(
+      fc.property(fc.array(TOKEN, { minLength: 1 }), PROBE, (tokens, probe) => {
+        const selection = parseToolSelection(tokens.join(","));
+        const closed = tokens.includes("oo") && !tokens.includes("core") && !tokens.includes("all");
+        expect(selection.closed).toBe(closed);
+        // Open: every hand-written tool listed and every endpoint reachable, as before 0.7.0.
+        expect(listsHandWritten(selection, probe)).toBe(!closed || selection.names.has(probe));
+        expect(reaches(selection, probe)).toBe(
+          !closed || selection.names.has(probe) || OO_REACHABLE.includes(probe),
+        );
+        // Whatever a closed selection lists, it reaches.
+        if (selects(selection, probe)) expect(reaches(selection, probe)).toBe(true);
+      }),
+    );
+  });
+
+  it("the oo tier reaches nothing that draws, whatever is added to it but a drawing name", () => {
+    const DRAWING = [
+      "build_diagram",
+      "create_element_with_view",
+      "create_edge_with_view",
+      "create_view_of",
+      "layout_diagram",
+      "route_edges",
+      "move_views",
+      "resize_node",
+      "set_view_style",
+      "set_z_order",
+      "divide_fragment",
+      "apply_theme",
+      "set_style_profile",
+      "batch",
+      "execute_command",
+    ];
+    fc.assert(
+      fc.property(fc.array(NAME, { maxLength: 4 }), (extra) => {
+        const selection = parseToolSelection(["oo", ...extra].join(","));
+        for (const name of DRAWING) {
+          expect(reaches(selection, name), name).toBe(extra.includes(name));
+        }
+      }),
     );
   });
 

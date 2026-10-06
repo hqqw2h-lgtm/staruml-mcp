@@ -121,6 +121,10 @@ const SHORT = new Set([
   "/apply_pattern",
   "/diagram_quality",
   "/improve_diagram",
+  "/derive_diagrams",
+  "/explain_model",
+  "/model_lint",
+  "/detect_patterns",
 ]);
 
 /** One case per manifest endpoint: required arguments only, an element summary as the answer. */
@@ -150,7 +154,6 @@ const UNDESCRIBED = new Set([
   "describe_pattern.variant",
   "apply_preset.dryRun",
   "apply_theme.dryRun",
-  "derive_diagrams.dryRun",
   "apply_style_profile.dryRun",
 ]);
 

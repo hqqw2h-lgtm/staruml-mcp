@@ -18,6 +18,11 @@ export const ErrorCode = {
   InvalidArgument: "INVALID_ARGUMENT",
   /** generate_diagram was asked for what only the extension's build_diagram does. */
   ExtensionRequired: "EXTENSION_REQUIRED",
+  /**
+   * The selected tier (`--tools oo`) leaves the endpoint out, or the call would place or style a
+   * view, which that tier leaves to the style profile (issue #17).
+   */
+  NotInTier: "NOT_IN_TIER",
 } as const;
 
 export type Upstream = "builtin" | "extension";

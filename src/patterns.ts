@@ -39,6 +39,19 @@ export function applyPatternInput(entry: ManifestEntry): z.ZodObject {
   return shortInput(entry, LISTED, UNTYPED);
 }
 
+/** Listed in the `oo` tier, where a model's patterns are checked rather than drawn. */
+export const DETECT_PATTERNS_DESCRIPTION =
+  "Find design patterns in the model by structure, with a confidence and what is missing.";
+
+export function detectPatternsInput(entry: ManifestEntry): z.ZodObject {
+  return shortInput(
+    entry,
+    { scope: "Model or package; default the project.", patterns: "Only these pattern names." },
+    // minConfidence (default 0.6) and limit pass unlisted.
+    new Set(["patterns"]),
+  );
+}
+
 type Json = Record<string, unknown>;
 
 interface RoleElement {

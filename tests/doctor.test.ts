@@ -430,7 +430,7 @@ describe("doctor tool", () => {
         error: {
           code: "INVALID_ARGUMENT",
           message:
-            'Invalid tools: "core,Bad Name". Use core, all, or comma-separated tool names such as core,create_diagram.',
+            'Invalid tools: "core,Bad Name". Use core, oo, all, or comma-separated tool names such as core,create_diagram.',
         },
       });
       expect(catalog.selection.label).toBe("core");

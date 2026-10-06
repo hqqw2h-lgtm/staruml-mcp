@@ -70,6 +70,8 @@ import {
   LINT_DIAGRAM_DESCRIPTION,
   lintDiagramInput,
   MODEL_LINT,
+  MODEL_LINT_DESCRIPTION,
+  modelLintInput,
   qualityResult,
   UML_LINT,
 } from "./quality.js";
@@ -78,6 +80,14 @@ import {
   BUILD_MODEL,
   BUILD_MODEL_DESCRIPTION,
   buildModelInput,
+  DERIVE_DIAGRAMS,
+  DERIVE_DIAGRAMS_DESCRIPTION,
+  deriveDiagramsInput,
+  deriveResult,
+  EXPLAIN_MODEL,
+  EXPLAIN_MODEL_DESCRIPTION,
+  explainModelInput,
+  explainResult,
   modelResult,
   SYNC_OPERATIONS,
 } from "./model.js";
@@ -87,6 +97,8 @@ import {
   APPLY_PRESET,
   applyPatternInput,
   DETECT_PATTERNS,
+  DETECT_PATTERNS_DESCRIPTION,
+  detectPatternsInput,
   detectResult,
   patternResult,
 } from "./patterns.js";
@@ -98,8 +110,11 @@ import {
   DEFAULT_TOOLS,
   ENDPOINT_GROUPS,
   endpointGroup,
+  OO_TOOLS,
   parseToolSelection,
+  reaches,
   selects,
+  VIEW_STYLE_FIELDS,
   type ToolSelection,
 } from "./tiers.js";
 import { exportResult, jsonResult, runTool } from "./tool-result.js";
@@ -206,12 +221,14 @@ function summarized(state: CatalogState): GeneratedTool | undefined {
   return current.compiled.tools.find((t) => t.name === SUMMARIZED);
 }
 
-/** Endpoints reachable only through call_endpoint. */
+/** Endpoints reachable only through call_endpoint: in a closed tier only those it reaches. */
 export function unlistedTools(state: CatalogState): GeneratedTool[] {
   const listed = new Set(listedTools(state).map((t) => t.name));
   if (summarized(state) !== undefined) listed.add(SUMMARIZED);
   return state.current.enabled
-    ? state.current.compiled.tools.filter((t) => !listed.has(t.name))
+    ? state.current.compiled.tools.filter(
+        (t) => !listed.has(t.name) && reaches(state.selection, t.name),
+      )
     : [];
 }
 
@@ -317,11 +334,28 @@ const SHORT_LISTED: Record<
     description: IMPROVE_DIAGRAM_DESCRIPTION,
     input: (tool) => improveDiagramInput(tool.entry),
   },
+  // The oo tier's model-first tools.
+  [DERIVE_DIAGRAMS]: {
+    description: DERIVE_DIAGRAMS_DESCRIPTION,
+    input: (tool) => deriveDiagramsInput(tool.entry),
+  },
+  [EXPLAIN_MODEL]: {
+    description: EXPLAIN_MODEL_DESCRIPTION,
+    input: (tool) => explainModelInput(tool.entry),
+  },
+  [MODEL_LINT]: {
+    description: MODEL_LINT_DESCRIPTION,
+    input: (tool) => modelLintInput(tool.entry),
+  },
+  [DETECT_PATTERNS]: {
+    description: DETECT_PATTERNS_DESCRIPTION,
+    input: (tool) => detectPatternsInput(tool.entry),
+  },
 };
 
 function specs(server: McpServer, client: StarUMLClient, state: CatalogState): ToolSpec[] {
   const out: ToolSpec[] = listedTools(state).map((tool) => {
-    const short = SHORT_LISTED[tool.name];
+    const short = Object.hasOwn(SHORT_LISTED, tool.name) ? SHORT_LISTED[tool.name] : undefined;
     return short === undefined
       ? {
           name: tool.name,
@@ -394,6 +428,8 @@ const RESULT_SHAPES: Record<
   [DIAGRAM_QUALITY]: qualityResult,
   [IMPROVE_DIAGRAM]: improveResult,
   [SET_STYLE_PROFILE]: setProfileResult,
+  [DERIVE_DIAGRAMS]: deriveResult,
+  [EXPLAIN_MODEL]: explainResult,
   // Endpoints that run a batch of their own answer a dry run's ops counted; patterns and presets
   // name their elements and properties by path.
   [BUILD_MODEL]: modelResult,
@@ -409,7 +445,9 @@ const RESULT_SHAPES: Record<
  * compacted first (reports.ts), then the endpoint's own shape.
  */
 function resultOf(name: string, data: unknown, input: Record<string, unknown>): CallToolResult {
-  return (RESULT_SHAPES[name] ?? jsonResult)(withReports(data), input);
+  // hasOwn: a manifest may name an endpoint after an Object.prototype member.
+  const shape = Object.hasOwn(RESULT_SHAPES, name) ? RESULT_SHAPES[name]! : jsonResult;
+  return shape(withReports(data), input);
 }
 
 /**
@@ -446,6 +484,7 @@ function validated(
   input: Record<string, unknown>,
 ): Record<string, unknown> {
   const { body, used } = canonicalBody(tool, input);
+  refuseDrawing(state, tool, body);
   const parsed = tool.requestSchema.safeParse(body);
   if (!parsed.success) {
     const issues = parsed.error.issues.map(
@@ -464,6 +503,31 @@ function validated(
     );
   }
   return parsed.data;
+}
+
+/**
+ * A closed tier reaches /update_element for model elements; a field that only a view has (its
+ * place, size, colours, what it shows) is refused before anything is sent, whether the profile
+ * is strict or not. The extension refuses it again under a strict profile (STYLE_LOCKED).
+ */
+function refuseDrawing(state: CatalogState, tool: GeneratedTool, body: Record<string, unknown>) {
+  const field = body.field;
+  if (
+    !state.selection.closed ||
+    tool.name !== UPDATE_ELEMENT ||
+    typeof field !== "string" ||
+    !VIEW_STYLE_FIELDS.has(field)
+  ) {
+    return;
+  }
+  throw new ToolInputError(
+    `field: ${field} places or styles a view, which the ${state.selection.label} tier leaves to the style profile`,
+    {
+      code: ErrorCode.NotInTier,
+      endpoint: tool.path,
+      hint: 'Change the model and let derive_diagrams or improve_diagram lay the views out; doctor({tools: "core"}) lists the drawing tools when the user asks for a placement.',
+    },
+  );
 }
 
 /**
@@ -633,6 +697,14 @@ function findTool(state: CatalogState, name: string): GeneratedTool {
   const tool = state.current.enabled
     ? state.current.compiled.tools.find((t) => t.name === name)
     : undefined;
+  if (tool !== undefined && !reaches(state.selection, name)) {
+    // Issue #17's first enforcement layer: what the tier leaves out cannot be called by name.
+    throw new ToolInputError(`${name} is outside the ${state.selection.label} tier`, {
+      code: ErrorCode.NotInTier,
+      endpoint: tool.path,
+      hint: 'The oo tier states the model and derives the diagrams; nothing in it places or styles views. describe_endpoints() lists what it reaches; doctor({tools: "core"}) switches to the drawing tools when the user asks to draw.',
+    });
+  }
   if (tool !== undefined) return tool;
   const { extension } = state.current.compiled.manifest;
   throw new ToolInputError(`No endpoint "${name}" in ${extension.name} ${extension.version}`, {
@@ -656,6 +728,7 @@ export function tierCheck(state: CatalogState): Check {
   const known = new Set([
     ...HAND_WRITTEN_TOOLS,
     ...CORE_ENDPOINTS,
+    ...OO_TOOLS,
     ...current.compiled.manifest.endpoints.map((e) => e.path.slice(1)),
   ]);
   const unknown = [...selection.names].filter((n) => n !== "all" && !known.has(n));

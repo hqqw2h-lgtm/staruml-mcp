@@ -1,4 +1,8 @@
-import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import {
+  McpServer,
+  ResourceTemplate,
+  type RegisteredTool,
+} from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { serialize } from "./compact.js";
@@ -24,9 +28,9 @@ import {
 import { generateDiagram } from "./generate-diagram.js";
 import { nonEmpty, PROJECTION_INSTRUCTIONS, unlisted, unstamped, untrivial } from "./manifest.js";
 import { readProjectTree } from "./project-tree.js";
-import { registerPrompts } from "./prompts.js";
+import { registerPrompts, syncPrompts } from "./prompts.js";
 import { StarUMLClient } from "./staruml-client.js";
-import { parseToolSelection, type ToolSelection } from "./tiers.js";
+import { listsHandWritten, parseToolSelection, type ToolSelection } from "./tiers.js";
 import { jsonResult, resourceError, runTool, textResult } from "./tool-result.js";
 import { ANNOTATE, VIEW_DIAGRAM, VIEW_DIAGRAM_DESCRIPTION, viewDiagram } from "./view-diagram.js";
 import {
@@ -150,7 +154,7 @@ const DoctorInput = unstamped(
     tools: z
       .string()
       .optional()
-      .describe("Tier to list: core, all or comma-separated endpoint names."),
+      .describe("Tier to list: core, oo, all or comma-separated tool names."),
   }),
 );
 
@@ -169,6 +173,8 @@ export function createServer(config: ServerConfig = {}): McpServer {
 
   const catalog = config.catalog ?? new CatalogState();
   registerResources(server, client, catalog);
+  /** Tools of this server, which a closed tier (`oo`) lists only when it names them. */
+  const handWritten: Record<string, RegisteredTool> = {};
 
   // A host may render MCP Apps without declaring the capability; fetching the view is the other
   // sign that it does (the approach of jgraph/drawio-mcp's app server). An HTTP request without a
@@ -196,7 +202,7 @@ export function createServer(config: ServerConfig = {}): McpServer {
     },
   );
 
-  server.registerTool(
+  handWritten["generate_diagram"] = server.registerTool(
     "generate_diagram",
     {
       description: "Render Mermaid code as a new StarUML diagram.",
@@ -209,7 +215,7 @@ export function createServer(config: ServerConfig = {}): McpServer {
       ),
   );
 
-  server.registerTool(
+  handWritten["get_all_diagrams_info"] = server.registerTool(
     "get_all_diagrams_info",
     {
       description: "List diagrams (id, type, name) of the open project.",
@@ -219,7 +225,7 @@ export function createServer(config: ServerConfig = {}): McpServer {
       runTool("get all diagrams info", async () => jsonResult(await client.getAllDiagramsInfo())),
   );
 
-  server.registerTool(
+  handWritten["get_current_diagram_info"] = server.registerTool(
     "get_current_diagram_info",
     { description: "Active diagram (id, type, name), or null.", annotations: READ_ONLY },
     async () =>
@@ -230,7 +236,7 @@ export function createServer(config: ServerConfig = {}): McpServer {
 
   // StarUML 7.1.1's /get_diagram_image_by_id ignores every field but diagramId (checked with
   // scale, maxWidth, width and format: identical bytes), so no sizing options are offered.
-  server.registerTool(
+  handWritten["get_diagram_image_by_id"] = server.registerTool(
     "get_diagram_image_by_id",
     {
       description: "Diagram as PNG.",
@@ -244,7 +250,7 @@ export function createServer(config: ServerConfig = {}): McpServer {
       }),
   );
 
-  server.registerTool(
+  handWritten[VIEW_DIAGRAM] = server.registerTool(
     VIEW_DIAGRAM,
     {
       description: VIEW_DIAGRAM_DESCRIPTION,
@@ -261,7 +267,7 @@ export function createServer(config: ServerConfig = {}): McpServer {
       }),
   );
 
-  server.registerTool(
+  handWritten[DIAGRAM_AS_TEXT] = server.registerTool(
     DIAGRAM_AS_TEXT,
     {
       description: DIAGRAM_AS_TEXT_DESCRIPTION,
@@ -279,7 +285,7 @@ export function createServer(config: ServerConfig = {}): McpServer {
       ),
   );
 
-  server.registerTool(
+  handWritten.doctor = server.registerTool(
     "doctor",
     {
       description: "Check StarUML, extension and Node setup; reloads the extension's tools.",
@@ -299,11 +305,22 @@ export function createServer(config: ServerConfig = {}): McpServer {
   // Everything else comes from the manifest of staruml-mcp-extension: the live one read at
   // startup, or the bundled snapshot when the extension was not reachable.
   const extensionTools: RegisteredExtensionTools = new Map();
-  const sync = () => syncExtensionTools(server, client, catalog, extensionTools);
+  const prompts = registerPrompts(server, catalog);
+  const sync = () => {
+    syncExtensionTools(server, client, catalog, extensionTools);
+    for (const [name, tool] of Object.entries(handWritten)) {
+      const wanted = listsHandWritten(catalog.selection, name);
+      // Each change sends notifications/tools/list_changed, so unchanged tools are left alone.
+      if (tool.enabled !== wanted) {
+        if (wanted) tool.enable();
+        else tool.disable();
+      }
+    }
+    syncPrompts(catalog, prompts);
+  };
   sync();
   // The catalog outlives this server, so the subscription must end with it.
   server.server.onclose = catalog.subscribe(sync);
-  registerPrompts(server, catalog);
 
   return server;
 }

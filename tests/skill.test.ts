@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { CatalogState } from "../src/extension-tools.js";
 import { BUNDLED_MANIFEST } from "../src/manifest.js";
+import { parseToolSelection } from "../src/tiers.js";
 import { UpstreamFixture } from "./support/fixture.js";
 import { connect, text } from "./support/mcp.js";
 import { frontMatter, readSkill, skillExamples } from "./support/skill.js";
@@ -129,8 +131,38 @@ describe("SKILL.md", () => {
         "diagram_quality",
         "build_model",
         "apply_pattern",
+        "derive_diagrams",
+        "model_lint",
+        "explain_model",
       ]),
     );
+    // Section 7's example runs in the oo tier, every other one in the default tier.
+    expect(new Set(examples.filter((e) => e.tools !== "core").map((e) => e.tools))).toEqual(
+      new Set(["oo"]),
+    );
+  });
+
+  it("teaches object-first authoring with one complete example, spec to derived diagrams (#17)", () => {
+    const section =
+      /^## 7\. Object-first, never draw\n([\s\S]*?)^## /m.exec(readSkill())?.[1] ?? "";
+    const oo = examples.filter((e) => e.tools === "oo");
+
+    expect(section).toContain("--tools oo");
+    expect(section).toContain("NOT_IN_TIER");
+    expect(oo.map((e) => e.tool)).toEqual([
+      "build_model",
+      "derive_diagrams",
+      "model_lint",
+      "explain_model",
+    ]);
+    const spec = oo[0]!.args.spec as Record<string, unknown[]>;
+    // Every kind derive_diagrams draws from a model's own sections is in the example.
+    for (const section of ["contexts", "classes", "relationships", "useCases"]) {
+      expect(spec[section]!.length, section).toBeGreaterThan(0);
+    }
+    expect(spec.collaborations).toHaveLength(1);
+    expect(spec.lifecycles).toHaveLength(1);
+    expect(oo[1]!.args).toEqual({ scope: (spec as unknown as { system: string }).system });
   });
 
   it("teaches model first and patterns with tested examples by path (#13)", () => {
@@ -248,11 +280,16 @@ describe("SKILL.md", () => {
   });
 });
 
-describe.each(examples)("SKILL.md line $line: $tool", ({ tool, args }) => {
-  it("is accepted by the server and reaches StarUML as written", async () => {
+describe.each(examples)("SKILL.md line $line: $tool ($tools)", ({ tool, args, tools }) => {
+  it("is accepted by the server under its tier and reaches StarUML as written", async () => {
     serve();
     // A server of its own: doctor reloads the catalog from the stand-ins, which are no extension.
-    const mcp = await connect({ apiHost: HOST, apiPort: builtin.port, extPort: extension.port });
+    const mcp = await connect({
+      apiHost: HOST,
+      apiPort: builtin.port,
+      extPort: extension.port,
+      catalog: new CatalogState(undefined, parseToolSelection(tools)),
+    });
 
     const result = await mcp.call(tool, args);
     await mcp.close();

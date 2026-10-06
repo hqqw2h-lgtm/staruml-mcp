@@ -90,3 +90,6 @@ jobs:
         run: |
           npm run load-test -- --quality --session --requests 2000 --max-p99-ms 4000 --min-rps 100
           npm run load-test -- --improve --session --requests 2000 --max-p99-ms 4000 --min-rps 100
+
+      - name: Load test (derive_diagrams dry run under the oo tier, one session)
+        run: npm run load-test -- --derive --session --requests 2000 --max-p99-ms 4000 --min-rps 100

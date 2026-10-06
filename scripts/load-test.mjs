@@ -14,20 +14,22 @@
 // are reshaped (src/quality.ts), or with --model a build_model dry run of a three-class spec, or
 // with --pattern an apply_pattern dry run of Strategy, whose answers are reshaped by path
 // (src/model.ts, src/patterns.ts), or with --quality a diagram_quality of the current diagram, or
-// with --improve an improve_diagram dry run of it (src/quality.ts). --lint lists lint_diagram
+// with --improve an improve_diagram dry run of it (src/quality.ts), or with --derive a
+// derive_diagrams dry run under --tools oo, whose answer is reshaped per diagram (src/model.ts),
+// which also runs the tier's checks. --lint lists lint_diagram
 // with --tools core,lint_diagram, since it left the core tier in 0.7.0. By default StarUML is replaced by an in-process stub so the numbers
 // measure this server, not StarUML; --live targets the real StarUML on 58321 and the extension
 // on 58322 instead. --build --live upserts one diagram named "load-test" into the open project:
 // the first call builds it and every later one finds nothing to add. --model and --pattern are
 // dry runs and change nothing, and so do --quality and --improve; --pattern --live needs a model in
 // the open project, where Strategy's new elements would go, and --quality --live and --improve
-// --live an open diagram.
+// --live an open diagram, --derive --live a model named LoadTest.
 //
 // Usage: npm run build && node scripts/load-test.mjs
 //          [--concurrency 50,200] [--requests 5000] [--warmup 500]
 //          [--max-p99-ms N] [--min-rps N] [--live] [--session]
 //          [--call-endpoint | --batch | --build | --lint | --model | --pattern | --quality
-//           | --improve]
+//           | --improve | --derive]
 // STARUML_EXT_TOKEN reaches the server, so --live works with an extension that requires a token.
 // Exits non-zero on any failed request or a breached budget.
 
@@ -53,6 +55,7 @@ const { values: args } = parseArgs({
     pattern: { type: "boolean", default: false },
     quality: { type: "boolean", default: false },
     improve: { type: "boolean", default: false },
+    derive: { type: "boolean", default: false },
     session: { type: "boolean", default: false },
   },
 });
@@ -101,6 +104,12 @@ const MODES = [
     "improve",
     { name: "improve_diagram", arguments: { dryRun: true } },
     "improve_diagram (current diagram, dry run)",
+  ],
+  [
+    "derive",
+    { name: "derive_diagrams", arguments: { scope: "LoadTest", dryRun: true } },
+    "derive_diagrams (dry run, oo tier)",
+    "oo",
   ],
   ["build", { name: "build_diagram", arguments: BUILD }, "build_diagram (3 classes, upsert)"],
   ["batch", { name: "batch", arguments: { ops: BATCH_OPS } }, `batch of ${BATCH_OPS.length} ops`],
@@ -395,6 +404,37 @@ async function startStub() {
           steps: ["layout hierarchy-down", "snap", "trim"],
           findings: [],
         },
+        dryRun: true,
+      },
+    }),
+    // A dry run of two derived diagrams in the shape src/handlers/oo.ts answers.
+    "POST /derive_diagrams": JSON.stringify({
+      success: true,
+      data: {
+        model: "LoadTest",
+        diagrams: [
+          {
+            kind: "package",
+            name: "LoadTest packages",
+            diagram: "$diagram",
+            created: 2,
+            updated: 0,
+            unchanged: 0,
+            deleted: 0,
+            ops: 4,
+          },
+          {
+            kind: "class",
+            name: "LoadTest",
+            diagram: "$diagram",
+            created: 5,
+            updated: 0,
+            unchanged: 0,
+            deleted: 0,
+            ops: 9,
+          },
+        ],
+        counts: { diagrams: 2, created: 7, updated: 0, unchanged: 0, deleted: 0 },
         dryRun: true,
       },
     }),

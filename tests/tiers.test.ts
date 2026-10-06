@@ -59,6 +59,8 @@ describe("parseToolSelection", () => {
       all: false,
       names: new Set(CORE_ENDPOINTS),
       label: "core",
+      closed: false,
+      reachable: new Set(),
     });
   });
 
@@ -71,6 +73,23 @@ describe("parseToolSelection", () => {
 
   it.each(["", " , ", "Create", "a-b", "core;all"])("rejects %j", (value) => {
     expect(() => parseToolSelection(value)).toThrow(`Invalid --tools: "${value}".`);
+  });
+
+  it("reads a token named like an Object.prototype member as a tool name", () => {
+    // An object literal of tiers read `constructor` from its prototype (tests/properties.test.ts).
+    for (const token of ["constructor", "tostring", "valueof", "hasownproperty"]) {
+      expect([...parseToolSelection(token).names]).toEqual([token]);
+    }
+    expect([...parseToolSelection("oo,constructor").names]).toContain("constructor");
+  });
+
+  it("closes the oo tier unless core or all is given too", () => {
+    expect(parseToolSelection("oo").closed).toBe(true);
+    expect(parseToolSelection("oo,save_project").closed).toBe(true);
+    expect(parseToolSelection("oo,core").closed).toBe(false);
+    expect(parseToolSelection("all,oo").closed).toBe(false);
+    expect(parseToolSelection("save_project").closed).toBe(false);
+    expect(parseToolSelection("core").reachable.size).toBe(0);
   });
 
   it("names the source of the value", () => {

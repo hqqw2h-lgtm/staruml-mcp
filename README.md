@@ -294,10 +294,11 @@ default and reaches every other extension endpoint through two generic tools:
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
 | `core` (default) | the 7 above; `find_elements`, `get_element_by_id`, `update_element`, `delete_element`, `batch`, `build_diagram`, `export_diagram`, `build_model`, `apply_pattern`, `diagram_quality`, `improve_diagram`; `describe_endpoints`, `call_endpoint` | 1,995 |
-| `all` | the 7 above and one tool per manifest endpoint | 11,896 |
+| `oo` | model-first only: `build_model`, `derive_diagrams`, `explain_model`, `model_lint`, `apply_pattern`, `detect_patterns`, `validate_model`, `diagram_quality`; `view_diagram`, `diagram_as_text`, `doctor`; `describe_endpoints`, `call_endpoint` | 1,111 |
+| `all` | the 7 above and one tool per manifest endpoint | 13,344 |
 | `core,create_diagram,…` | the 7 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
-Token counts include the server instructions (o200k_base, extension 0.3.0 with 79 endpoints, `npm run
+Token counts include the server instructions (o200k_base, extension 0.3.0 with 88 endpoints, `npm run
 benchmark:tokens`). 0.6.0 added `build_model` and `apply_pattern` (237 tokens) to the core tier
 and, to stay under 2,000, moved four endpoints out: `introspect` (`doctor` reports the versions),
 `describe_diagram` (`diagram_as_text`, always listed, reads a diagram in as many tokens),
@@ -313,6 +314,23 @@ environment but no arguments; the flag wins. An agent can switch it at runtime w
 `doctor({tools: "all"})`; the server then sends `notifications/tools/list_changed`, as it does when
 `doctor` finds a manifest with other endpoints. Names that are neither endpoints nor tools are
 reported by the `tier` check.
+
+The **`oo` tier** (issue #17) is for object-first authoring: the agent states the domain as
+objects and the extension derives and lays out every diagram, so nothing in the tier draws. Its
+guarantees are structural, not advice in a prompt: only the tools above are listed, the
+hand-written ones included (`generate_diagram` and the built-in image and diagram tools are
+disabled); `call_endpoint` and `describe_endpoints` reach model-level endpoints only (reads,
+elements, members, relationships without views, history, patterns, `uml_lint`, the style
+profile's read side, `apply_style_profile`, `improve_diagram`, saving and exporting) and answer
+`NOT_IN_TIER` for everything that places, sizes or colours views (`build_diagram`,
+`create_*_with_view`, `layout_diagram`, `move_views`, `set_view_style`, ...), for `batch` and
+`execute_command`, which could run those, and for `set_style_profile`, which could turn strict
+mode off; `update_element` setting a view attribute (`left`, `fillColor`, `suppressAttributes`,
+...) is refused the same way. Under a strict style profile the extension refuses the drawing
+endpoints itself (`STYLE_LOCKED`), so a client that bypasses this server cannot draw freely
+either, and `build_model`'s strict spec refuses geometry and colour. `oo,save_project` adds a
+name to the tier; `oo` with `core` or `all` is open again. The prompts follow the tier:
+`model-codebase`, which draws with `build_diagram`, is not listed under `oo`.
 
 - **`describe_endpoints()`** returns the endpoints without a tool, grouped (`quality`: lints,
   validation, `diff_diagram` and the quality loop; `history`: snapshots, undo and redo;
@@ -530,13 +548,14 @@ image tool and resource offer no size options.
 
 ### Prompts
 
-Clients that surface MCP prompts (as slash commands in Claude Code, for instance) offer four:
+Clients that surface MCP prompts (as slash commands in Claude Code, for instance) offer five:
 
 | Prompt | Arguments | Workflow |
 |---|---|---|
 | `model-codebase` | `path`, `language`, `description`, `name` (all optional) | `doctor`; with a source directory, `list_code_generators` and `reverse_code` (StarUML's Java reverse adds type hierarchy and package overview diagrams by default); otherwise one `build_diagram` of the central classes from the code or the description; then `describe_diagram` and `validate_model` on the result. |
 | `review-diagram` | `diagram`, an id or a path (default `@current`) | `describe_diagram`, `validate_model` scoped to the diagram's owner, `diagram_as_text`; then a review with a concrete fix per finding, changing nothing until asked. |
 | `improve-diagram` | `diagram`, an id or a path (default `@current`) | `view_diagram`; `diagram_quality` (score, target, penalties); `improve_diagram` (the profile's layout and the lint autofixes in one undo step, each step kept only when the score rises); `view_diagram` again; below target, split a diagram past the profile's `maxElements`, try another preset, `uml_lint` for the model; never placing views by hand. |
+| `model-first` | `system`, `description` (both optional) | Explain the domain back as contexts, classes with responsibilities, relationship verbs, actors, collaborations and lifecycles; `build_model` with `dryRun`, then for real; `derive_diagrams`; `view_diagram`, `diagram_as_text`, `explain_model`; `model_lint`, fixes in the spec, `build_model` upsert and `derive_diagrams` again, at most three rounds. Never places views. |
 | `apply-pattern` | `pattern`, `scope` (the package holding the classes), `diagram` (all optional) | `staruml://patterns` when no pattern is named; `describe_pattern`; bindings by path; `apply_pattern` with `dryRun`, then for real into `scope`; `view_diagram` with `annotate: "paths"`; `detect_patterns` to confirm confidence 1 and nothing missing. |
 
 The text names each endpoint as a tool when the current tier lists it and as `call_endpoint`
@@ -587,6 +606,7 @@ A failed tool call returns `isError: true` with a one-line cause, a hint where o
 | `INVALID_ARGUMENT`, `UNKNOWN_ENDPOINT` | Also raised by `call_endpoint` itself, before any request, for a body the manifest schema rejects or a name it does not have; `endpoint` and `hint` say which and how to look it up. |
 | extension 0.3.0 codes | Passed through with their HTTP status: `INVALID_ARGUMENT` (400), `UNKNOWN_TYPE` (400), `NOT_FOUND` (404), `UNKNOWN_ENDPOINT` (404, with the upgrade hint), `NO_PROJECT` (409), `STARUML_ERROR` (422, StarUML refused the operation), `DIALOG_REQUIRED` (422, the command or generator would have opened a dialog; the hint points to `describe_commands` for `execute_command` and to `list_code_generators` for code generation, and `details` names the missing arguments), `INTERNAL` (500). An error body's `details` is passed through as `error.details` and, except for a rolled-back batch's results, as a `Details:` line. |
 | extension reference codes | Passed through with a hint: `AMBIGUOUS_REF` (409: a path fits several elements; the hint names up to five of `details.candidates` by path, or by id where their paths collide), `DUPLICATE_NAME` (409: a sibling of that kind has the name; refer to `details.existing` by its path, keep `build_diagram`'s `reuse` on, rename, or pass `allowDuplicateNames: true`), `SNAPSHOT_STALE` (409: the undo history no longer reaches the snapshot; take a new one), `UNSUPPORTED_SYNTAX` (422: diagram text with a construct StarUML cannot draw; the message names it and its line). |
+| `NOT_IN_TIER` | Raised by `call_endpoint` and `describe_endpoints` before any request under a closed tier (`--tools oo`) for an endpoint the tier leaves out, or an `update_element` of a view attribute; the hint names `doctor({tools: "core"})` for when the user asks to draw. |
 | extension style codes | Passed through with a hint: `STYLE_LOCKED` (403: the project's style profile is `strict`, so the endpoints that place, size or colour views by hand refuse; the hint names `improve_diagram`, `apply_style_profile`, a rebuild, `override: true` for a change the user asked for, and `set_style_profile({patch: {strict: false}})`), `SAVE_BLOCKED` (409: the profile's `blockSaveOnErrors` refuses saving and exporting while `uml_lint` or `model_lint` report errors; the hint names the first ones from `details.findings` and `override: true`). |
 | extension request checks | Passed through with a hint naming the setting: `UNAUTHORIZED` (401: no or wrong access token; how to set or clear it), `FORBIDDEN_ORIGIN` (403: an `Origin` header not in Allowed Origins), `PAYLOAD_TOO_LARGE` (413: Max Request Body (KiB) or Max Batch Ops), `UNSUPPORTED_MEDIA_TYPE` (415: not `application/json`), `RATE_LIMITED` (429: Commands per Minute, with the `Retry-After` seconds), `TIMEOUT` (504: Request Timeout (s); the work may still complete). A 401/403/413/415/429/504 without these codes, as from a proxy, gets the same hint. |
 
@@ -969,6 +989,39 @@ parameter of `setStrategy`). It is not charged for knowing those. The last colum
 properties grouped by path; a dry run's is 265 against 1,098, its `/batch` ops counted. Most of
 the batch way's cost is reading the schemas (1,489 tokens of `describe_endpoints`) before
 writing the ops.
+
+### Modelling a domain object-first
+
+An eighth scenario turns one domain into diagrams two ways: ThingsBoard, the object spec of the
+extension's validation (`tests/fixtures/thingsboard.oo.json`: 93 classifiers in 15 contexts, 95
+relationships, 6 actors, 21 use cases, 5 collaborations, 3 lifecycles, and the activity, ERD, C4,
+deployment and mind map sections). `scripts/capture-oo.mjs` recorded both from StarUML 7.1.1 and
+the extension's phase 1h build into `scripts/benchmark-data/oo-thingsboard-7.1.1.json`. The `oo`
+tier way is the `model-first` prompt's: `build_model` with the spec, then `derive_diagrams`. The
+drawing way is one `build_diagram` per diagram under the core tier, each spec written from the
+same domain (every class with its members, every relation with its multiplicities, every message,
+state and node), which is the best a model drawing by hand can do. Each tier's definitions are
+counted once ("total") and, for a client without prompt caching, once per call.
+
+| Plan | Calls | Definitions | Call tokens | Result text | Total | Definitions each turn | Diagrams | Scores | Below 80 |
+|---|---|---|---|---|---|---|---|---|---|
+| `oo` tier: `build_model`, `derive_diagrams` | 2 | 1111 | 14758 | 1255 | 17124 | 18235 | 25 | 82–96 | 0 |
+| Drawing: 25 `build_diagram` calls | 25 | 1997 | 12385 | 2402 | 16784 | 64712 | 25 | 73–97 | 1 |
+
+Both write the domain once, and that dominates: the spec is 14,758 tokens, the 25 drawing specs
+12,385 (they leave out what only the model holds: responsibilities, collaborations' contexts,
+`knows`/`does`), so with prompt caching the two cost the same within 2% (17,124 against 16,784).
+Everything around it differs: 2 calls against 25, 1,255 tokens of answers against 2,402 (the
+extension's own are 357 for the build, 1,505 for the derivation and 3,314 for the 25 builds; each
+derived diagram keeps its id, since a derived sequence diagram is named like its collaboration
+and interaction), a tier listing 886 tokens shorter, and without prompt caching, where every turn
+resends the definitions, 18,235 against 64,712 tokens. Every
+derived diagram reaches the profile's target and one drawn diagram does not; the derived ones
+show the model's own elements, so a change to the model is a `build_model` upsert and one
+`derive_diagrams` (a second derivation of the unchanged model created, updated and deleted
+nothing), where the drawn ones are 25 more calls. The extension's validation drew the same 25
+diagrams by hand in 156 calls with about 55,000 result tokens (its README).
+Live, the two calls took 23 s on an idle StarUML; drawing took 29 s.
 
 ## Architecture
 

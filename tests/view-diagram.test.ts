@@ -240,6 +240,77 @@ describe("view_diagram for a client without MCP Apps", () => {
     expect(builtin.requests).toEqual([]);
   });
 
+  it("picks the one diagram among an ambiguous name's candidates (a derived sequence diagram)", async () => {
+    const candidate = (_id: string, _type: string) => ({ _id, _type, path: `Clinic/${_id}` });
+    extension.reply("/get_element_by_id", {
+      status: 409,
+      body: {
+        success: false,
+        code: "AMBIGUOUS_REF",
+        error: "Element Booking names 3 elements; pass one of their ids or a longer path",
+        details: {
+          candidates: [
+            candidate("C1", "UMLCollaboration"),
+            candidate("I1", "UMLInteraction"),
+            candidate("D7", "UMLSequenceDiagram"),
+          ],
+        },
+      },
+    });
+    builtin.reply("/get_diagram_image_by_id", { body: { success: true, data: PNG } });
+
+    const result = await plain.call("view_diagram", { diagram: "Booking" });
+
+    expect(result.content).toEqual([{ type: "image", data: PNG, mimeType: "image/png" }]);
+    expect(builtin.requests[0]!.body).toEqual({ diagramId: "D7" });
+  });
+
+  it.each([
+    [
+      "two diagrams",
+      {
+        candidates: [
+          { _id: "D1", _type: "UMLClassDiagram" },
+          { _id: "D2", _type: "UMLSequenceDiagram" },
+        ],
+      },
+    ],
+    [
+      "no diagram",
+      {
+        candidates: [
+          { _id: "C1", _type: "UMLClass" },
+          { _id: "C2", _type: "UMLClass" },
+        ],
+      },
+    ],
+    ["a diagram without an id", { candidates: [{ _type: "UMLClassDiagram" }, { _id: "C2" }] }],
+    ["no candidates", undefined],
+    ["candidates that are no list", { candidates: "D1" }],
+  ])("keeps AMBIGUOUS_REF with %s among the candidates", async (_, details) => {
+    extension.reply("/get_element_by_id", {
+      status: 409,
+      body: { success: false, code: "AMBIGUOUS_REF", error: "ambiguous", details },
+    });
+
+    const result = await plain.call("view_diagram", { diagram: "Main" });
+
+    expect(result.structuredContent).toMatchObject({ error: { code: "AMBIGUOUS_REF" } });
+    expect(builtin.requests).toEqual([]);
+  });
+
+  it("reports a diagram the extension does not find", async () => {
+    extension.reply("/get_element_by_id", {
+      status: 404,
+      body: { success: false, code: "NOT_FOUND", error: "Element not found: Nope" },
+    });
+
+    const result = await plain.call("view_diagram", { diagram: "Nope" });
+
+    expect(result.structuredContent).toMatchObject({ error: { code: "NOT_FOUND" } });
+    expect(builtin.requests).toEqual([]);
+  });
+
   it("looks up the current diagram without an id", async () => {
     builtin.reply("/get_current_diagram_info", {
       body: { success: true, data: { id: "D7", type: "UMLClassDiagram", name: "Main" } },

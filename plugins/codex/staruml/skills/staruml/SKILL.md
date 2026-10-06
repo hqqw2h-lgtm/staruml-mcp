@@ -34,11 +34,11 @@ extension's endpoints, so run it after the user upgrades the extension.
 |---|---|
 | A domain model from a description or requirements | `build_model` with an object spec (section 6), then diagrams of it |
 | A new diagram of a kind below | `build_diagram` with a `spec`: exact names, one undo step |
-| A design pattern, or a class to be a value object or entity | `apply_pattern`, or `apply_preset` (section 7) |
-| Their Mermaid source rendered | `generate_diagram` (routes itself, see section 8) |
+| A design pattern, or a class to be a value object or entity | `apply_pattern`, or `apply_preset` (section 8) |
+| Their Mermaid source rendered | `generate_diagram` (routes itself, see section 9) |
 | Small edits to an existing model | `find_elements`, then `update_element` / `delete_element` |
 | Many related creations or edits | one `batch` |
-| To read or explain a diagram | `diagram_as_text` (section 11), not a picture |
+| To read or explain a diagram | `diagram_as_text` (section 12), not a picture |
 | The `type` or command id to pass | `search_types` through `call_endpoint` |
 | To check a model | `uml_lint` and `validate_model` through `call_endpoint` (section 4) |
 | A diagram that reads badly, or one look for every diagram | `diagram_quality`, then `improve_diagram`; the style profile (section 5) |
@@ -48,7 +48,7 @@ extension's endpoints, so run it after the user upgrades the extension.
 
 A user may also start the server's prompts `model-codebase` (reverse-engineer a source directory
 or build class diagrams from a description), `review-diagram`, `improve-diagram` (the quality
-loop of section 5) and `apply-pattern` (section 7); they spell out the same calls.
+loop of section 5) and `apply-pattern` (section 8); they spell out the same calls.
 
 ### Ids and paths
 
@@ -68,7 +68,7 @@ need to look an id up first:
 A `\` escapes `/ . # @ ( ) ,` inside a name. Element results carry the `path` each element
 resolves by. A path that fits several elements is refused as `AMBIGUOUS_REF` with the candidates'
 ids and paths; pass one of those or a longer path. Use paths for what already exists and `$name`
-references (section 9) for what a batch creates.
+references (section 10) for what a batch creates.
 
 ## 3. build_diagram: one spec per kind
 
@@ -425,7 +425,109 @@ elements rather than copies. For a collaboration drawn as a sequence diagram,
 `call_endpoint({name: "check_messages", body: {diagram}})` lists the messages that name no
 operation of their receiver, and `sync_operations` adds those operations to the classes.
 
-## 7. Design patterns with correct properties
+## 7. Object-first, never draw
+
+When the server runs with `--tools oo` (or after `doctor({tools: "oo"})`), it lists only the
+model-first tools: `build_model`, `derive_diagrams`, `explain_model`, `model_lint`,
+`apply_pattern`, `detect_patterns`, `validate_model`, `diagram_quality`, `view_diagram`,
+`diagram_as_text`, `doctor` and the two generic ones. Nothing in that tier places, sizes or
+colours a view: `call_endpoint` answers `NOT_IN_TIER` for `build_diagram`, `move_views`,
+`batch` and the like, and a strict style profile makes the extension refuse them too. The work is
+stating the domain; the diagrams follow from it.
+
+1. **Explain the domain back** in a few sentences: contexts, classes with one responsibility
+   each, how they relate (section 6's verbs), actors and use cases, the collaborations worth a
+   sequence diagram, the lifecycles worth a state machine.
+2. **Write it as one spec** and check it with `dryRun: true`.
+3. **Build** it: `build_model` makes the model in one undo step.
+4. **Derive**: `derive_diagrams` draws every diagram the model implies by rule (a package
+   overview, class diagrams per context or `classViews`, a sequence diagram per collaboration,
+   use case diagrams, a state machine per lifecycle, and the activities, ERD, C4, deployment and
+   mind map sections), each laid out by the style profile and run through the quality loop. The
+   answer lists each diagram's name and score; `quality.failing` names any below target.
+5. **Look and review**: `view_diagram` on the diagrams that matter, `explain_model` for the
+   whole model as text, `model_lint` for the design (god classes, feature envy, package cycles,
+   anaemic entities, ...).
+6. **Iterate through the spec**: fix it, `build_model` with `upsert: true`, `derive_diagrams`
+   again. Both update in place; the same spec and profile give the same diagrams, so a second
+   derive of an unchanged model changes nothing.
+
+A complete example, a clinic's scheduling and billing:
+
+```json build_model oo
+{
+  "spec": {
+    "system": "Clinic",
+    "contexts": [
+      {"id": "scheduling", "name": "scheduling", "responsibility": "Who sees whom, and when"},
+      {"id": "billing", "name": "billing", "responsibility": "What a visit costs", "dependsOn": ["scheduling"]}
+    ],
+    "classes": [
+      {"name": "Patient", "context": "scheduling", "responsibility": "A person who books visits", "attributes": ["+name: String"]},
+      {"name": "Doctor", "context": "scheduling", "responsibility": "Sees patients in free slots", "attributes": ["+specialty: String"], "operations": ["+isFree(at: DateTime): boolean"]},
+      {"name": "Appointment", "context": "scheduling", "responsibility": "One patient with one doctor at one time", "attributes": ["+at: DateTime"], "operations": ["+confirm(): void", "+cancel(): void"]},
+      {"name": "Schedule", "context": "scheduling", "responsibility": "Books appointments into free slots", "operations": ["+book(patient: Patient, doctor: Doctor, at: DateTime): Appointment"]},
+      {"name": "Invoice", "context": "billing", "responsibility": "What one appointment costs", "attributes": ["+amount: double"], "operations": ["+pay(): void"]}
+    ],
+    "relationships": [
+      {"from": "Schedule", "to": "Appointment", "type": "owns", "fromMult": "1", "toMult": "0..*"},
+      {"from": "Appointment", "to": "Patient", "type": "knows", "toMult": "1"},
+      {"from": "Appointment", "to": "Doctor", "type": "knows", "toMult": "1"},
+      {"from": "Invoice", "to": "Appointment", "type": "knows", "toMult": "1"}
+    ],
+    "actors": ["Receptionist"],
+    "useCases": [
+      {"name": "Book appointment", "system": "Clinic", "actors": ["Receptionist"]},
+      {"name": "Cancel appointment", "system": "Clinic", "actors": ["Receptionist"]}
+    ],
+    "collaborations": [
+      {
+        "name": "Booking",
+        "context": "scheduling",
+        "participants": [{"name": "Receptionist", "kind": "actor"}, "Schedule", "Doctor", "Appointment"],
+        "messages": [
+          ["Receptionist", "Schedule", "book(patient, doctor, at)"],
+          ["Schedule", "Doctor", "isFree(at)"],
+          ["Schedule", "Appointment", "confirm()"]
+        ]
+      }
+    ],
+    "lifecycles": [
+      {
+        "name": "Appointment states",
+        "subject": "Appointment",
+        "states": [{"id": "start", "type": "initial"}, "Booked", "Confirmed", "Cancelled", {"id": "end", "type": "final"}],
+        "transitions": [
+          {"from": "start", "to": "Booked"},
+          {"from": "Booked", "to": "Confirmed", "trigger": "confirm"},
+          {"from": "Booked", "to": "Cancelled", "trigger": "cancel"},
+          {"from": "Confirmed", "to": "end"},
+          {"from": "Cancelled", "to": "end"}
+        ]
+      }
+    ]
+  }
+}
+```
+
+```json derive_diagrams oo
+{ "scope": "Clinic" }
+```
+
+```json model_lint oo
+{ "scope": "Clinic" }
+```
+
+```json explain_model oo
+{ "scope": "Clinic" }
+```
+
+That is two calls for five diagrams: the package overview, the class diagram of `scheduling`
+and of `billing`, the `Booking` sequence diagram, the use case diagram and the `Appointment
+states` state machine, every one a view of the model's own elements. `model_lint` points out
+that nothing calls `Invoice#pay()` (M007); add a collaboration that does, or let it be.
+
+## 8. Design patterns with correct properties
 
 A pattern is more than its class shapes: Strategy wants the strategy's operation abstract, the
 context's end of the association a shared aggregation that does not navigate, and the far end
@@ -482,7 +584,7 @@ For one class rather than a pattern, `apply_preset` gives it the properties of a
 `describe_type` explains what each property of a metamodel type means (`isLeaf`, `aggregation`,
 `navigable`, ...), when a pattern or preset sets one you need to understand.
 
-## 8. Mermaid
+## 9. Mermaid
 
 `build_diagram` reads `classDiagram`, `sequenceDiagram`, `flowchart`/`graph`, `erDiagram` and
 `stateDiagram` and names the diagram from `name`, front matter `title:` or a `title` line. `kind`
@@ -502,7 +604,7 @@ kind, a title or line breaks, which the built-in importer cannot do:
 
 Prefer a spec when you write the diagram yourself; use Mermaid when the user already has it.
 
-## 9. batch and `$name` references
+## 10. batch and `$name` references
 
 `batch` runs endpoint calls in order as one undo step and, by default, rolls every op back when
 one fails. `as` names an op's result; a later body refers to its id as `"$name"`, to a
@@ -527,7 +629,7 @@ its success and the id it made or acted on; `result: "ids"` or `"full"` returns 
 
 `atomic: false` runs every op and reports each result instead.
 
-## 10. Endpoints without a tool
+## 11. Endpoints without a tool
 
 The default tool list is a core set. The other endpoints (project open/save, views, layout,
 styles, undo/redo, commands, code generation, PDF/HTML export) are one step away:
@@ -547,7 +649,7 @@ Saving is `call_endpoint({name: "save_project", body: {filename: "/absolute/path
 If a session needs one endpoint often, `doctor({tools: "core,layout_diagram"})` lists it as a
 tool, and `doctor({tools: "core"})` goes back.
 
-## 11. Reading, viewing and exporting
+## 12. Reading, viewing and exporting
 
 Read a diagram as text. For a six-class diagram with members, Mermaid or a `describe_diagram`
 summary (through `call_endpoint`) is about 270 tokens, a PNG about 1,600 (an estimate, billed as an image) and an element
@@ -603,7 +705,7 @@ what you see can be named in the next call:
 `export_diagram` returns PNG or JPEG as an image and SVG as text; with `path` it writes the file
 and returns only its size, which is what to do for anything the user wants on disk.
 
-## 12. Keeping token use down
+## 13. Keeping token use down
 
 - Element results are summaries `{_id, _type, name, _parent, path}`. Ask for more with `fields`
   (attribute names), `depth` (owned elements) or, rarely, `summary: false`.
@@ -622,7 +724,7 @@ and returns only its size, which is what to do for anything the user wants on di
   returns them alone unless asked for `include` sections; narrow the metamodel with
   `types: ["UMLClass"]`.
 
-## 13. Access token and refusals
+## 14. Access token and refusals
 
 If the extension's access token is set in StarUML (Server Info, Generate Access Token...), the
 server must be started with `--ext-token <token>` or the `STARUML_EXT_TOKEN` environment variable;

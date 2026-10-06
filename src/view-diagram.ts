@@ -139,11 +139,27 @@ export async function resolveId(client: StarUMLClient, ref: string): Promise<str
     const element = (await client.callExtension("/get_element_by_id", { ref })) as { _id: string };
     return element._id;
   } catch (error) {
-    if (error instanceof StarUMLApiError && error.code === ErrorCode.ExtensionUnreachable) {
-      return ref;
-    }
+    // callExtension throws nothing but StarUMLApiError.
+    const refused = error as StarUMLApiError;
+    if (refused.code === ErrorCode.ExtensionUnreachable) return ref;
+    const diagram = refused.code === "AMBIGUOUS_REF" ? soleDiagram(refused.details) : undefined;
+    if (diagram !== undefined) return diagram;
     throw error;
   }
+}
+
+/**
+ * The one diagram among an AMBIGUOUS_REF's candidates: the reference is a diagram's, so a
+ * collaboration and an interaction of the same name, which every sequence diagram derived from a
+ * model has (extension #33), do not make it ambiguous here.
+ */
+function soleDiagram(details: unknown): string | undefined {
+  const candidates = (details as { candidates?: unknown } | undefined)?.candidates;
+  if (!Array.isArray(candidates)) return undefined;
+  const diagrams = (candidates as { _id?: unknown; _type?: unknown }[]).filter(
+    (c) => typeof c._type === "string" && c._type.endsWith("Diagram") && typeof c._id === "string",
+  );
+  return diagrams.length === 1 ? (diagrams[0]!._id as string) : undefined;
 }
 
 export async function currentDiagramId(client: StarUMLClient): Promise<string> {

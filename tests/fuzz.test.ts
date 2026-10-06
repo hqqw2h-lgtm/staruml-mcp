@@ -7,7 +7,9 @@ import fc from "fast-check";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ErrorCode } from "../src/errors.js";
+import { CatalogState } from "../src/extension-tools.js";
 import { BUNDLED_MANIFEST, toolName } from "../src/manifest.js";
+import { parseToolSelection, reaches } from "../src/tiers.js";
 import { UpstreamFixture } from "./support/fixture.js";
 import { connect, type ConnectedClient } from "./support/mcp.js";
 
@@ -17,6 +19,7 @@ let mcp: ConnectedClient;
 
 /** Codes this server or the fixture's 404 envelope produce; the SDK's own refusal has none. */
 const CODES = new Set<string>([
+  ErrorCode.NotInTier,
   ErrorCode.InvalidArgument,
   ErrorCode.UnknownEndpoint,
   ErrorCode.EndpointNotFound,
@@ -104,6 +107,7 @@ describe("fuzz", () => {
       "sdk validation",
       ErrorCode.InvalidArgument,
       ErrorCode.UnknownEndpoint,
+      ErrorCode.NotInTier,
     ]) {
       expect(seen.get(outcome), outcome).toBeGreaterThan(0);
     }
@@ -206,6 +210,39 @@ describe("fuzz", () => {
       ),
       { numRuns: 200 },
     );
+  }, 60_000);
+
+  it("call_endpoint under the oo tier never sends what the tier leaves out", async () => {
+    const oo = await connect({
+      apiHost: "http://127.0.0.1",
+      apiPort: builtin.port,
+      extPort: extension.port,
+      catalog: new CatalogState(undefined, parseToolSelection("oo")),
+    });
+    const selection = parseToolSelection("oo");
+    try {
+      await fc.assert(
+        fc.asyncProperty(call, async ([name, sent]) => {
+          const sentBefore = extension.requests.length;
+          const result = await oo.call("call_endpoint", { name, body: sent });
+          structured(result);
+          const code = (result.structuredContent as { error?: { code: string } } | undefined)?.error
+            ?.code;
+          // The SDK refuses a body that is not an object before the tier is consulted.
+          const sdkRefused = result.isError === true && code === undefined;
+          if (names.includes(name) && !reaches(selection, name) && !sdkRefused) {
+            expect(code, name).toBe(ErrorCode.NotInTier);
+          }
+          // Whatever reached the extension is an endpoint the tier reaches.
+          for (const request of extension.requests.slice(sentBefore)) {
+            expect(reaches(selection, request.path.slice(1)), request.path).toBe(true);
+          }
+        }),
+        { numRuns: 300 },
+      );
+    } finally {
+      await oo.close();
+    }
   }, 60_000);
 
   it("batch answers every ops list with a result", async () => {

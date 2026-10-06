@@ -33,7 +33,8 @@ import {
 } from "../../src/server.js";
 import { StarUMLClient } from "../../src/staruml-client.js";
 import { VIEWER_URI } from "../../src/viewer.js";
-import { CORE_ENDPOINTS, parseToolSelection } from "../../src/tiers.js";
+import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
+import { CORE_ENDPOINTS, OO_TOOLS, parseToolSelection } from "../../src/tiers.js";
 import { closedPort } from "../support/fixture.js";
 import { decodePng, differingRows } from "../support/png.js";
 import { connect, text, UI_CAPABILITIES, type ConnectedClient } from "../support/mcp.js";
@@ -819,6 +820,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         "review-diagram",
         "improve-diagram",
         "apply-pattern",
+        "model-first",
       ]);
 
       const review = await mcp.client.getPrompt({
@@ -1731,13 +1733,16 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         expect(planned.profile).toBe("uml-standard");
         expect(planned.diagrams).toBeGreaterThan(0);
 
-        const stored = payload<Record<string, unknown>>(
-          await call("set_style_profile", { profile: "minimal" }),
-        );
-        // The name and the switches, not the whole profile.
-        expect(stored).toMatchObject({ profile: "minimal", source: "project", changed: true });
-        expect(stored).not.toHaveProperty("naming");
-        await reset();
+        try {
+          const stored = payload<Record<string, unknown>>(
+            await call("set_style_profile", { profile: "minimal" }),
+          );
+          // The switches, not the whole profile; the name echoes the argument and is dropped.
+          expect(stored).toMatchObject({ strict: false, source: "project", changed: true });
+          expect(stored).not.toHaveProperty("naming");
+        } finally {
+          await reset();
+        }
       });
 
       it("a strict profile refuses placing views with STYLE_LOCKED and its hint, unless override", async () => {
@@ -1797,6 +1802,219 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         } finally {
           await reset();
           ok(await call("delete_element", { ref: "Cycle" }));
+        }
+      });
+    });
+
+    describe("oo tier: object-first, never draw (#17)", () => {
+      let oo: ConnectedClient;
+      /** A tool of the oo tier, or an endpoint through its call_endpoint. */
+      const ooCall = async (name: string, args: Record<string, unknown> = {}) => {
+        called.add(name);
+        return oo.call(name, args);
+      };
+      const tb = JSON.parse(
+        readFileSync(new URL("../fixtures/thingsboard.oo.json", import.meta.url), "utf8"),
+      ) as { system: string; classes: unknown[] };
+      interface Derived {
+        diagrams: { kind: string; name: string; score?: number; created?: number }[];
+        counts: { diagrams: number; created: number; updated: number; deleted: number };
+        quality: { min: number; mean: number; passing: number; failing?: string[] };
+      }
+      let derived: Derived;
+
+      beforeAll(async () => {
+        oo = await connect({
+          catalog: new CatalogState(catalog.current, parseToolSelection("oo")),
+        });
+      });
+
+      afterAll(async () => {
+        // The suite goes on in this project; ThingsBoard's 93 classes would slow every later build.
+        await mcp.call("delete_element", { ref: tb.system });
+        await oo.close();
+      }, 60_000);
+
+      it("lists no drawing tool and refuses one by name before StarUML sees it", async () => {
+        const listed = (await oo.client.listTools()).tools.map((t) => t.name);
+        expect(
+          listed.filter((n) => !["describe_endpoints", "call_endpoint"].includes(n)).sort(),
+        ).toEqual([...OO_TOOLS].sort());
+        for (const name of ["build_diagram", "move_views", "batch", "set_view_style"]) {
+          expect(failure(await oo.call("call_endpoint", { name, body: {} })).code).toBe(
+            "NOT_IN_TIER",
+          );
+        }
+        expect(
+          text(await oo.call("generate_diagram", { code: "classDiagram\n  class A" })),
+        ).toMatch(/disabled/);
+        // A spec that tries to draw is refused by the strict OO schema.
+        expect(
+          failure(
+            await ooCall("build_model", {
+              spec: { system: "Drawn", classes: [{ name: "A", x: 1 }] },
+            }),
+          ).code,
+        ).toBe("INVALID_ARGUMENT");
+      });
+
+      it(
+        "builds ThingsBoard from its object spec and derives every diagram in two calls",
+        { timeout: 600_000 },
+        async () => {
+          const started = performance.now();
+          const built = await ooCall("build_model", { spec: tb });
+          const model = payload<{ model: Summary; counts: { created: Record<string, number> } }>(
+            built,
+          );
+          expect(model.model.path).toBe(tb.system);
+          const answer = await ooCall("derive_diagrams", { scope: tb.system });
+          derived = payload<Derived>(answer);
+          const seconds = Math.round((performance.now() - started) / 1000);
+          const tokens = countTokens(text(built)) + countTokens(text(answer));
+          console.info(
+            `[live] ThingsBoard through the oo tier: 2 calls, ${derived.counts.diagrams} diagrams, ` +
+              `scores ${derived.quality.min}-${Math.max(...derived.diagrams.map((d) => d.score ?? 0))} ` +
+              `(mean ${derived.quality.mean}), ${tokens} result tokens, ${seconds} s`,
+          );
+          expect(derived.counts.diagrams).toBeGreaterThanOrEqual(25);
+          expect(new Set(derived.diagrams.map((d) => d.kind))).toEqual(
+            new Set([
+              "package",
+              "class",
+              "sequence",
+              "usecase",
+              "statemachine",
+              "activity",
+              "erd",
+              "c4",
+              "deployment",
+              "mindmap",
+            ]),
+          );
+          expect(derived.quality.min).toBeGreaterThanOrEqual(80);
+          expect(tokens).toBeLessThan(3000);
+        },
+      );
+
+      it(
+        "derives the same diagrams again without changing anything",
+        { timeout: 300_000 },
+        async () => {
+          const first = derived.diagrams.find((d) => d.kind === "class")!;
+          const before = text(await ooCall("diagram_as_text", { diagram: first.name }));
+          const again = payload<Derived>(await ooCall("derive_diagrams", { scope: tb.system }));
+
+          expect(again.counts).toMatchObject({ created: 0, updated: 0, deleted: 0 });
+          expect(again.diagrams.map((d) => [d.name, d.score])).toEqual(
+            derived.diagrams.map((d) => [d.name, d.score]),
+          );
+          expect(text(await ooCall("diagram_as_text", { diagram: first.name }))).toBe(before);
+        },
+      );
+
+      it("reads, reviews and scores the derived model", { timeout: 120_000 }, async () => {
+        const explained = text(await ooCall("explain_model", { scope: tb.system, maxChars: 2000 }));
+        expect(explained.split("\n")[0]).toMatch(new RegExp(`^${tb.system}: \\d+ packages`));
+        expect(explained).toMatch(/\[cut at maxChars; raise it or narrow scope\]$/);
+        const lint = payload<{ count: number; findings?: { rule: string; fix: string }[] }>(
+          await ooCall("model_lint", { scope: tb.system, limit: 5 }),
+        );
+        expect(lint.count).toBeGreaterThanOrEqual(lint.findings?.length ?? 0);
+        const detected = payload<{ detections?: unknown[] }>(
+          await ooCall("detect_patterns", { scope: tb.system }),
+        );
+        expect(Array.isArray(detected.detections ?? [])).toBe(true);
+        const sequence = derived.diagrams.find((d) => d.kind === "sequence")!;
+        const scored = payload<{ score: number; target: number }>(
+          await ooCall("diagram_quality", { ref: sequence.name }),
+        );
+        expect(scored.score).toBe(sequence.score);
+        // Named like its collaboration and interaction; view_diagram picks the diagram.
+        const view = await ooCall("view_diagram", { diagram: sequence.name });
+        expect(view.isError, text(view)).toBeFalsy();
+        expect(view.content[0]!.type).toBe("image");
+        ok(await ooCall("validate_model", { scope: tb.system, limit: 5 }));
+      });
+
+      it(
+        "the model-first prompt's calls run against StarUML as written",
+        { timeout: 120_000 },
+        async () => {
+          const prompt = await oo.client.getPrompt({
+            name: "model-first",
+            arguments: { system: "Shipping" },
+          });
+          const steps = (prompt.messages[0]!.content as { text: string }).text;
+          for (const step of [
+            "build_model({spec, dryRun: true})",
+            'derive_diagrams({scope: "Shipping"})',
+            'explain_model({scope: "Shipping"})',
+            'model_lint({scope: "Shipping"})',
+            "build_model({spec, upsert: true})",
+          ]) {
+            expect(steps).toContain(step);
+          }
+          expect(steps).not.toContain("call_endpoint");
+          // model-codebase draws with build_diagram, which the tier does not reach.
+          expect((await oo.client.listPrompts()).prompts.map((p) => p.name)).not.toContain(
+            "model-codebase",
+          );
+
+          const shipping = payload<Derived>(await ooCall("derive_diagrams", { scope: "Shipping" }));
+          expect(shipping.diagrams.map((d) => d.kind)).toContain("class");
+          expect(text(await ooCall("explain_model", { scope: "Shipping" }))).toMatch(/^Shipping: /);
+          expect(
+            payload<{ count: number }>(await ooCall("model_lint", { scope: "Shipping" })).count,
+          ).toBeGreaterThanOrEqual(0);
+        },
+      );
+
+      it("doctor switches a session to the oo tier and back", async () => {
+        const own = new CatalogState(catalog.current);
+        const session = await connect({ catalog: own });
+        try {
+          const names = async () => (await session.client.listTools()).tools.map((t) => t.name);
+          expect(await names()).toContain("build_diagram");
+          expect(text(await session.call("doctor", { tools: "oo" }))).toMatch(
+            /tier +ok +oo: 8 extension tools listed/,
+          );
+          expect(await names()).not.toContain("build_diagram");
+          expect(await names()).toContain("derive_diagrams");
+          ok(await session.call("doctor", { tools: "core" }));
+          expect(await names()).toContain("build_diagram");
+        } finally {
+          await session.close();
+        }
+      });
+
+      it("a strict profile still derives; the extension locks drawing and the tier refuses it", async () => {
+        ok(await call("set_style_profile", { patch: { strict: true } }));
+        try {
+          const planned = payload<Derived>(
+            await ooCall("derive_diagrams", { scope: tb.system, kinds: ["package"], dryRun: true }),
+          );
+          expect(planned.diagrams).toHaveLength(1);
+          // Core lists the endpoint; the extension refuses it (layer 2 of the issue's comment).
+          expect(
+            failure(
+              await call("route_edges", {
+                diagram: derived.diagrams[0]!.name,
+                lineStyle: "rectilinear",
+              }),
+            ).code,
+          ).toBe("STYLE_LOCKED");
+          // The oo tier never sends it (layer 1).
+          expect(
+            failure(
+              await oo.call("call_endpoint", {
+                name: "route_edges",
+                body: { diagram: derived.diagrams[0]!.name, lineStyle: "rectilinear" },
+              }),
+            ).code,
+          ).toBe("NOT_IN_TIER");
+        } finally {
+          ok(await call("set_style_profile", { reset: true }));
         }
       });
     });
@@ -2051,12 +2269,28 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
    * what each spec describes (#12).
    */
   describe("skill examples (#12)", () => {
-    // A build takes StarUML seconds while other clients use it; the default 5 s is too tight.
+    const tiers = new Map<string, Promise<ConnectedClient>>();
+    /** The default client, or one per tier an example names (section 7: oo). */
+    const client = (tools: string) => {
+      if (tools === "core") return Promise.resolve(mcp);
+      if (!tiers.has(tools)) {
+        tiers.set(
+          tools,
+          connect({ catalog: new CatalogState(catalog.current, parseToolSelection(tools)) }),
+        );
+      }
+      return tiers.get(tools)!;
+    };
+    afterAll(async () => {
+      for (const tier of tiers.values()) await (await tier).close();
+    });
+
+    // A build takes StarUML seconds while other clients use it; section 7's derive several.
     it.each(skillExamples())(
-      "SKILL.md line $line: $tool",
-      { timeout: 20_000 },
-      async ({ tool, args }) => {
-        const result = await mcp.call(tool, args);
+      "SKILL.md line $line: $tool ($tools)",
+      { timeout: 120_000 },
+      async ({ tool, args, tools }) => {
+        const result = await (await client(tools)).call(tool, args);
         expect(result.isError, text(result)).toBeFalsy();
         if (tool === "build_diagram") {
           // The extension answers terse by default: the diagram and counts, no ids.

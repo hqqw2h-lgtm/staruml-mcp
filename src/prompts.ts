@@ -1,7 +1,9 @@
 /**
  * MCP prompts: workflows a user starts by name (`/model-codebase`, `/review-diagram`,
- * `/improve-diagram`, `/apply-pattern` in clients that surface prompts as commands). They spell out the tool calls, so they name an endpoint's
- * call_endpoint form when the current tier does not list it.
+ * `/improve-diagram`, `/apply-pattern`, `/model-first` in clients that surface prompts as
+ * commands). They spell out the tool calls, so they name an endpoint's call_endpoint form when
+ * the current tier does not list it, and a prompt whose endpoints the tier cannot reach at all
+ * (model-codebase under `oo`, which draws with build_diagram) is not listed.
  */
 import type { McpServer, RegisteredPrompt } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
@@ -12,11 +14,13 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { listedTools, type CatalogState } from "./extension-tools.js";
+import { reaches } from "./tiers.js";
 
 export const MODEL_CODEBASE = "model-codebase";
 export const REVIEW_DIAGRAM = "review-diagram";
 export const IMPROVE_DIAGRAM = "improve-diagram";
 export const APPLY_PATTERN_PROMPT = "apply-pattern";
+export const MODEL_FIRST = "model-first";
 
 /**
  * How the model calls endpoint `name` with `args` (a JSON-like object literal): the tool when it
@@ -185,6 +189,59 @@ export function applyPattern(state: CatalogState, args: ApplyPatternArgs): GetPr
   );
 }
 
+export interface ModelFirstArgs {
+  system?: string;
+  description?: string;
+}
+
+/**
+ * Object-first authoring (issue #17): the domain stated as objects, the model built from them
+ * after a dry run, every diagram derived by rule and laid out by the style profile, then read,
+ * reviewed with model_lint and refined through the spec. The agent never draws: the oo tier
+ * lists nothing that could, and the prompt says so, but the tier is what keeps it so.
+ */
+export function modelFirst(state: CatalogState, args: ModelFirstArgs): GetPromptResult {
+  const system = args.system ?? "<system>";
+  const call = (endpoint: string, body: string) => invocation(state, endpoint, body);
+  const scope = `{scope: "${system}"}`;
+  return message(
+    [
+      `Model ${args.system ?? "the system described below"} object-first: state it as objects ` +
+        "and let StarUML derive and lay out every diagram. Do not place, size or colour views.",
+      ...(args.description === undefined ? [] : [`About it: ${args.description}`]),
+      "",
+      "1. Explain the domain back in a few sentences: its bounded contexts, the main classes " +
+        "with one responsibility each, how they relate (owns, has, uses, isA, implements, " +
+        "knows), the actors and their use cases, the collaborations worth a sequence diagram and " +
+        "the lifecycles worth a state machine. Write that as a build_model spec with system " +
+        `"${system}".`,
+      `2. ${call("build_model", "{spec, dryRun: true}")}: check every path it would create and ` +
+        "that each relationship verb points the right way (from is the whole, the client, the " +
+        "specific kind or the side that navigates).",
+      `3. ${call("build_model", "{spec}")} builds the model in one undo step. classViews and ` +
+        "useCaseViews in the spec group the class and use case diagrams as the user wants them.",
+      `4. ${call("derive_diagrams", scope)} draws every diagram the model implies, each laid ` +
+        "out by the style profile and run through the quality loop; quality.failing names any " +
+        "below its target.",
+      '5. view_diagram({diagram: "<a derived diagram\'s name>"}) for the diagrams that matter ' +
+        `most, diagram_as_text for their content, ${call("explain_model", scope)} for the whole ` +
+        "model as text.",
+      `6. ${call("model_lint", scope)} reviews the object design. Fix what it reports in the ` +
+        `spec, then ${call("build_model", "{spec, upsert: true}")} and ` +
+        `${call("derive_diagrams", scope)} again: both update in place. Repeat until it reports ` +
+        "no error or warning, at most three rounds.",
+      "",
+      "Report the model in a few sentences, the diagrams derived with their scores, and what " +
+        "model_lint still reports.",
+    ].join("\n"),
+  );
+}
+
+const ModelFirstPromptArgs = {
+  system: z.string().optional().describe("Name of the system, which names the model."),
+  description: z.string().optional().describe("What the domain is and does."),
+};
+
 const ModelCodebaseArgs = {
   path: z.string().optional().describe("Absolute source directory to reverse-engineer."),
   language: z.string().optional().describe("java, cpp, csharp or python, for reverse_code."),
@@ -213,7 +270,35 @@ const ApplyPatternPromptArgs = {
 /** A registered prompt's callback; every argument of these prompts is an optional string. */
 type Render = (args: Record<string, string>, extra: unknown) => GetPromptResult;
 
-export function registerPrompts(server: McpServer, state: CatalogState): void {
+/** Endpoints a prompt cannot do without, listed or through call_endpoint. */
+const NEEDS: Record<string, readonly string[]> = {
+  [MODEL_CODEBASE]: ["build_diagram"],
+  [REVIEW_DIAGRAM]: ["describe_diagram", "validate_model"],
+  [IMPROVE_DIAGRAM]: ["diagram_quality", "improve_diagram"],
+  [APPLY_PATTERN_PROMPT]: ["describe_pattern", "apply_pattern"],
+  [MODEL_FIRST]: ["build_model", "derive_diagrams"],
+};
+
+/**
+ * Lists each prompt whose endpoints the tier reaches (what a tier lists it reaches, tiers.ts);
+ * hides the others.
+ */
+export function syncPrompts(state: CatalogState, prompts: Record<string, RegisteredPrompt>): void {
+  const { selection } = state;
+  for (const [name, prompt] of Object.entries(prompts)) {
+    const wanted = NEEDS[name]!.every((e) => reaches(selection, e));
+    // Each change sends notifications/prompts/list_changed.
+    if (prompt.enabled !== wanted) {
+      if (wanted) prompt.enable();
+      else prompt.disable();
+    }
+  }
+}
+
+export function registerPrompts(
+  server: McpServer,
+  state: CatalogState,
+): Record<string, RegisteredPrompt> {
   const registered: Record<string, RegisteredPrompt> = {
     [MODEL_CODEBASE]: server.registerPrompt(
       MODEL_CODEBASE,
@@ -253,6 +338,16 @@ export function registerPrompts(server: McpServer, state: CatalogState): void {
       },
       (args) => applyPattern(state, args),
     ),
+    [MODEL_FIRST]: server.registerPrompt(
+      MODEL_FIRST,
+      {
+        title: "Model a domain object-first",
+        description:
+          "State a domain as objects, dry-run and build the model, derive every diagram, review.",
+        argsSchema: ModelFirstPromptArgs,
+      },
+      (args) => modelFirst(state, args),
+    ),
   };
   // GetPromptRequest's arguments are optional (MCP 2025-06-18, schema.ts), but McpServer 1.29
   // parses an absent one against the argument object and answers -32602. Every argument here is
@@ -260,9 +355,10 @@ export function registerPrompts(server: McpServer, state: CatalogState): void {
   // by one that reads an absent one as {}.
   server.server.setRequestHandler(GetPromptRequestSchema, async (request, extra) => {
     const prompt = registered[request.params.name];
-    if (prompt === undefined) {
+    if (prompt === undefined || !prompt.enabled) {
       throw new McpError(ErrorCode.InvalidParams, `Prompt ${request.params.name} not found`);
     }
     return (prompt.callback as Render)(request.params.arguments ?? {}, extra);
   });
+  return registered;
 }

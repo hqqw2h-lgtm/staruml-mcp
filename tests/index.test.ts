@@ -52,7 +52,13 @@ describe("parseArgs", () => {
       extPort: 58322,
       apiHost: "http://localhost",
       doctor: false,
-      tools: { all: false, names: new Set(CORE_ENDPOINTS), label: "core" },
+      tools: {
+        all: false,
+        names: new Set(CORE_ENDPOINTS),
+        label: "core",
+        closed: false,
+        reachable: new Set(),
+      },
       extToken: undefined,
       sessions: DEFAULT_SESSION_LIMITS,
     });

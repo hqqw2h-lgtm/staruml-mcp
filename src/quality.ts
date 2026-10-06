@@ -148,3 +148,18 @@ export function improveResult(data: unknown, input: Json): CallToolResult {
   }
   return jsonResult({ ...answer, diagram: diagramName(answer.diagram) }, input);
 }
+
+export const MODEL_LINT_DESCRIPTION =
+  "Review the object design: god classes, feature envy, package cycles, anaemic entities, ...";
+
+export function modelLintInput(entry: ManifestEntry): z.ZodObject {
+  return shortInput(
+    entry,
+    {
+      scope: "Model or package; default the project.",
+      rules: "Per rule id or name: off|error|warning|info.",
+    },
+    // The record of severities lists in 40 tokens what the description says; limit passes.
+    new Set(["rules"]),
+  );
+}

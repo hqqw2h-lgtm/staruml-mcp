@@ -1,9 +1,9 @@
 /**
  * Which extension endpoints get a tool of their own. Every tool definition is resent with each
  * model turn: with one tool per endpoint of extension 0.3.0 (88), tools/list and the instructions
- * cost about 12,000 tokens, the core tier under 2,000 (o200k_base, scripts/token-benchmark.mjs). The endpoints
- * most modelling sessions need are listed and the rest are reached through describe_endpoints and
- * call_endpoint.
+ * cost about 13,300 tokens, the core tier under 2,000 and the oo tier under 1,500 (o200k_base,
+ * scripts/token-benchmark.mjs). The endpoints a session needs are listed and the rest are reached
+ * through describe_endpoints and call_endpoint.
  */
 
 /**
@@ -37,12 +37,144 @@ export const CORE_ENDPOINTS: readonly string[] = [
   "improve_diagram",
 ];
 
-/** `all` lists every endpoint; otherwise `names` are listed, `core` expanded to {@link CORE_ENDPOINTS}. */
+/**
+ * The `oo` tier (issue #17): model-first authoring with nothing that draws. An agent states the
+ * domain as objects (`/build_model`), the extension derives every diagram the model implies by
+ * rule and lays each out by the style profile (`/derive_diagrams`), and the agent reads, reviews
+ * and scores the result. Only these tools are listed, the hand-written ones included: StarUML's
+ * built-in `generate_diagram` draws from Mermaid and `get_diagram_image_by_id` is
+ * view_diagram's fallback anyway.
+ */
+export const OO_TOOLS: readonly string[] = [
+  "build_model",
+  "derive_diagrams",
+  "explain_model",
+  "model_lint",
+  "apply_pattern",
+  "detect_patterns",
+  "validate_model",
+  "diagram_quality",
+  "diagram_as_text",
+  "view_diagram",
+  "doctor",
+];
+
+/**
+ * What call_endpoint reaches in the `oo` tier besides the listed tools: reads, model-level
+ * writes (elements, members, stereotypes, documentation, relationships without views), the
+ * pattern library, history, the style profile's read side, the quality loop, saving and
+ * exporting. Left out are the endpoints that place, size, colour or draw views
+ * (`DRAWING_ENDPOINTS` in the extension's src/style/guard.ts: /build_diagram, /move_views,
+ * /set_view_style, /layout_diagram, ...), `/set_style_profile`, which could turn strict mode off,
+ * `/batch` and `/execute_command`, which run any of those, and the editor's UI state. A strict
+ * style profile refuses the drawing endpoints in the extension as well (STYLE_LOCKED), so a
+ * client that bypasses this server cannot draw freely either.
+ */
+export const OO_REACHABLE: readonly string[] = [
+  "get_project_info",
+  "save_project",
+  "save_project_as",
+  "new_project",
+  "open_project",
+  "is_modified",
+  "find_elements",
+  "get_element_by_id",
+  "get_relationships_of",
+  "get_refs_to",
+  "create_element",
+  "update_element",
+  "delete_element",
+  "create_relationship",
+  "set_stereotype",
+  "set_documentation",
+  "add_attribute",
+  "add_operation",
+  "add_parameter",
+  "add_enumeration_literal",
+  "add_template_parameter",
+  "add_slot",
+  "add_tag",
+  "describe_diagram",
+  "export_diagram",
+  "export_diagrams",
+  "export_pdf",
+  "export_html",
+  "export_text",
+  "uml_lint",
+  "undo",
+  "redo",
+  "snapshot",
+  "diff_since",
+  "restore_snapshot",
+  "sync_operations",
+  "check_messages",
+  "list_patterns",
+  "describe_pattern",
+  "apply_preset",
+  "describe_type",
+  "search_types",
+  "get_style_profile",
+  "apply_style_profile",
+  "explain_style_violation",
+  "improve_diagram",
+];
+
+/**
+ * View attributes that place or style a view (`VIEW_STYLE_FIELDS`, extension
+ * src/style/guard.ts). Model elements have none of them, so in the `oo` tier an
+ * `/update_element` setting one is refused here before the extension is asked; a strict profile
+ * refuses it there too.
+ */
+export const VIEW_STYLE_FIELDS: ReadonlySet<string> = new Set([
+  "left",
+  "top",
+  "width",
+  "height",
+  "points",
+  "fillColor",
+  "lineColor",
+  "fontColor",
+  "font",
+  "lineStyle",
+  "stereotypeDisplay",
+  "autoResize",
+  "showVisibility",
+  "showOperationSignature",
+  "showProperty",
+  "showType",
+  "showMultiplicity",
+  "suppressAttributes",
+  "suppressOperations",
+  "wordWrap",
+  "showNamespace",
+]);
+
+/**
+ * Tiers by name; any other token names one tool. A Map, since a token is user input: an object
+ * literal would read `constructor` from its prototype (found by tests/properties.test.ts).
+ */
+const TIERS = new Map<string, readonly string[]>([
+  ["core", CORE_ENDPOINTS],
+  ["oo", OO_TOOLS],
+]);
+
+/**
+ * `all` lists every endpoint; otherwise `names` are listed, `core` and `oo` expanded to their
+ * tools. A selection with `oo` and without `core` or `all` is closed.
+ */
 export interface ToolSelection {
   all: boolean;
   names: ReadonlySet<string>;
   /** The value it was parsed from, for reports. */
   label: string;
+  /**
+   * Hand-written tools are listed only when named, and call_endpoint and describe_endpoints
+   * reach only `reachable`. An open selection lists every hand-written tool and reaches every
+   * endpoint.
+   */
+  closed: boolean;
+  /** Under a closed selection: `names` and {@link OO_REACHABLE}. Empty otherwise. */
+  reachable: ReadonlySet<string>;
 }
 
 export const DEFAULT_TOOLS = "core";
@@ -50,9 +182,10 @@ export const DEFAULT_TOOLS = "core";
 const NAME = /^[a-z0-9_]+$/;
 
 /**
- * Parses `core`, `all` or a comma-separated list of endpoint names, which may include `core`
- * (`core,create_diagram,save_project`). Throws on an empty list or a token that cannot be a tool
- * name; whether a name exists is only known once the manifest is read, so the doctor reports it.
+ * Parses `core`, `oo`, `all` or a comma-separated list of tool names, which may include a tier
+ * (`core,create_diagram`, `oo,save_project`). Throws on an empty list or a token that cannot be a
+ * tool name; whether a name exists is only known once the manifest is read, so the doctor
+ * reports it.
  */
 export function parseToolSelection(value: string, source = "--tools"): ToolSelection {
   const tokens = value
@@ -62,18 +195,37 @@ export function parseToolSelection(value: string, source = "--tools"): ToolSelec
   const bad = tokens.find((t) => !NAME.test(t));
   if (tokens.length === 0 || bad !== undefined) {
     throw new Error(
-      `Invalid ${source}: "${value}". Use core, all, or comma-separated tool names such as core,create_diagram.`,
+      `Invalid ${source}: "${value}". Use core, oo, all, or comma-separated tool names such as core,create_diagram.`,
     );
   }
   const names = new Set<string>();
   for (const token of tokens) {
-    for (const name of token === "core" ? CORE_ENDPOINTS : [token]) names.add(name);
+    for (const name of TIERS.get(token) ?? [token]) names.add(name);
   }
-  return { all: names.has("all"), names, label: tokens.join(",") };
+  const all = names.has("all");
+  const closed = tokens.includes("oo") && !tokens.includes("core") && !all;
+  return {
+    all,
+    names,
+    label: tokens.join(","),
+    closed,
+    reachable: closed ? new Set([...names, ...OO_REACHABLE]) : new Set(),
+  };
 }
 
+/** Whether an extension endpoint gets a tool of its own. */
 export function selects(selection: ToolSelection, name: string): boolean {
   return selection.all || selection.names.has(name);
+}
+
+/** Whether a hand-written tool is listed: always, unless a closed selection leaves it out. */
+export function listsHandWritten(selection: ToolSelection, name: string): boolean {
+  return !selection.closed || selection.names.has(name);
+}
+
+/** Whether call_endpoint and describe_endpoints may reach an endpoint. */
+export function reaches(selection: ToolSelection, name: string): boolean {
+  return !selection.closed || selection.reachable.has(name);
 }
 
 /**
