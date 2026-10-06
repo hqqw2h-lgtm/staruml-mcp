@@ -33,9 +33,9 @@ extension's endpoints, so run it after the user upgrades the extension.
 |---|---|
 | A domain model from a description or requirements | `build_model` with an object spec (section 6), then diagrams of it |
 | A new diagram of a kind below | `build_diagram` with a `spec`: exact names, one undo step |
-| A design pattern, or a class to be a value object or entity | `apply_pattern`, or `apply_preset` (section 8) |
+| A design pattern, or a class to be a value object or entity | `apply_pattern` or `apply_preset` through `call_endpoint` (section 8) |
 | Their Mermaid source rendered | `generate_diagram` (routes itself, see section 9) |
-| Small edits to an existing model | `find_elements`, then `update_element` / `delete_element` |
+| Small edits to an existing model | `find_elements`, then `update_element`; deletions as a `/delete_element` op in a `batch` |
 | Many related creations or edits | one `batch` |
 | To read or explain a diagram | `diagram_as_text` (section 12), not a picture |
 | The `type` or command id to pass | `search_types` through `call_endpoint` |
@@ -532,7 +532,9 @@ A pattern is more than its class shapes: Strategy wants the strategy's operation
 context's end of the association a shared aggregation that does not navigate, and the far end
 navigable, named `strategy`, with multiplicity 1. `apply_pattern` sets every such property from
 the pattern's data, on existing classes or new ones, in one undo step; writing the same by hand
-in a `batch` takes a dozen ops and usually misses some.
+in a `batch` takes a dozen ops and usually misses some. The default tools reach it through
+`call_endpoint`; `doctor({tools: "core,apply_pattern"})` lists it as a tool, and the `oo` tier
+lists it anyway.
 
 1. Pick the pattern: `staruml://patterns` lists the 23 GoF patterns and Repository, Unit of
    Work, Specification, Value Object, Entity, Service and DTO with their intent and roles (`*`
@@ -551,21 +553,27 @@ in a `batch` takes a dozen ops and usually misses some.
 { "name": "describe_pattern", "body": { "name": "Strategy" } }
 ```
 
-```json apply_pattern
+```json call_endpoint
 {
-  "pattern": "Strategy",
-  "bindings": { "Context": "Loans/Loan", "Strategy": "FinePolicy", "ConcreteStrategy": ["DailyFine", "FlatFine"] },
-  "parent": "Lending/Loans",
-  "dryRun": true
+  "name": "apply_pattern",
+  "body": {
+    "pattern": "Strategy",
+    "bindings": { "Context": "Loans/Loan", "Strategy": "FinePolicy", "ConcreteStrategy": ["DailyFine", "FlatFine"] },
+    "parent": "Lending/Loans",
+    "dryRun": true
+  }
 }
 ```
 
-```json apply_pattern
+```json call_endpoint
 {
-  "pattern": "Strategy",
-  "bindings": { "Context": "Loans/Loan", "Strategy": "FinePolicy", "ConcreteStrategy": ["DailyFine", "FlatFine"] },
-  "parent": "Lending/Loans",
-  "diagram": "Fine policy"
+  "name": "apply_pattern",
+  "body": {
+    "pattern": "Strategy",
+    "bindings": { "Context": "Loans/Loan", "Strategy": "FinePolicy", "ConcreteStrategy": ["DailyFine", "FlatFine"] },
+    "parent": "Lending/Loans",
+    "diagram": "Fine policy"
+  }
 }
 ```
 

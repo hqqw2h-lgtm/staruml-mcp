@@ -1,11 +1,13 @@
 /**
- * build_model and apply_pattern (core), and the shapes of the pattern, preset, theme and sync
+ * build_model (core) and apply_pattern (listed by name since 0.8.0), and the shapes of the pattern, preset, theme and sync
  * answers reached through call_endpoint. Answers are what extension #23 and #30 gave StarUML
  * 7.1.1 for a Strategy over a three-class "Shipping" model.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { BUILD_MODEL_DESCRIPTION, countedPlan, modelResult } from "../src/model.js";
 import { APPLY_PATTERN_DESCRIPTION, detectResult, patternResult } from "../src/patterns.js";
+import { CatalogState } from "../src/extension-tools.js";
+import { parseToolSelection } from "../src/tiers.js";
 import { UpstreamFixture } from "./support/fixture.js";
 import { connect, text, type ConnectedClient } from "./support/mcp.js";
 
@@ -19,6 +21,7 @@ beforeAll(async () => {
     apiHost: "http://127.0.0.1",
     apiPort: builtin.port,
     extPort: extension.port,
+    catalog: new CatalogState(undefined, parseToolSelection("core,apply_pattern")),
   });
 });
 
@@ -209,7 +212,29 @@ describe("build_model tool (extension #23)", () => {
 });
 
 describe("apply_pattern tool (extension #30)", () => {
-  it("is listed in the core tier with pattern, bindings, diagram and dryRun", async () => {
+  it("is reached through call_endpoint under the core tier and shaped the same way", async () => {
+    const core = await connect({
+      apiHost: "http://127.0.0.1",
+      apiPort: builtin.port,
+      extPort: extension.port,
+    });
+    try {
+      const { tools } = await core.client.listTools();
+      expect(tools.map((t) => t.name)).not.toContain("apply_pattern");
+      extension.reply("/apply_pattern", ok(APPLIED));
+
+      const result = await core.call("call_endpoint", {
+        name: "apply_pattern",
+        body: { pattern: "Strategy", bindings: BINDINGS },
+      });
+
+      expect(text(result)).toBe(text(patternResult(APPLIED, { pattern: "Strategy" })));
+    } finally {
+      await core.close();
+    }
+  });
+
+  it("is listed by name with pattern, bindings, diagram and dryRun", async () => {
     const { tools } = await mcp.client.listTools();
     const tool = tools.find((t) => t.name === "apply_pattern")!;
 

@@ -142,13 +142,13 @@ describe("POST /mcp", () => {
   });
 
   it("returns a tool error result rather than a JSON-RPC error", async () => {
-    extension.reply("/delete_element", {
+    extension.reply("/get_element_by_id", {
       status: 400,
       body: { success: false, error: "Element not found: X" },
     });
 
     const { message } = await rpc(server, 4, "tools/call", {
-      name: "delete_element",
+      name: "get_element_by_id",
       arguments: { ref: "X" },
     });
 

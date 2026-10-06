@@ -316,8 +316,8 @@ describe("apply-pattern", () => {
         "",
         '1. call_endpoint({name: "describe_pattern", body: {name: "Strategy"}}): its roles (`*` binds several elements, `?` is optional), what each gets and the relationship ends it sets.',
         '2. Bind each role to existing classes in Shipping by path; staruml://project/tree and find_elements list them. Write bindings as {Role: "Pkg/Class", ManyRole: ["Pkg/A", "Pkg/B"]}; give a role no class plays a name in the domain\'s words, or leave it unbound for a new element named after the role.',
-        '3. apply_pattern({pattern: "Strategy", bindings, parent: "Shipping", diagram: "Strategy pattern", dryRun: true}): check every role\'s paths, the elements it would create and each property it would set.',
-        '4. apply_pattern({pattern: "Strategy", bindings, parent: "Shipping", diagram: "Strategy pattern"}) applies it in one undo step.',
+        '3. call_endpoint({name: "apply_pattern", body: {pattern: "Strategy", bindings, parent: "Shipping", diagram: "Strategy pattern", dryRun: true}}): check every role\'s paths, the elements it would create and each property it would set.',
+        '4. call_endpoint({name: "apply_pattern", body: {pattern: "Strategy", bindings, parent: "Shipping", diagram: "Strategy pattern"}}) applies it in one undo step.',
         '5. view_diagram({diagram: "Strategy pattern", annotate: "paths"}) to look at it, and call_endpoint({name: "detect_patterns", body: {patterns: ["Strategy"], scope: "Shipping"}}) to confirm it: confidence 1 and nothing missing.',
         "",
         "Report the bindings, what was created and anything detect_patterns still lists as missing.",
@@ -338,6 +338,7 @@ describe("apply-pattern", () => {
       expect(text).toContain("2. Bind each role to existing classes by path;");
       expect(text).toContain('view_diagram({diagram: "Billing", annotate: "paths"})');
       expect(text).toContain('detect_patterns({patterns: ["<pattern>"]}) to confirm it');
+      expect(text).toContain('3. apply_pattern({pattern: "<pattern>", bindings, diagram:');
     } finally {
       await all.close();
     }

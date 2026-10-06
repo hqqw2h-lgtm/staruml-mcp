@@ -31,10 +31,12 @@ beforeAll(async () => {
   for (const { path } of BUNDLED_MANIFEST.endpoints) {
     extension.reply(path, { body: { success: true, data: { path } } });
   }
+  // apply_pattern and delete_element left the core tier in 0.8.0 and are listed by name.
   mcp = await connect({
     apiHost: "http://127.0.0.1",
     apiPort: builtin.port,
     extPort: extension.port,
+    catalog: new CatalogState(undefined, parseToolSelection("core,apply_pattern,delete_element")),
   });
 });
 
@@ -122,8 +124,8 @@ describe("fuzz", () => {
     );
   }, 60_000);
 
-  it("core tools pass any path in a field that takes one to the extension as written", async () => {
-    // Fields of core tools that take an id or a path (extension src/refs.ts), as listed.
+  it("listed tools pass any path in a field that takes one to the extension as written", async () => {
+    // Fields of listed tools that take an id or a path (extension src/refs.ts), as listed.
     const fields: [string, string, Record<string, unknown>][] = [
       ["get_element_by_id", "ref", {}],
       ["delete_element", "ref", {}],

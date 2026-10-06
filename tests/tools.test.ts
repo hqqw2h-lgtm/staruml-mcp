@@ -155,6 +155,13 @@ const UNDESCRIBED = new Set([
   "apply_preset.dryRun",
   "apply_theme.dryRun",
   "apply_style_profile.dryRun",
+  "set_project_metadata.name",
+  "set_project_metadata.author",
+  "set_project_metadata.company",
+  "set_project_metadata.copyright",
+  "set_project_metadata.version",
+  "set_project_metadata.documentation",
+  "close_diagrams.diagrams",
 ]);
 
 const HOST = "http://127.0.0.1";
@@ -200,7 +207,7 @@ describe("tool registry", () => {
         ...BUNDLED_MANIFEST.endpoints.map((e) => toolName(e.path)),
       ].sort(),
     );
-    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(88);
+    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(103);
   });
 
   it("lists no $schema on any input schema", async () => {
@@ -262,6 +269,7 @@ describe("tool registry", () => {
       "export_html",
       "export_pdf",
       "generate_code",
+      "new_from_template",
       "new_project",
       "open_project",
       "redo",

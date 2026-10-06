@@ -130,7 +130,6 @@ describe("SKILL.md", () => {
         "improve_diagram",
         "diagram_quality",
         "build_model",
-        "apply_pattern",
         "derive_diagrams",
         "model_lint",
         "explain_model",
@@ -177,15 +176,14 @@ describe("SKILL.md", () => {
     }
     expect(model).toContain("becomes the class's documentation");
     expect(model).toContain("```json build_model");
-    expect(patterns).toContain("```json apply_pattern");
+    expect(patterns).toContain('"name": "apply_pattern"');
     expect(patterns).toContain("detect_patterns");
-    // Bindings name existing classes by path.
-    const applied = examples.filter((e) => e.tool === "apply_pattern");
-    expect(applied.map((e) => (e.args.bindings as { Context: string }).Context)).toEqual([
-      "Loans/Loan",
-      "Loans/Loan",
-    ]);
-    expect(applied.map((e) => e.args.dryRun === true)).toEqual([true, false]);
+    // Bindings name existing classes by path; the core tier reaches apply_pattern by name.
+    const applied = examples
+      .filter((e) => e.tool === "call_endpoint" && e.args.name === "apply_pattern")
+      .map((e) => e.args.body as { bindings: { Context: string }; dryRun?: boolean });
+    expect(applied.map((b) => b.bindings.Context)).toEqual(["Loans/Loan", "Loans/Loan"]);
+    expect(applied.map((b) => b.dryRun === true)).toEqual([true, false]);
   });
 
   it("teaches the build loop and what a readable UML diagram needs (#13)", () => {

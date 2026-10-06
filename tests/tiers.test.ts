@@ -104,7 +104,7 @@ describe("parseToolSelection", () => {
 });
 
 describe("endpointGroup", () => {
-  it("groups every endpoint of the 88-endpoint manifest", () => {
+  it("groups every endpoint of the 103-endpoint manifest", () => {
     const groups: Record<string, string[]> = {};
     for (const e of BUNDLED_MANIFEST.endpoints) {
       (groups[endpointGroup(toolName(e.path))] ??= []).push(toolName(e.path));
@@ -117,9 +117,21 @@ describe("endpointGroup", () => {
         "save_project_as",
         "new_project",
         "open_project",
+        "list_templates",
+        "new_from_template",
+        "get_project_metadata",
+        "set_project_metadata",
+        "get_preference",
+        "set_preference",
+        "list_extensions",
+        "list_working_diagrams",
+        "close_diagrams",
         "is_modified",
       ],
+      io: ["export_fragment", "import_fragment", "export_xmi", "import_xmi"],
+      perf: ["performance_stats"],
       element: [
+        "quick_find",
         "get_element_by_id",
         "find_elements",
         "create_element",
@@ -210,9 +222,12 @@ describe("endpointGroup", () => {
     expect(endpointGroup("set_font")).toBe("style");
     expect(endpointGroup("derive_operations")).toBe("model");
     expect(endpointGroup("reset_style_profile")).toBe("style");
+    expect(endpointGroup("reset_preferences")).toBe("project");
     expect(ENDPOINT_GROUPS).toEqual([
       "quality",
       "history",
+      "io",
+      "perf",
       "project",
       "command",
       "meta",
@@ -243,12 +258,10 @@ describe("core tier (default)", () => {
       "get_element_by_id",
       "find_elements",
       "update_element",
-      "delete_element",
       "export_diagram",
       "batch",
       "build_diagram",
       "build_model",
-      "apply_pattern",
       "diagram_quality",
       "improve_diagram",
       "describe_endpoints",
@@ -401,6 +414,7 @@ describe("describe_endpoints", () => {
     expect(Object.keys(index.patterns!)).toEqual([
       "list_patterns",
       "describe_pattern",
+      "apply_pattern",
       "detect_patterns",
       "apply_preset",
     ]);
@@ -450,7 +464,9 @@ describe("describe_endpoints", () => {
     const result = await mcp.call("describe_endpoints", { group: "element" });
 
     expect(Object.keys(JSON.parse(text(result)) as object)).toEqual([
+      "quick_find",
       "create_element",
+      "delete_element",
       "create_relationship",
       "set_stereotype",
       "set_documentation",

@@ -70,17 +70,59 @@ describe("build_diagram tool", () => {
     });
   });
 
-  it("names a spec shape for every kind but requirement and c4, which describe_endpoints shows", async () => {
+  it("lists the manifest's kinds and a spec shape for every one but requirement and c4", async () => {
     const { tools } = await mcp.client.listTools();
-    const spec = (
-      tools.find((t) => t.name === "build_diagram")!.inputSchema.properties as {
-        spec: { description: string };
-      }
-    ).spec.description;
+    const listed = tools.find((t) => t.name === "build_diagram")!.inputSchema.properties as {
+      kind: { enum: string[] };
+      spec: { description: string };
+    };
     const kinds = (entry.request.properties as { kind: { enum: string[] } }).kind.enum;
+    const described = (entry.request.properties as { spec: { description: string } }).spec
+      .description;
 
-    expect(kinds.filter((k) => !spec.includes(`${k}{`))).toEqual(["requirement", "c4"]);
-    expect(spec).toContain("component{components[{name,provides,requires,ports}]");
+    expect(listed.kind.enum).toEqual(kinds);
+    expect(kinds).toHaveLength(29);
+    const shaped = kinds.filter((k) => listed.spec.description.includes(`${k}{`));
+    expect(shaped).toEqual([
+      "class",
+      "sequence",
+      "usecase",
+      "activity",
+      "statemachine",
+      "erd",
+      "flowchart",
+      "mindmap",
+      "package",
+      "component",
+      "deployment",
+    ]);
+    // The rest are extension #25's families, whose specs share one node and edge shape, which
+    // the listing names once as "other kinds".
+    const families = kinds.filter((k) => !shaped.includes(k) && k !== "requirement" && k !== "c4");
+    expect(families).toHaveLength(16);
+    for (const kind of families) {
+      expect(described, kind).toMatch(
+        new RegExp(`\\b${kind} \\([^{]*?\\): \\{(block, )?nodes: \\[`),
+      );
+    }
+    expect(listed.spec.description).toContain(
+      "other kinds{nodes[{name,type,in}],edges[{from,to,type,name}]}",
+    );
+  });
+
+  it("follows a manifest that adds a kind", () => {
+    const properties = entry.request.properties as { kind: { enum: string[] } };
+    const schema = z.toJSONSchema(
+      buildDiagramInput({
+        ...entry,
+        request: {
+          ...entry.request,
+          properties: { ...properties, kind: { ...properties.kind, enum: ["class", "c5"] } },
+        },
+      }),
+    ) as unknown as { properties: { kind: { enum: string[] } } };
+
+    expect(schema.properties.kind.enum).toEqual(["class", "c5"]);
   });
 
   it("lists the same short schema under --tools all", async () => {
@@ -203,7 +245,6 @@ describe("build_diagram tool", () => {
       { kind: "class", spec: "classes" },
       "spec: Invalid input: expected object, received string",
     ],
-    ["a kind it does not build", { kind: "gantt", spec: {} }, "kind: Invalid option"],
     ["a layout preset it does not have", { mermaid, layout: "sideways" }, "layout: Invalid option"],
     [
       "a flag that is not a boolean",
@@ -232,8 +273,11 @@ describe("build_diagram tool", () => {
     expect(extension.requests).toEqual([]);
   });
 
-  it("rejects a wrong-typed listed parameter through the input schema", async () => {
-    const result = await mcp.call("build_diagram", { mermaid, name: 5 });
+  it.each([
+    ["a wrong-typed listed parameter", { mermaid, name: 5 }],
+    ["a kind it does not build", { kind: "gantt", spec: {} }],
+  ])("rejects %s through the input schema", async (_, args) => {
+    const result = await mcp.call("build_diagram", args);
 
     expect(text(result)).toMatch(/Input validation error/);
     expect(extension.requests).toEqual([]);
@@ -292,13 +336,13 @@ describe("buildDiagramInput", () => {
     expect(Object.keys(schema.properties)).toEqual(["kind", "spec", "mermaid", "name"]);
   });
 
-  it("lists spec, kind, layout and the flags without the types the whole schema checks", () => {
+  it("lists spec, layout and the flags without the types the whole schema checks", () => {
     const schema = z.toJSONSchema(buildDiagramInput(entry)) as {
       properties: Record<string, Record<string, unknown>>;
     };
 
     expect(Object.keys(schema.properties.spec!)).toEqual(["description"]);
-    expect(Object.keys(schema.properties.kind!)).toEqual(["description"]);
+    expect(Object.keys(schema.properties.kind!)).toEqual(["type", "enum", "description"]);
     expect(Object.keys(schema.properties.layout!)).toEqual(["description"]);
     for (const flag of ["upsert", "prune", "dryRun"]) {
       expect(Object.keys(schema.properties[flag]!), flag).toEqual(["description"]);

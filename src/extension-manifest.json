@@ -558,6 +558,744 @@
       }
     },
     {
+      "path": "/list_templates",
+      "description": "The project templates StarUML offers under File > New From Template, from its resources and its extensions, for /new_from_template.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "templates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "source",
+                "path"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "templates"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/new_from_template",
+      "description": "Replace the open project with a new one from a template (File > New From Template), by name as /list_templates gives it, e.g. 'UMLConventional', or an absolute .mdj path; unsaved changes are lost and the new project has no file.",
+      "readOnly": false,
+      "destructive": true,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "template": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Template name, or an absolute .mdj path."
+          }
+        },
+        "required": [
+          "template"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "template": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "source",
+              "path"
+            ],
+            "additionalProperties": false
+          },
+          "project": {
+            "type": "object",
+            "properties": {
+              "_id": {
+                "type": "string"
+              },
+              "_type": {
+                "type": "string",
+                "description": "Metamodel class name."
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "_parent": {
+                "description": "Owner id; null for the project.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "description": "Summary only: a path any id field accepts, e.g. 'Model/Shop/Order', 'Model/Shop/Order.total', 'Model/Shop/Order#pay()', and 'model path@diagram path' for a view. Absent for the project and for views without a model."
+              }
+            },
+            "required": [
+              "_id",
+              "_type"
+            ],
+            "additionalProperties": {},
+            "description": "Element projection. Reference attributes are {$ref: id}; owned elements are {$ref: id} or, with depth > 0, nested elements."
+          }
+        },
+        "required": [
+          "template",
+          "project"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/get_project_metadata",
+      "description": "The project's own fields: name, author, company, copyright, version and documentation (the Project's attributes in the core metamodel).",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "company": {
+            "type": "string"
+          },
+          "copyright": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "documentation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "author",
+          "company",
+          "copyright",
+          "version",
+          "documentation"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/set_project_metadata",
+      "description": "Set any of the project's name, author, company, copyright, version and documentation, as one undo step; answers them all.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "company": {
+            "type": "string"
+          },
+          "copyright": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "documentation": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "company": {
+            "type": "string"
+          },
+          "copyright": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "documentation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "author",
+          "company",
+          "copyright",
+          "version",
+          "documentation"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/export_fragment",
+      "description": "Write an element and everything it owns to a model fragment file (.mfj), as File > Export > Fragment does; /import_fragment reads it into any project.",
+      "readOnly": true,
+      "destructive": true,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Element to export, e.g. a package. Id or path."
+          },
+          "filename": {
+            "type": "string",
+            "description": "Absolute .mfj path; overwritten."
+          },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile blocks saving on lint errors; the call is still made as asked."
+          }
+        },
+        "required": [
+          "ref",
+          "filename"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "element": {
+            "type": "object",
+            "properties": {
+              "_id": {
+                "type": "string"
+              },
+              "_type": {
+                "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "_parent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_id",
+              "_type",
+              "name",
+              "_parent"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "filename",
+          "element"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/import_fragment",
+      "description": "Read a model fragment file (.mfj) into an element's ownedElements, as File > Import > Fragment does. StarUML records the insertion as an operation that undo skips (ProjectManager.importFromFile, 7.1.1): delete the imported element to take it out again.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string",
+            "description": "Absolute .mfj path."
+          },
+          "parent": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Owner of the imported element; default the project. Id or path."
+          }
+        },
+        "required": [
+          "filename"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "element": {
+            "type": "object",
+            "properties": {
+              "_id": {
+                "type": "string"
+              },
+              "_type": {
+                "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "_parent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "_id",
+              "_type",
+              "name",
+              "_parent"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "element"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/export_xmi",
+      "description": "Write the project as XMI 2.1 through the staruml-xmi extension, which must be installed; NOT_FOUND says so otherwise.",
+      "readOnly": true,
+      "destructive": true,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string",
+            "description": "Absolute .xmi path; overwritten."
+          },
+          "override": {
+            "type": "boolean",
+            "description": "Do it although the style profile blocks saving on lint errors; the call is still made as asked."
+          }
+        },
+        "required": [
+          "filename"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "command"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/import_xmi",
+      "description": "Read an XMI 2.1 file into the project through the staruml-xmi extension, which must be installed; NOT_FOUND says so otherwise.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string",
+            "description": "Absolute .xmi path."
+          }
+        },
+        "required": [
+          "filename"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "command"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/get_preference",
+      "description": "Read a StarUML preference (File > Preferences) by key, e.g. 'diagramEditor.showGrid', 'view.lineStyle', 'uml.class.suppressOperations', 'mcp-ext.limits.maxBatchOps', with its default, type and whether /set_preference may change it. The access token is never answered.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Key."
+          }
+        },
+        "required": [
+          "key"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {},
+          "default": {},
+          "type": {
+            "type": "string",
+            "description": "check, number, string, color, font, dropdown or combo."
+          },
+          "settable": {
+            "type": "boolean",
+            "description": "Whether /set_preference may change it."
+          },
+          "options": {
+            "type": "array",
+            "items": {}
+          }
+        },
+        "required": [
+          "key",
+          "value",
+          "default",
+          "type",
+          "settable"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/set_preference",
+      "description": "Change a StarUML preference, as File > Preferences does; takes effect for what is drawn next. Allowed: view.*, diagramEditor.*, theme.*, validation.*, each diagram extension's defaults (uml.*, sysml.*, bpmn.*, c4.*, dfd.*, erd.*, flowchart.*, mindmap.*, aws.*, azure.*, gcp.*, wireframe.*), mcp-ext.limits.*, mcp-ext.ui.* and mcp-ext.server.logLevel; what decides who may call this server is not.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Key."
+          },
+          "value": {
+            "description": "New value, of the preference's type."
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {},
+          "default": {},
+          "type": {
+            "type": "string",
+            "description": "check, number, string, color, font, dropdown or combo."
+          },
+          "settable": {
+            "type": "boolean",
+            "description": "Whether /set_preference may change it."
+          },
+          "options": {
+            "type": "array",
+            "items": {}
+          },
+          "previous": {}
+        },
+        "required": [
+          "key",
+          "value",
+          "default",
+          "type",
+          "settable",
+          "previous"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/list_extensions",
+      "description": "The extensions StarUML loads (essential, default, dev and user folders) with name, title, version and description, and the commands each adds to the menus that are registered now, for /execute_command.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "version": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "source": {
+                  "type": "string",
+                  "description": "essential, default, dev or user."
+                },
+                "path": {
+                  "type": "string"
+                },
+                "commands": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Command ids its menus name that are registered."
+                }
+              },
+              "required": [
+                "name",
+                "title",
+                "version",
+                "description",
+                "source",
+                "path",
+                "commands"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "extensions"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/quick_find",
+      "description": "Find model elements whose name, documentation or tags contain a text, case-insensitively, as Edit > Find does; each match with its path, where it matched and the text around it. Views are not searched.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Text to find."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "description": "Most matches answered; default 50."
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "matches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "element": {
+                  "type": "object",
+                  "properties": {
+                    "_id": {
+                      "type": "string"
+                    },
+                    "_type": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "_parent": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_id",
+                    "_type",
+                    "name",
+                    "_parent"
+                  ],
+                  "additionalProperties": false
+                },
+                "field": {
+                  "type": "string",
+                  "description": "name, documentation or 'tag <name>'."
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "element",
+                "field",
+                "text"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "matches",
+          "total",
+          "truncated"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
       "path": "/get_element_by_id",
       "description": "Read one element by id or path ('Model/Shop/Order', 'Order.total', 'Order#pay()', a diagram name, '@current').",
       "readOnly": true,
@@ -3162,6 +3900,112 @@
       }
     },
     {
+      "path": "/list_working_diagrams",
+      "description": "The diagrams open in the editor's tabs, in tab order, and which one is current. /switch_diagram opens one, /close_diagram closes one, /close_diagrams several.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagrams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": {
+                  "type": "string"
+                },
+                "_type": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "_parent": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "path": {
+                  "type": "string"
+                },
+                "current": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "_id",
+                "_type",
+                "name",
+                "_parent",
+                "current"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "diagrams"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/close_diagrams",
+      "description": "Close editor tabs: the diagrams named, or every one but those in keep; the diagrams stay in the model.",
+      "readOnly": false,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "diagrams": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Diagram. Id or path."
+            }
+          },
+          "keep": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Diagram. Id or path."
+            },
+            "description": "With no diagrams: tabs left open."
+          }
+        }
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "closed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "closed"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
       "path": "/get_views_of",
       "description": "Every view of a model element, on any diagram; empty for a model that is in no diagram.",
       "readOnly": true,
@@ -5550,7 +6394,7 @@
     },
     {
       "path": "/export_text",
-      "description": "Write a diagram as Mermaid or PlantUML text: class, sequence, use case, activity, state machine, ERD, flowchart, mind map, requirement and C4 diagrams, and as PlantUML only package, component and deployment diagrams. Mermaid comes out in the form /build_diagram reads (pass the answer's kind with it), so a diagram can be exported, edited as text and built again. warnings name what the text cannot carry.",
+      "description": "Write a diagram as Mermaid or PlantUML text: class, sequence, use case, activity, state machine, ERD, flowchart, mind map, requirement and C4 diagrams, as PlantUML only package, component and deployment diagrams, and every other diagram family (composite structure, object, communication, timing, interaction overview, information flow, profile, DFD, SysML block definition, internal block and parametric, BPMN, wireframe, AWS, Azure, GCP) as its /build_diagram spec in JSON (format spec). Mermaid comes out in the form /build_diagram reads (pass the answer's kind with it), so a diagram can be exported, edited as text and built again. warnings name what the text cannot carry.",
       "readOnly": true,
       "destructive": false,
       "request": {
@@ -5566,9 +6410,10 @@
             "type": "string",
             "enum": [
               "mermaid",
-              "plantuml"
+              "plantuml",
+              "spec"
             ],
-            "description": "Text format."
+            "description": "Text format. spec: the /build_diagram spec as JSON, the text form of the kinds no Mermaid or PlantUML diagram holds (composite, object, communication, timing, overview, infoflow, profile, dfd, bdd, ibd, parametric, bpmn, wireframe, aws, azure, gcp); build it again with that kind."
           },
           "override": {
             "type": "boolean",
@@ -5629,7 +6474,23 @@
               "c4",
               "package",
               "component",
-              "deployment"
+              "deployment",
+              "composite",
+              "object",
+              "communication",
+              "timing",
+              "overview",
+              "infoflow",
+              "profile",
+              "dfd",
+              "bdd",
+              "ibd",
+              "parametric",
+              "bpmn",
+              "wireframe",
+              "aws",
+              "azure",
+              "gcp"
             ],
             "description": "The /build_diagram kind; use case and activity diagrams are written as Mermaid flowcharts and need it to be built again."
           },
@@ -6029,7 +6890,7 @@
           },
           "atomic": {
             "type": "boolean",
-            "description": "Default true. Atomic batches refuse /undo, /redo, /restore_snapshot, /new_project, /open_project, /save_project*, /execute_command, /export_pdf, /export_html, /export_diagrams, /generate_code, /reverse_code, and the endpoints running a batch of their own: /build_diagram, /build_model, /sync_operations, /apply_pattern, /apply_preset, /apply_theme."
+            "description": "Default true. Atomic batches refuse /undo, /redo, /restore_snapshot, /new_project, /open_project, /new_from_template, /import_fragment, /import_xmi, /export_xmi, /save_project*, /execute_command, /export_pdf, /export_html, /export_diagrams, /generate_code, /reverse_code, and the endpoints running a batch of their own: /build_diagram, /build_model, /sync_operations, /apply_pattern, /apply_preset, /apply_theme."
           },
           "result": {
             "type": "string",
@@ -6113,7 +6974,7 @@
     },
     {
       "path": "/build_diagram",
-      "description": "Build a whole diagram in one call from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap, requirement, c4) or from text: Mermaid (classDiagram, sequenceDiagram, flowchart, erDiagram, stateDiagram with composite state blocks, mindmap, requirementDiagram, C4Context/C4Container/C4Component; notes and classDef/style colours; a flowchart also as activity or usecase; /export_text writes this Mermaid back), PlantUML, SQL DDL or JSON Schema. One undo step; laid out by Format > Layout where the kind allows. Elements named like existing ones are shown again rather than copied (reuse). upsert updates the diagram of the same name instead of adding another, and prune removes what the spec no longer has. Answers the ids of what it made, not the model.",
+      "description": "Build a whole diagram in one call from a compact spec per kind (class, sequence, usecase, activity, statemachine, erd, flowchart, mindmap, requirement, c4, package, component, deployment, and the families composite, object, communication, timing, overview, infoflow, profile, dfd, bdd, ibd, parametric, bpmn, wireframe, aws, azure, gcp) or from text: Mermaid (classDiagram, sequenceDiagram, flowchart, erDiagram, stateDiagram with composite state blocks, mindmap, requirementDiagram, C4Context/C4Container/C4Component; notes and classDef/style colours; a flowchart also as activity or usecase; /export_text writes this Mermaid back), PlantUML, SQL DDL or JSON Schema. One undo step; laid out by Format > Layout where the kind allows. Elements named like existing ones are shown again rather than copied (reuse). upsert updates the diagram of the same name instead of adding another, and prune removes what the spec no longer has. Answers the ids of what it made, not the model.",
       "readOnly": false,
       "destructive": false,
       "request": {
@@ -6135,7 +6996,23 @@
               "c4",
               "package",
               "component",
-              "deployment"
+              "deployment",
+              "composite",
+              "object",
+              "communication",
+              "timing",
+              "overview",
+              "infoflow",
+              "profile",
+              "dfd",
+              "bdd",
+              "ibd",
+              "parametric",
+              "bpmn",
+              "wireframe",
+              "aws",
+              "azure",
+              "gcp"
             ],
             "description": "Diagram kind; required with spec. With text it is read from the source; 'activity' or 'usecase' reads a Mermaid flowchart as that kind, 'erd' JSON Schema as an ERD, and any kind picks the PlantUML reader."
           },
@@ -6145,7 +7022,7 @@
               "type": "string"
             },
             "additionalProperties": {},
-            "description": "class: {packages, classes: [{name, kind: class|interface|enum|abstract, package, stereotype, attributes: ['+id: long'], operations: ['+total(): double'], literals}], relations: [{from, to, type: association|directed|aggregation|composition|generalization|realization|dependency, name, fromMultiplicity, toMultiplicity}] (an aggregation or composition's from is the whole, which gets the diamond)}. sequence: {participants, messages: [{from, to, text, kind: sync|async|reply|create|delete}], fragments: [{operator: alt|opt|loop|..., guard, operands: ['else'], operandStarts, from, to}] (message indices)}. usecase: {system, actors, useCases, relations: [{from, to, type: association|include|extend|generalization}]}. activity: {lanes, nodes: [{id, name, type: action|initial|final|flowFinal|decision|merge|fork|join|object, lane}], flows: [{from, to, guard}]}. statemachine: {states: [{id, name, type: state|initial|final|choice|fork|join, parent: composite state}], transitions: [{from, to, trigger, guard, effect}]}. erd: {entities: [{name, columns: ['id int PK', ...]}], relationships: [{from, to, fromCardinality, toCardinality: '0..1'|'1'|'0..*'|'1..*', name, identifying}]}. flowchart: {nodes: [{id, name, shape: process|decision|terminator|data|document|predefined|alternate|database|manualInput|preparation|connector|delay|display}], flows: [{from, to, label}]}. mindmap: {root: {name, children: [...]}}. requirement: {requirements: [{name, type: requirement|functional|interface|performance|physical|design, id, text, risk, verifyMethod}], elements: [{name, type, docRef}], relations: [{from, to, type: contains|copies|derives|satisfies|verifies|refines|traces}]}. c4: {elements: [{id, name, type: person|system|container|component, kind (container kind, e.g. database), technology, description, external}], relations: [{from, to, label, technology, description}]}. Every kind also takes notes: [{text, on: node(s); sequence: side: left|right|over, at: message index}] and styles: {node: {fillColor, lineColor, fontColor}}. Names may contain '\\n' or '<br/>' for line breaks; edges name nodes by name, or by id where nodes have one."
+            "description": "class: {packages, classes: [{name, kind: class|interface|enum|abstract, package, stereotype, attributes: ['+id: long'], operations: ['+total(): double'], literals}], relations: [{from, to, type: association|directed|aggregation|composition|generalization|realization|dependency, name, fromMultiplicity, toMultiplicity}] (an aggregation or composition's from is the whole, which gets the diamond)}. sequence: {participants, messages: [{from, to, text, kind: sync|async|reply|create|delete}], fragments: [{operator: alt|opt|loop|..., guard, operands: ['else'], operandStarts, from, to}] (message indices)}. usecase: {system, actors, useCases, relations: [{from, to, type: association|include|extend|generalization}]}. activity: {lanes, nodes: [{id, name, type: action|initial|final|flowFinal|decision|merge|fork|join|object, lane}], flows: [{from, to, guard}]}. statemachine: {states: [{id, name, type: state|initial|final|choice|fork|join, parent: composite state}], transitions: [{from, to, trigger, guard, effect}]}. erd: {entities: [{name, columns: ['id int PK', ...]}], relationships: [{from, to, fromCardinality, toCardinality: '0..1'|'1'|'0..*'|'1..*', name, identifying}]}. flowchart: {nodes: [{id, name, shape: process|decision|terminator|data|document|predefined|alternate|database|manualInput|preparation|connector|delay|display}], flows: [{from, to, label}]}. mindmap: {root: {name, children: [...]}}. requirement: {requirements: [{name, type: requirement|functional|interface|performance|physical|design, id, text, risk, verifyMethod}], elements: [{name, type, docRef}], relations: [{from, to, type: contains|copies|derives|satisfies|verifies|refines|traces}]}. c4: {elements: [{id, name, type: person|system|container|component, kind (container kind, e.g. database), technology, description, external}], relations: [{from, to, label, technology, description}]}. Every kind also takes notes: [{text, on: node(s); sequence: side: left|right|over, at: message index}] and styles: {node: {fillColor, lineColor, fontColor}}. Names may contain '\\n' or '<br/>' for line breaks; edges name nodes by name, or by id where nodes have one. composite (UML composite structure: classes with their parts, ports and connectors, collaborations): {nodes: [{name, id, type: class|part|port|interface|collaboration|collaborationUse, in, stereotype, properties, attributes, operations, width, height}], edges: [{from, to, type: connector|association|dependency|realization|roleBinding|generalization, name}]}. object (UML object: instances with slot values and the links between them): {nodes: [{name, id, type: object|class|componentInstance|nodeInstance|artifactInstance, in, stereotype, properties, attributes, operations, slots, width, height}], edges: [{from, to, type: link|directedLink|dependency, name}]}. communication (UML communication: lifelines, the connectors between them and numbered messages along the connectors): {nodes: [{name, id, type: lifeline, in, stereotype, properties, width, height}], edges: [{from, to, type: connector|message, name}]}. timing (UML timing: lifelines in the frame, their states, the time segments each state lasts and messages between segments): {nodes: [{name, id, type: lifeline|state|segment, in, stereotype, properties, width, height}], edges: [{from, to, type: message, name}]}. overview (UML interaction overview: interactions and interaction uses joined by control flow): {nodes: [{name, id, type: interactionUse|interaction|initial|final|decision|merge|fork|join, in, stereotype, properties, width, height}], edges: [{from, to, type: flow, name}]}. infoflow (UML information flow: classifiers and the information items conveyed between them): {nodes: [{name, id, type: class|actor|useCase|item, in, stereotype, properties, width, height}], edges: [{from, to, type: flow|dependency|association, name}]}. profile (UML profile: stereotypes, the metaclasses they extend and their generalizations): {nodes: [{name, id, type: stereotype|metaclass|enumeration, in, stereotype, properties, attributes, operations, width, height}], edges: [{from, to, type: extension|generalization, name}]}. dfd (Data flow (Gane–Sarson): external entities, processes, data stores and data flows): {nodes: [{name, id, type: external|process|store, in, stereotype, properties, width, height}], edges: [{from, to, type: flow, name}]}. bdd (SysML block definition: blocks, value and constraint types, their compositions and generalizations): {nodes: [{name, id, type: block|valueType|interfaceBlock|constraintBlock|enumeration|signal|stakeholder|viewpoint|view, in, stereotype, properties, attributes, operations, width, height}], edges: [{from, to, type: association|directed|composition|aggregation|generalization|dependency|realization|conform|expose, name}]}. ibd (SysML internal block: the parts, references and values inside one block (spec.block), its ports and the connectors between them): {block, nodes: [{name, id, type: part|reference|value|port, in, stereotype, properties, width, height}], edges: [{from, to, type: connector, name}]}. parametric (SysML parametric: constraint properties of one block (spec.block), their parameters and the values bound to them): {block, nodes: [{name, id, type: constraint|parameter|value|part, in, stereotype, properties, width, height}], edges: [{from, to, type: connector, name}]}. bpmn (BPMN process: pools and lanes, tasks, events, gateways, data and the flows between them): {nodes: [{name, id, type: pool|lane|task|userTask|serviceTask|sendTask|receiveTask|manualTask|scriptTask|businessRuleTask|callActivity|subProcess|start|end|throw|catch|exclusive|parallel|inclusive|eventBased|complex|dataObject|dataStore|annotation, in, stereotype, properties, width, height}], edges: [{from, to, type: sequence|message|association|data, name}]}. wireframe (Wireframe: frames (web, mobile, desktop) holding panels and controls, top to bottom): {nodes: [{name, id, type: frame|webFrame|mobileFrame|desktopFrame|panel|button|text|input|dropdown|checkbox|radio|switch|link|tabList|tab|image|separator|avatar|slider, in, stereotype, properties, width, height}]}. aws (AWS architecture: groups (cloud, VPC, subnets, availability zones, security groups) holding services and resources, joined by arrows): {nodes: [{name, id, type: group|genericGroup|availabilityZone|securityGroup|service|resource|generalResource|callout, in, stereotype, properties, width, height}], edges: [{from, to, type: arrow, name}]}. azure (Azure architecture: groups holding services, joined by connectors): {nodes: [{name, id, type: group|service|callout, in, stereotype, properties, width, height}], edges: [{from, to, type: connector, name}]}. gcp (Google Cloud architecture: users, zones (project, region, …) holding products and services, joined by paths): {nodes: [{name, id, type: user|zone|product|service, in, stereotype, properties, width, height}], edges: [{from, to, type: path, name}]}."
           },
           "mermaid": {
             "type": "string",
@@ -7445,7 +8322,23 @@
               "c4",
               "package",
               "component",
-              "deployment"
+              "deployment",
+              "composite",
+              "object",
+              "communication",
+              "timing",
+              "overview",
+              "infoflow",
+              "profile",
+              "dfd",
+              "bdd",
+              "ibd",
+              "parametric",
+              "bpmn",
+              "wireframe",
+              "aws",
+              "azure",
+              "gcp"
             ],
             "description": "Diagram kind; required with spec, else read from text."
           },
@@ -9804,7 +10697,7 @@
     },
     {
       "path": "/derive_diagrams",
-      "description": "Draw the diagrams a model implies, by rule, as one undo step: an overview of its packages and their dependencies, a class diagram per class view (or per package, with its direct collaborators), a sequence diagram per collaboration, a use case diagram per use case view (or per system), a state machine per lifecycle, and the activities, ERD, C4 containers, deployments and feature mind map /build_model stored with the model. Each diagram shows the model's own elements (never copies), is laid out by the style profile and goes through the quality loop. Running it again after a model change updates the diagrams in place: what is new is shown, what is gone loses its view, the rest is left as it is. kinds limits which; policy overrides the profile's policy for this call; dryRun answers what each diagram would change.",
+      "description": "Draw the diagrams a model implies, by rule, as one undo step: an overview of its packages and their dependencies, a class diagram per class view (or per package, with its direct collaborators), a sequence diagram per collaboration, a use case diagram per use case view (or per system), a state machine per lifecycle, a communication diagram per collaboration when kinds asks for communication, and the activities, ERD, C4 containers, deployments and feature mind map /build_model stored with the model. Each diagram shows the model's own elements (never copies), is laid out by the style profile and goes through the quality loop. Running it again after a model change updates the diagrams in place: what is new is shown, what is gone loses its view, the rest is left as it is. kinds limits which; policy overrides the profile's policy for this call; dryRun answers what each diagram would change.",
       "readOnly": false,
       "destructive": false,
       "request": {
@@ -9831,7 +10724,8 @@
                 "erd",
                 "c4",
                 "deployment",
-                "mindmap"
+                "mindmap",
+                "communication"
               ]
             },
             "description": "Only these diagram kinds; default all."
@@ -12874,6 +13768,80 @@
         "required": [
           "staruml",
           "extension"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "/performance_stats",
+      "description": "Diagnostics of the write path: repository listeners per event, undo and redo depth, elements indexed, editor tabs open, animations queued in the model explorer, and the renderer's heap. A count that grows over a session while the model does not points at what slows it.",
+      "readOnly": true,
+      "destructive": false,
+      "request": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      },
+      "response": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "listeners": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "description": "Repository listeners by event."
+          },
+          "undo": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "redo": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "elements": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Elements, views and diagrams indexed by id."
+          },
+          "workingDiagrams": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "explorerAnimations": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Scroll animations queued in the model explorer (jQuery fx queue)."
+          },
+          "heapUsedMiB": {
+            "type": "number"
+          },
+          "quiet": {
+            "type": "boolean",
+            "description": "A writing request is running."
+          }
+        },
+        "required": [
+          "listeners",
+          "undo",
+          "redo",
+          "elements",
+          "workingDiagrams",
+          "explorerAnimations",
+          "heapUsedMiB",
+          "quiet"
         ],
         "additionalProperties": false
       }

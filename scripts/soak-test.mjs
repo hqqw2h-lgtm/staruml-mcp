@@ -2,8 +2,8 @@
 // Soak test over stdio: starts the built server (dist/index.js) against an in-process stub of both
 // StarUML ports, sends tool calls one after another through the MCP SDK client (a rotation of
 // get_all_diagrams_info, call_endpoint find_elements, batch, build_diagram, lint_diagram through
-// call_endpoint, diagram_quality, and dry runs of improve_diagram, build_model, apply_pattern and
-// derive_diagrams through call_endpoint),
+// call_endpoint, diagram_quality, and dry runs of improve_diagram, build_model, and of
+// apply_pattern and derive_diagrams through call_endpoint),
 // and compares the first and the last --window of --calls
 // measured calls. The server's resident set
 // size is sampled with ps every --sample calls, and its live heap after a full GC is read at the
@@ -91,8 +91,11 @@ const ROTATION = [
     arguments: { spec: { system: "Soak", classes: [{ name: "Order" }] }, dryRun: true },
   },
   {
-    name: "apply_pattern",
-    arguments: { pattern: "Strategy", bindings: { Context: "Order" }, dryRun: true },
+    name: "call_endpoint",
+    arguments: {
+      name: "apply_pattern",
+      body: { pattern: "Strategy", bindings: { Context: "Order" }, dryRun: true },
+    },
   },
 ];
 

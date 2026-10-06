@@ -18,23 +18,33 @@ export const BUILD_DIAGRAM_DESCRIPTION =
   "Build a whole diagram in one undo step from a per-kind spec or Mermaid.";
 
 /**
- * The spec shape in brief. The manifest's description of `spec` is ~1,400 characters (about 400
- * o200k_base tokens) and would be resent with every turn; this names the fields a model needs to
- * write one, and describe_endpoints serves the rest.
+ * The spec shape in brief, for the kinds whose spec has sections of its own. The manifest's
+ * description of `spec` is 6,929 characters (1,805 o200k_base tokens) and would be resent
+ * with every turn; this names the fields a model needs to write one, and describe_endpoints
+ * serves the rest.
  */
-const SPEC =
+const SHAPES =
   "class{classes[{name,attributes,operations}],relations[{from,to,type}]} " +
   "sequence{participants,messages[{from,to,text}]} usecase{actors,useCases,relations} " +
   "activity{nodes[{id,name,type}],flows} statemachine{states,transitions} " +
   "erd{entities[{name,columns}],relationships} flowchart{nodes,flows} mindmap{root{name,children}} " +
   "package{packages[{name,parent}],dependencies} " +
   "component{components[{name,provides,requires,ports}],interfaces,connectors} " +
-  "deployment{nodes[{name,deploys}],artifacts,paths}; details: describe_endpoints";
+  "deployment{nodes[{name,deploys}],artifacts,paths}";
+
+/**
+ * Every other kind but requirement and c4 is one of extension #25's diagram families
+ * (src/build/families.ts there): nodes with a family-specific `type`, nested by `in`, and typed
+ * edges. One shape covers the sixteen of 0.3.0 and any family a later build adds to the enum.
+ */
+const FAMILIES =
+  "other kinds{nodes[{name,type,in}],edges[{from,to,type,name}]}, ibd|parametric also block; " +
+  "types and requirement|c4: describe_endpoints";
 
 /** Listed parameters with their shorter descriptions. */
 const LISTED: Record<string, string> = {
-  kind: "Required with spec. activity|usecase reads a Mermaid flowchart so.",
-  spec: SPEC,
+  kind: "Required with spec; activity|usecase read a Mermaid flowchart so.",
+  spec: `${SHAPES} ${FAMILIES}`,
   mermaid: "Instead of spec; its title names the diagram unless name is given.",
   name: "Diagram name; \\n or <br/> breaks lines.",
   upsert: "Add only what the same-named diagram lacks.",
@@ -45,12 +55,13 @@ const LISTED: Record<string, string> = {
 };
 
 /**
- * spec's record type lists as {type, propertyNames, properties, additionalProperties}, kind's
- * enum repeats the kinds spec's description names and layout's enum spells out eight presets the
- * description composes from two lists: 75 tokens together. The flags' descriptions say they are
- * flags, so `type: "boolean"` adds 5 tokens each. The whole request schema still checks them all.
+ * kind is listed with the manifest's enum, so the kinds a model may name follow the running
+ * extension. spec's record type lists as {type, propertyNames, properties,
+ * additionalProperties} and layout's enum spells out eight presets the description composes
+ * from two lists. The flags' descriptions say they are flags, so `type: "boolean"` adds 5 tokens
+ * each. The whole request schema still checks them all.
  */
-const UNTYPED = new Set(["spec", "kind", "layout", "upsert", "prune", "dryRun"]);
+const UNTYPED = new Set(["spec", "layout", "upsert", "prune", "dryRun"]);
 
 /**
  * The listed input schema: {@link LISTED} out of the entry's properties, loose so `parentId` and

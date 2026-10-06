@@ -17,7 +17,8 @@
 // with --improve an improve_diagram dry run of it (src/quality.ts), or with --derive a
 // derive_diagrams dry run under --tools oo, whose answer is reshaped per diagram (src/model.ts),
 // which also runs the tier's checks. --lint lists lint_diagram
-// with --tools core,lint_diagram, since it left the core tier in 0.7.0. By default StarUML is replaced by an in-process stub so the numbers
+// with --tools core,lint_diagram, since it left the core tier in 0.7.0, and --pattern
+// apply_pattern with --tools core,apply_pattern, since it left in 0.8.0. By default StarUML is replaced by an in-process stub so the numbers
 // measure this server, not StarUML; --live targets the real StarUML on 58321 and the extension
 // on 58322 instead. --build --live upserts one diagram named "load-test" into the open project:
 // the first call builds it and every later one finds nothing to add. --model and --pattern are
@@ -91,7 +92,12 @@ const MODEL = {
 const PATTERN = { pattern: "Strategy", dryRun: true };
 /** The first mode given wins; each names the tool call, its label and the tier it needs. */
 const MODES = [
-  ["pattern", { name: "apply_pattern", arguments: PATTERN }, "apply_pattern (Strategy, dry run)"],
+  [
+    "pattern",
+    { name: "apply_pattern", arguments: PATTERN },
+    "apply_pattern (Strategy, dry run)",
+    "core,apply_pattern",
+  ],
   ["model", { name: "build_model", arguments: MODEL }, "build_model (3 classes, dry run)"],
   [
     "lint",

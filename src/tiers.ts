@@ -1,38 +1,38 @@
 /**
  * Which extension endpoints get a tool of their own. Every tool definition is resent with each
- * model turn: with one tool per endpoint of extension 0.3.0 (88), tools/list and the instructions
- * cost about 13,100 tokens, the core tier under 2,000 and the oo tier under 1,500 (o200k_base,
+ * model turn: with one tool per endpoint of extension 0.3.0 (103), tools/list and the instructions
+ * cost about 14,300 tokens, the core tier under 2,000 and the oo tier under 1,500 (o200k_base,
  * scripts/token-benchmark.mjs). The endpoints a session needs are listed and the rest are reached
  * through describe_endpoints and call_endpoint.
  */
 
 /**
- * The core tier: the element CRUD every session uses, the composite endpoints that replace
- * dozens of calls (`/batch`, `/build_diagram`, `/export_diagram`), the model-first pair since
- * 0.6.0: `/build_model` (a model from an object spec) and `/apply_pattern` (a design pattern with
- * every property it prescribes, which a model writing batch ops by hand gets wrong or leaves
- * out), and since 0.7.0 the quality loop of extension #32: `/diagram_quality` scores a diagram
- * from its geometry, which a model cannot see in text, and `/improve_diagram` lays it out by the
- * style profile and applies the lint autofixes until the score reaches the profile's target.
- * Names missing from the running manifest are ignored.
+ * The core tier: the element reads and updates every session uses, the composite endpoints that
+ * replace dozens of calls (`/batch`, `/build_diagram`, `/export_diagram`), `/build_model` (a
+ * model from an object spec, since 0.6.0) and since 0.7.0 the quality loop of extension #32:
+ * `/diagram_quality` scores a diagram from its geometry, which a model cannot see in text, and
+ * `/improve_diagram` lays it out by the style profile and applies the lint autofixes until the
+ * score reaches the profile's target. Names missing from the running manifest are ignored.
  *
  * Budget, 2,000 tools/list tokens with the instructions: 0.6.0 moved `/introspect` (doctor
  * reports both versions), `/describe_diagram` (diagram_as_text reads a diagram in as many
- * tokens), `/validate_model` and `/search_types` out to make room for the pair. In 0.7.0
- * `/lint_diagram` (70 tokens) leaves for the quality pair: improve_diagram runs its autofixes in
- * its loop and diagram_quality reports what it still finds, by rule. `--tools core,lint_diagram`
- * and the like list them again.
+ * tokens), `/validate_model` and `/search_types` out to make room for `/build_model` and
+ * `/apply_pattern`. In 0.7.0 `/lint_diagram` (70 tokens) left for the quality pair:
+ * improve_diagram runs its autofixes in its loop and diagram_quality reports what it still
+ * finds, by rule. In 0.8.0 build_diagram's kind enum, now 29 kinds, costs 111 tokens, so
+ * `/apply_pattern` (112) moves to the `patterns` group, where the apply-pattern prompt and the
+ * oo tier, which lists it, still reach it, and `/delete_element` (53) leaves too: a deletion is
+ * one `/batch` op or call_endpoint away, and the default listing no longer offers the one tool
+ * that takes a whole subtree with it. `--tools core,apply_pattern` and the like list them again.
  */
 export const CORE_ENDPOINTS: readonly string[] = [
   "find_elements",
   "get_element_by_id",
   "update_element",
-  "delete_element",
   "batch",
   "build_diagram",
   "export_diagram",
   "build_model",
-  "apply_pattern",
   "diagram_quality",
   "improve_diagram",
 ];
@@ -239,7 +239,17 @@ const GROUP_RULES: readonly (readonly [string, RegExp])[] = [
   ["quality", /lint|^validate_model$|^diff_diagram$|^diagram_quality$|^improve_diagram$/],
   // Model checkpoints and the undo history they restore through.
   ["history", /snapshot|^diff_since$|^(undo|redo)$/],
-  ["project", /project|modified/],
+  // Extension #28: model fragments (.mfj) and XMI in and out. divide_fragment splits a combined
+  // fragment of a sequence diagram and stays in diagram.
+  ["io", /^(export|import)_(fragment|xmi)$/],
+  // Extension #26's write-path diagnostics.
+  ["perf", /^performance_stats$/],
+  // The project and its editor: file, metadata and templates, StarUML's preferences, the
+  // extensions it loads, and the diagram tabs open (extension #28).
+  [
+    "project",
+    /project|modified|preference|templates?$|^list_extensions$|working_diagrams$|^close_diagrams$/,
+  ],
   ["command", /command/],
   // search_types searches the same catalogues introspect dumps; describe_type explains one.
   ["meta", /^(introspect|debug|search_types|describe_type)$/],

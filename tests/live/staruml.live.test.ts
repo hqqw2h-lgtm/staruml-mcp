@@ -1621,7 +1621,9 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         expect(steps).toContain(
           'call_endpoint({name: "describe_pattern", body: {name: "Strategy"}})',
         );
-        expect(steps).toContain('apply_pattern({pattern: "Strategy", bindings, parent: "Shipping"');
+        expect(steps).toContain(
+          'call_endpoint({name: "apply_pattern", body: {pattern: "Strategy", bindings, parent: "Shipping"',
+        );
         expect(steps).toContain(
           'call_endpoint({name: "detect_patterns", body: {patterns: ["Strategy"], scope: "Shipping"}})',
         );
@@ -1835,7 +1837,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
 
       afterAll(async () => {
         // The suite goes on in this project; ThingsBoard's 93 classes would slow every later build.
-        await mcp.call("delete_element", { ref: tb.system });
+        await call("delete_element", { ref: tb.system });
         await oo.close();
       }, 60_000);
 
@@ -2023,17 +2025,193 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       });
     });
 
+    /**
+     * Extension #28's project, io and editor endpoints and #26's diagnostics, all through
+     * call_endpoint as the core tier reaches them.
+     */
+    describe("project, io and perf groups (#15)", () => {
+      it("reads a preference, changes one it may and restores it, and refuses the rest", async () => {
+        const grid = payload<{ value: boolean; default: boolean; type: string; settable: boolean }>(
+          await call("get_preference", { key: "diagramEditor.showGrid" }),
+        );
+        expect(grid).toMatchObject({ type: "check", settable: true });
+        try {
+          ok(await call("set_preference", { key: "diagramEditor.showGrid", value: !grid.value }));
+          expect(
+            payload<{ value: boolean }>(
+              await call("get_preference", { key: "diagramEditor.showGrid" }),
+            ).value,
+          ).toBe(!grid.value);
+        } finally {
+          ok(await call("set_preference", { key: "diagramEditor.showGrid", value: grid.value }));
+        }
+        expect(
+          failure(await call("set_preference", { key: "mcp-ext.server.port", value: 1 })).code,
+        ).toBe("INVALID_ARGUMENT");
+        // The access token is never answered.
+        expect(failure(await call("get_preference", { key: "mcp-ext.token" })).code).toBe(
+          "NOT_FOUND",
+        );
+      });
+
+      it("sets the project's metadata as one undo step and reads it back", async () => {
+        const before = payload<Record<string, string>>(await call("get_project_metadata"));
+        // The answer drops the fields that echo the arguments, as every answer does.
+        const after = payload<Record<string, string>>(
+          await call("set_project_metadata", { author: "Live suite", version: "0.8.0" }),
+        );
+        expect(after).toMatchObject({ name: before.name });
+        expect(after).not.toHaveProperty("author");
+        expect(payload<Record<string, string>>(await call("get_project_metadata"))).toMatchObject({
+          author: "Live suite",
+          version: "0.8.0",
+        });
+        ok(await call("undo"));
+        expect(payload<Record<string, string>>(await call("get_project_metadata"))).toEqual(before);
+      });
+
+      it("lists the templates and extensions StarUML loads", async () => {
+        const { templates } = payload<{ templates: { name: string; source: string }[] }>(
+          await call("list_templates"),
+        );
+        expect(templates.map((t) => t.name)).toEqual(
+          expect.arrayContaining(["Default", "UMLConventional", "C4Model", "WireframeModel"]),
+        );
+        const { extensions } = payload<{ extensions: { name: string; commands?: string[] }[] }>(
+          await call("list_extensions"),
+        );
+        const ours = extensions.find((e) => e.name === "staruml-mcp-extension");
+        expect(ours?.commands).toContain("mcp-ext:set-token");
+      });
+
+      it("opens a project from a template and returns to the suite's project", async () => {
+        const back = join(dir, "before-template.mdj");
+        ok(await call("save_project", { filename: back }));
+        try {
+          const made = payload<{ template: { name: string } }>(
+            await call("new_from_template", { template: "UMLConventional" }),
+          );
+          expect(made.template.name).toBe("UMLConventional");
+          const models = payload<{ count: number }>(
+            await call("find_elements", { type: "UMLModel" }),
+          ).count;
+          expect(models).toBeGreaterThan(1);
+          expect(failure(await call("new_from_template", { template: "Nope" })).code).toBe(
+            "NOT_FOUND",
+          );
+        } finally {
+          ok(await call("open_project", { filename: back }));
+        }
+      });
+
+      it("finds text in names and documentation, and lists and closes editor tabs", async () => {
+        const built = payload<{ diagram: Summary }>(
+          await call("build_diagram", {
+            kind: "class",
+            name: "Quick find",
+            spec: { classes: [{ name: "Ledger" }, { name: "Posting" }] },
+          }),
+        );
+        ok(
+          await call("set_documentation", {
+            ref: "Posting",
+            documentation: "One line of a ledger entry.",
+          }),
+        );
+        const found = payload<{ matches: { element: Summary; field: string }[]; total: number }>(
+          await call("quick_find", { text: "LEDGER" }),
+        );
+        expect(found.matches.map((m) => `${m.element.name} ${m.field}`)).toEqual(
+          expect.arrayContaining(["Ledger name", "Posting documentation"]),
+        );
+        expect(
+          payload<{ total: number; truncated?: boolean }>(
+            await call("quick_find", { text: "e", limit: 1 }),
+          ),
+        ).toMatchObject({ truncated: true });
+
+        ok(await call("switch_diagram", { diagram: built.diagram._id }));
+        const tabs = payload<{ diagrams: (Summary & { current?: boolean })[] }>(
+          await call("list_working_diagrams"),
+        );
+        expect(tabs.diagrams).toContainEqual(
+          expect.objectContaining({ _id: built.diagram._id, current: true }),
+        );
+        expect(
+          payload<{ closed: string[] }>(
+            await call("close_diagrams", { diagrams: [built.diagram._id] }),
+          ).closed,
+        ).toEqual([built.diagram._id]);
+        // No tab left open answers `ok`: the empty list is pruned.
+        const left = ok(await call("list_working_diagrams"));
+        if (left !== "ok") {
+          expect((JSON.parse(left) as { diagrams: Summary[] }).diagrams).not.toContainEqual(
+            expect.objectContaining({ _id: built.diagram._id }),
+          );
+        }
+      });
+
+      it("writes a package to a fragment and reads it into another owner", async () => {
+        const file = join(dir, "fragment.mfj");
+        ok(
+          await call("build_model", {
+            spec: { system: "Fragmented", classes: [{ name: "Part" }, { name: "Whole" }] },
+          }),
+        );
+        ok(await call("export_fragment", { ref: "Fragmented", filename: file }));
+        expect(readFileSync(file, "utf8")).toContain('"Whole"');
+        const target = payload<Summary>(
+          await call("create_element", { type: "UMLPackage", parent: "@project", name: "Copies" }),
+        );
+        ok(await call("import_fragment", { filename: file, parent: target._id }));
+        expect(
+          payload<{ count: number }>(await call("find_elements", { name: "Whole" })).count,
+        ).toBe(2);
+        // The import is an operation undo skips; deleting the owner takes it out again.
+        ok(await call("delete_element", { ref: target._id }));
+        ok(await call("delete_element", { ref: "Fragmented" }));
+      });
+
+      it("answers NOT_FOUND for XMI without the staruml-xmi extension", async () => {
+        const installed = payload<{ extensions: { name: string }[] }>(
+          await call("list_extensions"),
+        ).extensions.some((e) => e.name === "staruml-xmi");
+        const file = join(dir, "model.xmi");
+        const exported = await call("export_xmi", { filename: file });
+        if (installed) {
+          ok(exported);
+          ok(await call("import_xmi", { filename: file }));
+          return;
+        }
+        expect(failure(exported)).toMatchObject({ code: "NOT_FOUND" });
+        expect(text(exported)).toContain("staruml-xmi");
+        writeFileSync(file, '<?xml version="1.0"?><xmi:XMI xmlns:xmi="http://www.omg.org/XMI"/>');
+        expect(failure(await call("import_xmi", { filename: file })).message).toContain(
+          "staruml-xmi",
+        );
+      });
+
+      it("reports the write path's counters", async () => {
+        const stats = payload<{
+          listeners: Record<string, number>;
+          undo: number;
+          elements: number;
+          heapUsedMiB: number;
+        }>(await call("performance_stats"));
+        expect(stats.listeners.operationExecuted).toBeGreaterThan(0);
+        expect(stats.elements).toBeGreaterThan(1);
+        expect(stats.heapUsedMiB).toBeGreaterThan(0);
+      });
+    });
+
     it("called every listed tool and every endpoint of the bundled manifest", async () => {
       const { tools } = await mcp.client.listTools();
       const live = catalog.current.compiled.manifest.endpoints.map((e) => e.path);
-      // The bundled manifest is the contract this server is tested against; the running
-      // extension must offer all of it. A newer 0.3.x build may add endpoints, which the
-      // server serves from the live manifest and this suite does not call.
+      // The extension is final at 0.3.0 (phase 1i): the running one offers exactly the bundled
+      // manifest, every endpoint with the same description and schemas.
       const bundled = BUNDLED_MANIFEST.endpoints.map((e) => e.path);
-      expect(live).toEqual(expect.arrayContaining(bundled));
-      const newer = live.filter((p) => !bundled.includes(p));
-      if (newer.length > 0)
-        console.info(`[live] endpoints newer than the bundle: ${newer.join(" ")}`);
+      expect(live).toEqual(bundled);
+      expect(catalog.current.compiled.manifest).toEqual(BUNDLED_MANIFEST);
       const generic = ["describe_endpoints", "call_endpoint"];
       expect(
         [...tools.map((t) => t.name), ...bundled.map((p) => toolName(p))].filter(
