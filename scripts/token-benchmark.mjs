@@ -747,13 +747,27 @@ const messy = JSON.parse(
 /** A step of a fixing plan: one tool call, the upstream answers it needs, an image estimate. */
 const fixStep = (tool, args, replies, image = 0) => ({ tool, args, replies, image });
 
+// Since 0.9.0 view_diagram's PNG is the extension's export, capped in width (#19). The recorded
+// sizes are StarUML's built-in PNG at the display's pixel ratio, which the export at scale 1 does
+// not exceed, so the image estimate is an upper bound.
 const look = (png) =>
   fixStep(
     "view_diagram",
     { diagram: messy.diagramId },
     [
-      ["extension", "/get_element_by_id", { _id: messy.diagramId, _type: "UMLClassDiagram" }],
-      ["builtin", "/get_diagram_image_by_id", "iVBORw0KGgo="],
+      [
+        "extension",
+        "/export_diagram",
+        {
+          diagram: messy.diagramId,
+          format: "png",
+          mimeType: "image/png",
+          width: Math.min(png.width, 1600),
+          height: png.height,
+          bytes: 8,
+          base64: "iVBORw0KGgo=",
+        },
+      ],
     ],
     imageTokens(png),
   );
@@ -1024,6 +1038,11 @@ async function measureDomain() {
             tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
           ),
         ) + countTokens(client.getInstructions() ?? "");
+      // The oo tier reads the style profile before each change (#19); a strict one is all it
+      // reads, and the read is server traffic, not tokens.
+      extension.reply("/get_style_profile", {
+        body: ok({ profile: { name: "uml-standard", strict: true }, source: "project" }),
+      });
       let calls = 0;
       let results = 0;
       for (const [tool, args, slug, data] of plan.steps) {

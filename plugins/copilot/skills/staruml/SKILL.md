@@ -1090,8 +1090,16 @@ what it owns), and lists each problem with its element and rule id.
 ```
 
 `view_diagram` shows the current diagram (or `diagram`): an interactive SVG viewer with pan, zoom and
-dark mode in clients that render MCP Apps, a PNG image elsewhere. Use it to check a layout
-after building. `annotate: "paths"` labels every view with its element's path on the picture, so
+dark mode in clients that render MCP Apps, a PNG image elsewhere, no wider than the style
+profile's page (1,600 px by default; `maxWidth: 0` for full size). Use it to check a layout
+after building. With `path` (an absolute `.png`, `.jpg` or `.svg` file) it writes the image there
+and answers only the path and size; do that when looking at many diagrams, or when the user
+wants the picture:
+
+```json view_diagram
+{ "diagram": "Ordering", "path": "/tmp/ordering.png" }
+```
+ `annotate: "paths"` labels every view with its element's path on the picture, so
 what you see can be named in the next call:
 
 ```json view_diagram

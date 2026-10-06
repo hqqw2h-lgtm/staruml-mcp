@@ -212,6 +212,8 @@ staruml-mcp [options]
       --doctor             Check the setup, print a report and exit (1 on failure)
       --tools <tiers>      core | oo | all | comma list (default: core; env STARUML_MCP_TOOLS)
       --allow-tier-switch  let doctor({tools}) widen the tier (env STARUML_MCP_ALLOW_TIER_SWITCH=1)
+      --image-max-width <px>  widest inline image, 0 = none (default: the profile's page width;
+                           env STARUML_MCP_IMAGE_MAX_WIDTH)
       --session-timeout <duration>  close an idle HTTP session (default: 30m; ms, s, m or h)
       --max-sessions <number>       live HTTP sessions, LRU beyond (default: 64; 0 = stateless)
   -V, --version            Print version
@@ -262,7 +264,7 @@ extension    fail  http://localhost:58322 refused the request: Missing or wrong 
 | `get_all_diagrams_info` | List all diagrams in the current project (id, name, type). |
 | `get_current_diagram_info` | Get metadata of the currently focused diagram. |
 | `get_diagram_image_by_id` | Export a diagram as PNG by its ID. |
-| `view_diagram` | Show `diagram` (an id or a path; default the current one): an interactive SVG viewer in clients that render MCP Apps, the `get_diagram_image_by_id` PNG otherwise ([below](#inline-viewer-mcp-apps)). The SVG comes from the extension, which also resolves a path to the id the PNG needs. `annotate: "paths"` or `"ids"` labels every view with its element on the picture (never on the model); a labelled PNG comes from the extension's `export_diagram`, since the built-in PNG has no labels. |
+| `view_diagram` | Show `diagram` (an id or a path; default the current one): an interactive SVG viewer in clients that render MCP Apps, a PNG otherwise ([below](#inline-viewer-mcp-apps)), no wider than the image cap ([Image size](#image-size)). `path` (absolute; `.svg`, `.jpg`/`.jpeg`, anything else PNG) writes the image to that file instead and answers its path, pixel size and bytes; `maxWidth` (pixels, 0 for full size, accepted but unlisted) overrides the cap for one call. `annotate: "paths"` or `"ids"` labels every view with its element on the picture (never on the model). Since `path` writes files, the tool is annotated as not read-only. |
 | `diagram_as_text` | `diagram` (an id or a path; default the current one) as Mermaid, or PlantUML with `format: "plantuml"`, or with `format: "spec"` as the `build_diagram` spec of the sixteen diagram families neither has (sent on one line), through the extension's `export_text`: the text in a block of its own, then `{id?, kind, warnings?}`. Each is a form `build_diagram` reads back. |
 | `doctor` | Check Node, both StarUML ports, the extension and StarUML versions; reloads the extension's tools and, given `tools`, switches the tier. |
 
@@ -619,8 +621,43 @@ is one self-contained HTML file with no external requests; it speaks the protoco
   dragging, zooms with the wheel or the −/+ buttons, fits on `Fit` or a double-click, and follows
   the host's light or dark theme until the Dark button overrides it. The SVG is shown as an
   `<img>` data URL, which runs no script whatever text the model put in element names.
-- **Any other client**, or no compatible extension: the PNG image block `get_diagram_image_by_id`
-  returns, from StarUML's built-in API, for `diagram` or the current diagram.
+- **Any other client**: the PNG the extension's `export_diagram` draws for `diagram` or the
+  current diagram, capped in width (below). With no compatible extension, or none answering, the
+  PNG `get_diagram_image_by_id` returns from StarUML's built-in API, at its own size.
+
+### Image size
+
+An inline PNG or JPEG (`view_diagram` without the viewer, `export_diagram` without `path` or
+`scale`) is exported no wider than a cap (issue #19). The re-validation viewed 25 ThingsBoard
+diagrams as 8.7 MB of base64, up to 5,800 px wide, which a vision model scales down to 1,568 px on
+the long edge anyway. The cap is, in order: the call's `maxWidth` (`view_diagram` only),
+`--image-max-width <px>` (or `STARUML_MCP_IMAGE_MAX_WIDTH`), the style profile's
+`layout.page.width` (1,600 px in `uml-standard`, `minimal` and `presentation`, 1,123 in `print`),
+and 1,600 when no profile can be read. 0 turns it off. StarUML has no endpoint for a diagram's
+extent, so the image is exported at scale 1 first and, when it is wider than the cap, again at
+the scale that fits, rounded down to three places; a narrower diagram, the usual case, is
+exported once. The second answer carries `fullWidth`, the width at scale 1. Files are written at
+full size unless the call passes `maxWidth`; SVG is never scaled. For a picture the user wants
+to keep, pass `path`: the answer is the pixel size and bytes, and the diagram's id when the call
+named it by path, about 15 tokens instead of an image.
+
+The 25 diagrams `derive_diagrams` makes of ThingsBoard, viewed one by one under `--tools oo`
+against StarUML 7.1.1 (live suite, "views every derived diagram capped inline and writes each to
+disk"; vision tokens estimated as Anthropic's vision docs bill them, the long edge scaled to
+1,568 px and about width × height / 750 tokens, at most about 1,600 an image):
+
+| How | Image bytes | Widest | Vision tokens (est.) | Text tokens |
+|---|---|---|---|---|
+| 0.8.0: StarUML's built-in PNG | 9.0 MB (12.0 MB base64) | 5,942 px | ~36,600 | 0 |
+| `export_diagram` at scale 1 (`maxWidth: 0`) | 3.3 MB | 2,971 px | ~29,200 | 0 |
+| capped at the profile's 1,600 px (default) | 2.8 MB (3.7 MB base64) | 1,599 px | ~29,200 | 0 |
+| `path`, written to disk | 3.3 MB in files, none in context | | 0 | 376 |
+
+The built-in PNG is rendered at the display's pixel ratio (2 here), which doubles every side; the
+export at scale 1 is a third of its bytes, and the cap takes off the widest diagrams' extra
+pixels, which the model's own downscaling would have dropped anyway, so the vision estimate
+barely moves between the two. What the cap saves is transfer and context bytes; what saves
+tokens is not sending images at all: 25 diagrams to disk cost 376 text tokens.
 
 Over `--transport http` this works within a session; a request sent without a session id gets
 a server of its own, which sees neither sign, and answers the PNG.

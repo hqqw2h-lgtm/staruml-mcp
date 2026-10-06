@@ -68,9 +68,8 @@ describe("listing", () => {
       { name: "get_diagram_image_by_id", description: "Diagram as PNG.", annotations: READ_ONLY },
       {
         name: "view_diagram",
-        description:
-          "Show a diagram: pan/zoom SVG viewer in clients that render MCP Apps, else a PNG.",
-        annotations: READ_ONLY,
+        description: "Show a diagram: SVG viewer under MCP Apps, else PNG.",
+        annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
       },
       {
         name: "diagram_as_text",

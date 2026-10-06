@@ -10,6 +10,7 @@ import type { AddressInfo } from "node:net";
 import {
   ALLOW_TIER_SWITCH_ENV,
   createHttpHandler,
+  IMAGE_MAX_WIDTH_ENV,
   EXT_TOKEN_ENV,
   isEntrypoint,
   isLoopback,
@@ -61,6 +62,7 @@ describe("parseArgs", () => {
         reachable: new Set(),
       },
       allowTierSwitch: false,
+      imageMaxWidth: undefined,
       extToken: undefined,
       sessions: DEFAULT_SESSION_LIMITS,
     });
@@ -78,6 +80,28 @@ describe("parseArgs", () => {
   ])("allows a tier switch: %s", (_, flags, env, allowed) => {
     expect(parseArgs([...ARGV0, ...flags], { [ALLOW_TIER_SWITCH_ENV]: env }).allowTierSwitch).toBe(
       allowed,
+    );
+  });
+
+  it.each([
+    ["the profile's page width by default", [], undefined, undefined],
+    ["an empty variable as unset", [], "", undefined],
+    [`${IMAGE_MAX_WIDTH_ENV}`, [], "800", 800],
+    ["0 as no cap", ["--image-max-width", "0"], undefined, 0],
+    ["the flag over the variable", ["--image-max-width", "1024"], "800", 1024],
+  ])("reads the image cap: %s", (_, flags, env, width) => {
+    expect(parseArgs([...ARGV0, ...flags], { [IMAGE_MAX_WIDTH_ENV]: env }).imageMaxWidth).toBe(
+      width,
+    );
+  });
+
+  it.each([
+    [["--image-max-width", "wide"], undefined, "--image-max-width"],
+    [["--image-max-width", "-5"], undefined, "--image-max-width"],
+    [[], "1.5", IMAGE_MAX_WIDTH_ENV],
+  ])("refuses an image cap that is no whole number: %j %j", (flags, env, named) => {
+    expect(() => parseArgs([...ARGV0, ...flags], { [IMAGE_MAX_WIDTH_ENV]: env })).toThrow(
+      `Invalid ${named}`,
     );
   });
 
@@ -147,6 +171,8 @@ describe("parseArgs", () => {
         "--tools",
         "all",
         "--allow-tier-switch",
+        "--image-max-width",
+        "1200",
         "--ext-token",
         "s3cret",
         "--session-timeout",
@@ -164,6 +190,7 @@ describe("parseArgs", () => {
       doctor: true,
       tools: parseToolSelection("all"),
       allowTierSwitch: true,
+      imageMaxWidth: 1200,
       extToken: "s3cret",
       sessions: { idleTimeoutMs: 90_000, maxSessions: 0 },
     });

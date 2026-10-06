@@ -3,26 +3,50 @@ import { serialize } from "./compact.js";
 import { ErrorCode, StarUMLApiError, ToolInputError } from "./errors.js";
 import type { GeneratedTool } from "./manifest.js";
 import type { StarUMLClient } from "./staruml-client.js";
+import {
+  checkAbsolute,
+  exportRaster,
+  formatOf,
+  imageMaxWidth,
+  unreachable,
+  writePng,
+  type ExportedImage,
+} from "./images.js";
 import { VIEWER_URI, type ViewerData } from "./viewer.js";
 
 export const VIEW_DIAGRAM = "view_diagram";
 
-export const VIEW_DIAGRAM_DESCRIPTION =
-  "Show a diagram: pan/zoom SVG viewer in clients that render MCP Apps, else a PNG.";
+export const VIEW_DIAGRAM_DESCRIPTION = "Show a diagram: SVG viewer under MCP Apps, else PNG.";
+
+export interface ViewOptions {
+  annotate?: Annotate;
+  /** An absolute file to write the image to; the answer is its path and size. */
+  path?: string;
+  /**
+   * The inline PNG's width cap in pixels, 0 for none: the call's `maxWidth`, else
+   * `--image-max-width`; undefined reads the style profile's page width (images.ts).
+   */
+  maxWidth?: number;
+}
 
 /**
  * The SVG for the viewer when the client renders it and the extension can export SVG, otherwise
- * the PNG get_diagram_image_by_id returns. The SVG travels in `structuredContent`, which MCP Apps
- * hands to the view and hosts keep out of the model's context; the model gets a one-line summary.
- * `diagram` is an id or, with the extension, a path.
+ * a PNG. The SVG travels in `structuredContent`, which MCP Apps hands to the view and hosts keep
+ * out of the model's context; the model gets a one-line summary. The PNG comes from the
+ * extension's /export_diagram, no wider than the cap (issue #19), and from StarUML's built-in
+ * /get_diagram_image_by_id, at its own size, when no extension answers. With `path` the image is
+ * written to that file instead and the answer is its path and size. `diagram` is an id or, with
+ * the extension, a path.
  */
 export async function viewDiagram(
   client: StarUMLClient,
   exportTool: GeneratedTool | undefined,
   diagram: string | undefined,
   inline: boolean,
-  annotate: Annotate = "none",
+  options: ViewOptions = {},
 ): Promise<CallToolResult> {
+  const annotate = options.annotate ?? "none";
+  if (options.path !== undefined) checkAbsolute(options.path);
   if (exportTool === undefined) {
     if (annotate !== "none") {
       throw new ToolInputError("annotate needs staruml-mcp-extension's export_diagram", {
@@ -30,50 +54,125 @@ export async function viewDiagram(
         hint: "Run doctor; without the extension view_diagram shows the built-in PNG only.",
       });
     }
-    return pngResult(client, false, diagram);
+    return options.path === undefined
+      ? pngResult(client, diagram)
+      : builtinFile(client, diagram, options.path);
+  }
+  if (options.path !== undefined) {
+    return fileResult(client, exportTool, diagram, annotate, options.path, options.maxWidth);
   }
   if (inline) return svgResult(client, exportTool, diagram, annotate);
-  // StarUML's built-in PNG has no labels, so a labelled picture comes from the extension.
-  return annotate === "none"
-    ? pngResult(client, true, diagram)
-    : labelledPng(client, exportTool, diagram, annotate);
+  try {
+    return await rasterResult(client, exportTool, diagram, annotate, options.maxWidth);
+  } catch (error) {
+    // The manifest lists /export_diagram but nothing answers: StarUML's own PNG still does.
+    if (annotate === "none" && unreachable(error)) return pngResult(client, diagram);
+    throw error;
+  }
 }
 
 /** Extension #24's label modes; `none` draws nothing. */
 export const ANNOTATE = ["none", "ids", "paths"] as const;
 export type Annotate = (typeof ANNOTATE)[number];
 
-function exportBody(
-  diagram: string | undefined,
-  format: string,
-  annotate: Annotate,
-): Record<string, unknown> {
-  return {
-    ...(diagram === undefined ? {} : { diagram }),
-    format,
-    ...(annotate === "none" ? {} : { annotate }),
-  };
+function exportBody(format: string, annotate: Annotate): Record<string, unknown> {
+  return { format, ...(annotate === "none" ? {} : { annotate }) };
 }
 
 /**
- * The PNG /export_diagram draws with labels. Each label names its element as a reference the
- * next call takes, so the picture is the whole answer; the label boxes stay out of the text.
+ * /export_diagram of `diagram`. A derived sequence diagram is named like its collaboration and
+ * interaction (extension #33), so an AMBIGUOUS_REF with one diagram among its candidates is
+ * exported again by that diagram's id.
  */
-async function labelledPng(
+async function exportOf(
+  client: StarUMLClient,
+  exportTool: GeneratedTool,
+  diagram: string | undefined,
+  body: Record<string, unknown>,
+  maxWidth?: number,
+): Promise<ExportedImage> {
+  const run = (ref: string | undefined) => {
+    const sent = { ...(ref === undefined ? {} : { diagram: ref }), ...body };
+    return maxWidth === undefined
+      ? (client.callExtension(exportTool.path, sent) as Promise<ExportedImage>)
+      : exportRaster(client, exportTool.path, sent, maxWidth);
+  };
+  try {
+    return await run(diagram);
+  } catch (error) {
+    const refused = error as StarUMLApiError;
+    const sole = refused.code === "AMBIGUOUS_REF" ? soleDiagram(refused.details) : undefined;
+    if (sole === undefined) throw error;
+    return run(sole);
+  }
+}
+
+/**
+ * The PNG /export_diagram draws, labelled when asked: each label names its element as a
+ * reference the next call takes, so the picture is the whole answer; the label boxes stay out
+ * of the text. One narrowed to the cap says how wide it was.
+ */
+async function rasterResult(
   client: StarUMLClient,
   exportTool: GeneratedTool,
   diagram: string | undefined,
   annotate: Annotate,
+  maxWidth: number | undefined,
 ): Promise<CallToolResult> {
-  const data = (await client.callExtension(
-    exportTool.path,
-    exportBody(diagram, "png", annotate),
-  )) as { base64?: unknown };
-  return { content: [{ type: "image", data: exported(data, exportTool), mimeType: "image/png" }] };
+  const cap = await imageMaxWidth(client, maxWidth);
+  const data = await exportOf(client, exportTool, diagram, exportBody("png", annotate), cap);
+  const image = { type: "image" as const, data: exported(data, exportTool), mimeType: "image/png" };
+  if (data.fullWidth === undefined) return { content: [image] };
+  const size = { width: data.width, height: data.height, fullWidth: data.fullWidth };
+  return { content: [image, { type: "text", text: serialize(size) }] };
+}
+
+/** The image written by the extension to `file`, in the format its name asks for. */
+async function fileResult(
+  client: StarUMLClient,
+  exportTool: GeneratedTool,
+  diagram: string | undefined,
+  annotate: Annotate,
+  file: string,
+  maxWidth: number | undefined,
+): Promise<CallToolResult> {
+  const format = formatOf(file);
+  const body = { ...exportBody(format, annotate), path: file };
+  // A file is written at full size unless the call caps it; SVG has no pixel width to cap.
+  const cap = format === "svg" ? undefined : maxWidth;
+  const data = await exportOf(client, exportTool, diagram, body, cap);
+  return written(data, { diagram, path: file });
+}
+
+/** StarUML's built-in PNG written to `file`, when no extension answers. */
+async function builtinFile(
+  client: StarUMLClient,
+  diagram: string | undefined,
+  file: string,
+): Promise<CallToolResult> {
+  if (formatOf(file) !== "png") {
+    throw new ToolInputError(`${file}: only PNG is written without the extension`, {
+      code: ErrorCode.ExtensionRequired,
+      hint: "Name a .png file, or run doctor to set up staruml-mcp-extension for SVG and JPEG.",
+    });
+  }
+  const diagramId = diagram ?? (await currentDiagramId(client));
+  const image = await client.getDiagramImageById(diagramId);
+  return written({ diagram: diagramId, ...(await writePng(file, image)) }, { diagram, path: file });
+}
+
+/**
+ * What a written image is: its pixel size and bytes, and no image; the diagram's id and the file
+ * only where they differ from what the call named (a temp-dir path is about 40 tokens).
+ */
+function written(data: ExportedImage, input: Record<string, unknown>): CallToolResult {
+  const { diagram, path, width, height, bytes, fullWidth } = data;
+  const shown = { diagram, path, width, height, bytes, fullWidth };
+  return { content: [{ type: "text", text: serialize(shown, input) }] };
 }
 
 /** The export's base64, or the error a missing one is. */
-function exported(data: { base64?: unknown }, exportTool: GeneratedTool): string {
+function exported(data: ExportedImage, exportTool: GeneratedTool): string {
   if (typeof data.base64 !== "string") {
     throw new StarUMLApiError("export_diagram answered without the image", {
       code: ErrorCode.InvalidResponse,
@@ -84,31 +183,23 @@ function exported(data: { base64?: unknown }, exportTool: GeneratedTool): string
   return data.base64;
 }
 
-interface SvgExport {
-  diagram: string;
-  width: number;
-  height: number;
-  base64?: unknown;
-}
-
 async function svgResult(
   client: StarUMLClient,
   exportTool: GeneratedTool,
   diagram: string | undefined,
   annotate: Annotate,
 ): Promise<CallToolResult> {
-  const body = exportBody(diagram, "svg", annotate);
-  const data = (await client.callExtension(exportTool.path, body)) as SvgExport;
+  const data = await exportOf(client, exportTool, diagram, exportBody("svg", annotate));
   const svg = exported(data, exportTool);
   // The export names the diagram by id only; its summary carries the name.
   const element = (await client.callExtension("/get_element_by_id", { ref: data.diagram })) as {
     name?: string | null;
   };
   const shown = {
-    diagram: data.diagram,
+    diagram: data.diagram as string,
     name: element.name ?? "",
-    width: data.width,
-    height: data.height,
+    width: data.width as number,
+    height: data.height as number,
   };
   const structured: ViewerData = { ...shown, svg: Buffer.from(svg, "base64").toString() };
   return {
@@ -117,35 +208,14 @@ async function svgResult(
   };
 }
 
+/** StarUML's built-in PNG, at its own size: without the extension nothing can scale it. */
 async function pngResult(
   client: StarUMLClient,
-  extension: boolean,
   diagram: string | undefined,
 ): Promise<CallToolResult> {
-  let diagramId: string;
-  if (diagram === undefined) diagramId = await currentDiagramId(client);
-  else diagramId = extension ? await resolveId(client, diagram) : diagram;
+  const diagramId = diagram ?? (await currentDiagramId(client));
   const image = await client.getDiagramImageById(diagramId);
   return { content: [{ type: "image", data: image, mimeType: "image/png" }] };
-}
-
-/**
- * The id of the element `ref` names, read from the extension, which resolves paths: StarUML's
- * built-in /get_diagram_image_by_id takes ids only. Without an answering extension `ref` is
- * passed on as it is, which works when it is an id.
- */
-export async function resolveId(client: StarUMLClient, ref: string): Promise<string> {
-  try {
-    const element = (await client.callExtension("/get_element_by_id", { ref })) as { _id: string };
-    return element._id;
-  } catch (error) {
-    // callExtension throws nothing but StarUMLApiError.
-    const refused = error as StarUMLApiError;
-    if (refused.code === ErrorCode.ExtensionUnreachable) return ref;
-    const diagram = refused.code === "AMBIGUOUS_REF" ? soleDiagram(refused.details) : undefined;
-    if (diagram !== undefined) return diagram;
-    throw error;
-  }
 }
 
 /**

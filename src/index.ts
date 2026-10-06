@@ -37,6 +37,8 @@ export interface CliOptions {
   tools: ToolSelection;
   /** doctor({tools}) may widen the tier as well as narrow it. */
   allowTierSwitch: boolean;
+  /** Widest inline image in pixels, 0 for none; undefined reads the style profile's page width. */
+  imageMaxWidth: number | undefined;
   /** The extension's access token; undefined when none is configured. */
   extToken: string | undefined;
   /** HTTP session idle timeout and cap. */
@@ -52,6 +54,8 @@ export const DEFAULT_HOST = "127.0.0.1";
 
 /** Read when `--tools` is absent, for clients that pass environment but no arguments. */
 export const TOOLS_ENV = "STARUML_MCP_TOOLS";
+/** Read when `--image-max-width` is absent. */
+export const IMAGE_MAX_WIDTH_ENV = "STARUML_MCP_IMAGE_MAX_WIDTH";
 /** Read when `--allow-tier-switch` is absent: `1` or `true` allows it, `0`, `false` or empty not. */
 export const ALLOW_TIER_SWITCH_ENV = "STARUML_MCP_ALLOW_TIER_SWITCH";
 /**
@@ -117,6 +121,10 @@ export function parseArgs(
       `Extension tools to list: core, oo, all or comma-separated names (env ${TOOLS_ENV}; default ${DEFAULT_TOOLS})`,
     )
     .option(
+      "--image-max-width <px>",
+      `Widest inline PNG or JPEG in pixels, 0 for full size (env ${IMAGE_MAX_WIDTH_ENV}; default the style profile's page width, 1600 for uml-standard)`,
+    )
+    .option(
       "--allow-tier-switch",
       `Let doctor({tools}) widen the tier, not only narrow it (env ${ALLOW_TIER_SWITCH_ENV})`,
     )
@@ -132,6 +140,7 @@ export function parseArgs(
     doctor: boolean;
     tools?: string;
     allowTierSwitch?: boolean;
+    imageMaxWidth?: string;
     extToken?: string;
     sessionTimeout: string;
     maxSessions: string;
@@ -152,6 +161,7 @@ export function parseArgs(
         ? parseToolSelection(raw.tools)
         : parseToolSelection(fromEnv || DEFAULT_TOOLS, TOOLS_ENV),
     allowTierSwitch: raw.allowTierSwitch ?? parseSwitch(env[ALLOW_TIER_SWITCH_ENV]),
+    imageMaxWidth: optionalCount(raw.imageMaxWidth, env[IMAGE_MAX_WIDTH_ENV]),
     // An empty value means no token, as an empty mcp-ext.token preference does in the extension.
     extToken: (raw.extToken ?? env[EXT_TOKEN_ENV]) || undefined,
     sessions: {
@@ -194,6 +204,7 @@ export async function main(
     name: packageJson.name,
     version: packageJson.version,
     catalog: state,
+    imageMaxWidth: options.imageMaxWidth,
   };
 
   if (options.transport === "stdio") {
@@ -521,6 +532,12 @@ function parseSwitch(value: string | undefined): boolean {
   if (normalized === "1" || normalized === "true") return true;
   if (normalized === "" || normalized === "0" || normalized === "false") return false;
   throw new Error(`Invalid ${ALLOW_TIER_SWITCH_ENV}: "${value}". Use 1, true, 0 or false.`);
+}
+
+/** `--image-max-width`, else its variable when set and not empty, else undefined. */
+function optionalCount(flag: string | undefined, fromEnv: string | undefined): number | undefined {
+  if (flag !== undefined) return parseCount(flag, "--image-max-width");
+  return fromEnv ? parseCount(fromEnv, IMAGE_MAX_WIDTH_ENV) : undefined;
 }
 
 function parseCount(value: string, flag: string): number {

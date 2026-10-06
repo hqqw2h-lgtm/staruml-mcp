@@ -602,19 +602,16 @@ describe("doctor({tools}): the tier is fixed at launch", () => {
     expect(await names()).not.toContain("generate_diagram");
   });
 
-  it("says in its schema whether the tier may widen", async () => {
-    await connectOo();
-    const locked = (await mcp.client.listTools()).tools.find((t) => t.name === "doctor")!;
-    expect(locked.inputSchema.properties!.tools).toMatchObject({
-      description: "Tier to list, never wider than at launch: core, oo, all or tool names.",
-    });
-    await mcp.close();
+  it.each([
+    ["oo", false, "Tier: core, oo, all or tool names; never wider than at launch."],
+    ["oo", true, "Tier to list: core, oo, all or tool names."],
+    ["core", false, "Tier to list: core, oo, all or tool names."],
+  ])("says in its schema whether a %s tier may widen (switch %s)", async (tools, allow, says) => {
+    await connectOo(tools, allow);
 
-    await connectOo("oo", true);
-    const open = (await mcp.client.listTools()).tools.find((t) => t.name === "doctor")!;
-    expect(open.inputSchema.properties!.tools).toMatchObject({
-      description: "Tier to list: core, oo, all or comma-separated tool names.",
-    });
+    const doctor = (await mcp.client.listTools()).tools.find((t) => t.name === "doctor")!;
+
+    expect(doctor.inputSchema.properties!.tools).toMatchObject({ description: says });
   });
 
   it("no sequence of doctor calls widens the tier through the MCP tool", async () => {

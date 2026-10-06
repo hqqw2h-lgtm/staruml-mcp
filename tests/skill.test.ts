@@ -88,10 +88,8 @@ function expectedRequest(tool: string, args: Record<string, unknown>) {
     case "generate_diagram":
       return { fixture: builtin, path: "/generate_diagram", body: args };
     case "view_diagram":
-      // A labelled picture comes from the extension; the built-in PNG has no labels.
-      return args.annotate === undefined
-        ? { fixture: builtin, path: "/get_diagram_image_by_id", body: { diagramId: "D1" } }
-        : { fixture: extension, path: "/export_diagram", body: { ...args, format: "png" } };
+      // The extension exports the PNG, labelled or not, so it can be capped in width (#19).
+      return { fixture: extension, path: "/export_diagram", body: { ...args, format: "png" } };
     case "diagram_as_text":
       return {
         fixture: extension,

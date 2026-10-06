@@ -15,6 +15,7 @@ import {
   exportDiagramInput,
 } from "./export-diagram.js";
 import { LruCache, memo } from "./cache.js";
+import { exportRaster, imageMaxWidth, inlineRaster } from "./images.js";
 import type { Check } from "./doctor.js";
 import {
   DELETE_ELEMENT,
@@ -288,8 +289,9 @@ export function syncExtensionTools(
   client: StarUMLClient,
   state: CatalogState,
   registered: RegisteredExtensionTools,
+  options: SendOptions = {},
 ): void {
-  const wanted = specs(server, client, state);
+  const wanted = specs(server, client, state, options);
   const names = new Set(wanted.map((s) => s.name));
   for (const [name, entry] of registered) {
     if (!names.has(name)) {
@@ -393,20 +395,33 @@ const SHORT_LISTED: Record<
   },
 };
 
-function specs(server: McpServer, client: StarUMLClient, state: CatalogState): ToolSpec[] {
+function specs(
+  server: McpServer,
+  client: StarUMLClient,
+  state: CatalogState,
+  options: SendOptions,
+): ToolSpec[] {
   const out: ToolSpec[] = listedTools(state).map((tool) => {
     const short = Object.hasOwn(SHORT_LISTED, tool.name) ? SHORT_LISTED[tool.name] : undefined;
     return short === undefined
       ? {
           name: tool.name,
           fingerprint: tool.fingerprint,
-          register: () => registerGenerated(server, client, state, tool),
+          register: () => registerGenerated(server, client, state, tool, options),
         }
       : {
           name: tool.name,
           fingerprint: `short ${tool.fingerprint}`,
           register: () =>
-            registerShortListed(server, client, state, tool, short.description, short.input(tool)),
+            registerShortListed(
+              server,
+              client,
+              state,
+              tool,
+              short.description,
+              short.input(tool),
+              options,
+            ),
         };
   });
   const introspect = summarized(state);
@@ -427,7 +442,7 @@ function specs(server: McpServer, client: StarUMLClient, state: CatalogState): T
       {
         name: "call_endpoint",
         fingerprint: "generic",
-        register: () => registerCall(server, client, state),
+        register: () => registerCall(server, client, state, options),
       },
     );
   }
@@ -439,29 +454,42 @@ function registerGenerated(
   client: StarUMLClient,
   state: CatalogState,
   tool: GeneratedTool,
+  options: SendOptions,
 ): RegisteredTool {
   return server.registerTool(
     tool.name,
     { description: tool.description, inputSchema: tool.inputSchema, annotations: tool.annotations },
     async (input: Record<string, unknown>) =>
       runTool(actionOf(tool.name), async () =>
-        resultOf(tool.name, await send(client, state, tool, input), input),
+        resultOf(tool.name, await send(client, state, tool, input, options), input),
       ),
   );
 }
 
+/** What the server was started with that shapes how a call is sent. */
+export interface SendOptions {
+  /** `--image-max-width`; the style profile's page width when absent. */
+  imageMaxWidth?: number;
+}
+
 /**
  * Every extension tool sends through here: under a closed tier a call that changes something
- * waits until the project's style profile is strict, and is refused when it cannot be made so.
+ * waits until the project's style profile is strict, and is refused when it cannot be made so;
+ * an inline /export_diagram at the default scale comes back no wider than the image cap.
  */
 async function send(
   client: StarUMLClient,
   state: CatalogState,
   tool: GeneratedTool,
   body: Record<string, unknown>,
+  options: SendOptions,
 ): Promise<unknown> {
   if (needsStrictProfile(state.selection, tool.name, tool.entry.readOnly === true)) {
     await ensureStrictProfile(client, tool.path);
+  }
+  if (tool.name === EXPORT_DIAGRAM && inlineRaster(body)) {
+    const cap = await imageMaxWidth(client, options.imageMaxWidth);
+    return exportRaster(client, tool.path, body, cap);
   }
   return client.callExtension(tool.path, body);
 }
@@ -518,6 +546,7 @@ function registerShortListed(
   tool: GeneratedTool,
   description: string,
   inputSchema: z.ZodObject,
+  options: SendOptions,
 ): RegisteredTool {
   return server.registerTool(
     tool.name,
@@ -525,7 +554,7 @@ function registerShortListed(
     async (input: Record<string, unknown>) =>
       runTool(actionOf(tool.name), async () => {
         const body = validated(state, tool, input);
-        return resultOf(tool.name, await send(client, state, tool, body), body);
+        return resultOf(tool.name, await send(client, state, tool, body, options), body);
       }),
   );
 }
@@ -756,6 +785,7 @@ function registerCall(
   server: McpServer,
   client: StarUMLClient,
   state: CatalogState,
+  options: SendOptions,
 ): RegisteredTool {
   return server.registerTool(
     "call_endpoint",
@@ -774,7 +804,7 @@ function registerCall(
           return jsonResult(await readIntrospect(client, state, tool.path, sent), body);
         }
         const sent = validated(state, tool, body);
-        return resultOf(name, await send(client, state, tool, sent), body);
+        return resultOf(name, await send(client, state, tool, sent, options), body);
       }),
   );
 }

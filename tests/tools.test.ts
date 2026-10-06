@@ -83,6 +83,9 @@ const ENDPOINTS = BUNDLED_MANIFEST.endpoints.filter((e) => e.path !== "/introspe
 const ARGS: Record<string, Record<string, unknown>> = {
   // An op path must name an endpoint of the manifest (src/batch.ts).
   "/batch": { ops: [{ path: "/find_elements" }] },
+  // A scale of its own skips the inline width cap and its profile read (images.ts), which
+  // batch.test.ts covers.
+  "/export_diagram": { scale: 1 },
 };
 
 /**
@@ -281,6 +284,7 @@ describe("tool registry", () => {
       "set_stereotype",
       "undo",
       "update_element",
+      "view_diagram",
     ]);
   });
 

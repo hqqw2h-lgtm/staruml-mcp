@@ -363,11 +363,61 @@ describe("export_diagram", () => {
 
     const result = await mcp.call("export_diagram", { diagram: "Model/Main", format });
 
-    expect(extension.requests[0]!.body).toEqual({ diagram: "Model/Main", format });
+    expect(extension.requests.at(-1)!.body).toEqual({ diagram: "Model/Main", format });
     expect(result.content).toEqual([
       { type: "image", data: "iVBORw0KGgo=", mimeType },
       { type: "text", text: '{"diagram":"D1","width":640,"height":480,"bytes":1234}' },
     ]);
+  });
+
+  it("exports an inline image wider than the cap again at the cap, and says how wide it was", async () => {
+    const png = (width: number) => ({
+      body: {
+        success: true,
+        data: { ...meta, width, mimeType: "image/png", base64: "iVBORw0KGgo=" },
+      },
+    });
+    extension.reply("/export_diagram", png(3200), png(1600));
+
+    const result = await mcp.call("export_diagram", { diagram: "D1" });
+
+    expect(extension.requests.map((r) => [r.path, r.body])).toEqual([
+      ["/get_style_profile", {}],
+      ["/export_diagram", { diagram: "D1" }],
+      ["/export_diagram", { diagram: "D1", scale: 0.5 }],
+    ]);
+    expect(text({ content: result.content.slice(1) })).toBe(
+      '{"format":"png","width":1600,"height":480,"bytes":1234,"fullWidth":3200}',
+    );
+  });
+
+  it.each([
+    ["a scale of its own", { scale: 2 }],
+    ["a file", { path: "/tmp/d.png" }],
+    ["SVG", { format: "svg" }],
+  ])("leaves the size alone for %s", async (_, args) => {
+    extension.reply("/export_diagram", {
+      body: { success: true, data: { ...meta, width: 9000, mimeType: "image/png" } },
+    });
+
+    await mcp.call("export_diagram", args);
+
+    expect(extension.requests.map((r) => r.path)).toEqual(["/export_diagram"]);
+  });
+
+  it("caps through call_endpoint too", async () => {
+    extension.reply("/get_style_profile", {
+      body: { success: true, data: { profile: { layout: { page: { width: 900 } } } } },
+    });
+    extension.reply(
+      "/export_diagram",
+      { body: { success: true, data: { ...meta, width: 1800 } } },
+      { body: { success: true, data: { ...meta, width: 900 } } },
+    );
+
+    await mcp.call("call_endpoint", { name: "export_diagram", body: {} });
+
+    expect(extension.requests.at(-1)!.body).toEqual({ scale: 0.5 });
   });
 
   it("keeps an SVG as JSON, since MCP clients do not all render SVG images", async () => {
@@ -407,7 +457,7 @@ describe("export_diagram", () => {
 
     const result = await mcp.call("export_diagram", { annotate: "paths" });
 
-    expect(extension.requests[0]!.body).toEqual({ annotate: "paths" });
+    expect(extension.requests.at(-1)!.body).toEqual({ annotate: "paths" });
     expect(JSON.parse(text(result).split("\n").at(-1)!)).toMatchObject({
       annotations: [label, "odd"],
     });

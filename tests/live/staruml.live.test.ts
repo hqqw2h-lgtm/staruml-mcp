@@ -70,6 +70,18 @@ function payload<T>(result: CallToolResult): T {
   return JSON.parse(ok(result)) as T;
 }
 
+/**
+ * Whether the running extension publishes `path` as the bundled manifest does. Phase 2l runs
+ * against an extension whose next release is in progress; where an endpoint changed, the
+ * assertions that depend on its old behaviour wait for the next manifest sync.
+ */
+let runningManifest: typeof BUNDLED_MANIFEST | undefined;
+function sameAsBundled(path: string): boolean {
+  const entry = (m: typeof BUNDLED_MANIFEST | undefined) =>
+    JSON.stringify(m?.endpoints.find((e) => e.path === path));
+  return entry(runningManifest) === entry(BUNDLED_MANIFEST);
+}
+
 function failure(result: CallToolResult): { code: string; message: string; status?: number } {
   expect(result.isError, text(result)).toBe(true);
   return (result.structuredContent as { error: { code: string; message: string } }).error;
@@ -125,6 +137,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
     const diagnosis = await diagnose(new StarUMLClient());
     expect(healthy(diagnosis.checks), JSON.stringify(diagnosis.checks)).toBe(true);
     catalog = new CatalogState(diagnosis.catalog);
+    runningManifest = diagnosis.catalog.compiled.manifest;
     mcp = await connect({ catalog });
     listed = new Set((await mcp.client.listTools()).tools.map((t) => t.name));
     // A null filename (never saved) is pruned from the result.
@@ -679,7 +692,9 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         }),
       );
       expect(laid.separations).toMatchObject({ node: 40, rank: 80 });
-      expect(laid.fitted).toBeGreaterThan(0);
+      // The extension's next release sizes views to their content when it builds them, so its
+      // fit finds nothing left to resize; the bundled 0.3.0 always resized some.
+      if (sameAsBundled("/layout_diagram")) expect(laid.fitted).toBeGreaterThan(0);
       expect(
         payload<{ edges: number }>(
           await call("route_edges", { diagram: classDiagramId, lineStyle: "rectilinear" }),
@@ -1965,10 +1980,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           // The in-progress extension scores what a reader sees (labels over text, shared edge
           // lines, ...), which takes ThingsBoard's worst diagram from 82 to 59; until the
           // manifest is synced, the bundled metric's floor applies to its mean only.
-          const quality = (m: typeof BUNDLED_MANIFEST) =>
-            JSON.stringify(m.endpoints.find((e) => e.path === "/diagram_quality"));
-          const sameMetric =
-            quality(catalog.current.compiled.manifest) === quality(BUNDLED_MANIFEST);
+          const sameMetric = sameAsBundled("/diagram_quality");
           expect(sameMetric ? derived.quality.min : derived.quality.mean).toBeGreaterThanOrEqual(
             80,
           );
@@ -1989,6 +2001,75 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
             derived.diagrams.map((d) => [d.name, d.score]),
           );
           expect(text(await ooCall("diagram_as_text", { diagram: first.name }))).toBe(before);
+        },
+      );
+
+      it(
+        "views every derived diagram capped inline and writes each to disk (#19)",
+        { timeout: 600_000 },
+        async () => {
+          const size = (base64: string) => {
+            const png = Buffer.from(base64, "base64");
+            return { width: png.readUInt32BE(16), height: png.readUInt32BE(20), bytes: png.length };
+          };
+          // Anthropic's vision docs: past 1,568 px on the long edge an image is scaled down,
+          // then billed about width * height / 750 tokens, at most about 1,600.
+          const visionTokens = ({ width, height }: { width: number; height: number }) => {
+            const fit = Math.min(1, 1568 / Math.max(width, height));
+            return Math.min(1600, Math.round((width * fit * height * fit) / 750));
+          };
+          const out = mkdtempSync(join(tmpdir(), "staruml-mcp-oo-images-"));
+          const totals = {
+            builtin: { bytes: 0, widest: 0, vision: 0 },
+            full: { bytes: 0, widest: 0, vision: 0 },
+            capped: { bytes: 0, widest: 0, vision: 0 },
+            disk: { tokens: 0, bytes: 0 },
+          };
+          const add = (into: (typeof totals)["full"], base64: string) => {
+            const seen = size(base64);
+            into.bytes += seen.bytes;
+            into.widest = Math.max(into.widest, seen.width);
+            into.vision += visionTokens(seen);
+            return seen;
+          };
+          const ids = new Map(
+            payload<{ id: string; name: string }[]>(await call("get_all_diagrams_info")).map(
+              (d) => [d.name, d.id],
+            ),
+          );
+          for (const [index, { name }] of derived.diagrams.entries()) {
+            // 0.8.0's answer: StarUML's own PNG at the display's pixel ratio.
+            const id = ids.get(name) ?? name;
+            const before = await call("get_diagram_image_by_id", { diagramId: id });
+            add(totals.builtin, (before.content[0] as { data: string }).data);
+            const full = await ooCall("view_diagram", { diagram: id, maxWidth: 0 });
+            add(totals.full, (full.content[0] as { data: string }).data);
+            const capped = await ooCall("view_diagram", { diagram: id });
+            const shown = add(totals.capped, (capped.content[0] as { data: string }).data);
+            expect(shown.width, name).toBeLessThanOrEqual(1600);
+            const file = join(out, `${String(index).padStart(2, "0")}.png`);
+            const written = await ooCall("view_diagram", { diagram: id, path: file });
+            // The id and the file are the call's own, so the answer leaves them out.
+            const answer = payload<{ path?: string; width: number; bytes: number }>(written);
+            expect(answer.path).toBeUndefined();
+            expect(readFileSync(file).subarray(0, 8).toString("hex")).toBe(PNG_SIGNATURE);
+            expect(size(readFileSync(file).toString("base64")).width).toBe(answer.width);
+            totals.disk.tokens += countTokens(text(written));
+            totals.disk.bytes += answer.bytes;
+          }
+          const svg = join(out, "first.svg");
+          ok(await ooCall("view_diagram", { diagram: derived.diagrams[0]!.name, path: svg }));
+          expect(readFileSync(svg, "utf8")).toMatch(/^<svg /);
+          const mb = (bytes: number) => (bytes / 1e6).toFixed(1);
+          console.info(
+            `[live] ${derived.diagrams.length} ThingsBoard diagrams viewed (#19): ` +
+              `built-in PNG ${mb(totals.builtin.bytes)} MB, widest ${totals.builtin.widest} px, ~${totals.builtin.vision} vision tokens; ` +
+              `export at scale 1 ${mb(totals.full.bytes)} MB, widest ${totals.full.widest} px, ~${totals.full.vision}; ` +
+              `capped ${mb(totals.capped.bytes)} MB, widest ${totals.capped.widest} px, ~${totals.capped.vision}; ` +
+              `to disk ${totals.disk.tokens} text tokens for ${mb(totals.disk.bytes)} MB of files`,
+          );
+          expect(totals.capped.bytes).toBeLessThan(totals.builtin.bytes);
+          expect(totals.disk.tokens).toBeLessThan(30 * derived.diagrams.length);
         },
       );
 

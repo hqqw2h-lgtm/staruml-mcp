@@ -97,6 +97,11 @@ export interface ServerConfig {
   version?: string;
   /** Extension catalog and tool selection; the bundled manifest and the core tier when absent. */
   catalog?: CatalogState;
+  /**
+   * `--image-max-width`: the widest inline PNG or JPEG in pixels, 0 for no cap; the style
+   * profile's page width when absent (images.ts).
+   */
+  imageMaxWidth?: number;
 }
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const;
@@ -132,6 +137,7 @@ const ViewDiagramInput = unstamped(
       annotate: unlisted(z.enum(ANNOTATE), "enum", "type")
         .optional()
         .describe("As export_diagram's."),
+      path: unlisted(nonEmpty(), "type").optional().describe("Absolute file to write instead."),
     }),
   ),
 );
@@ -145,25 +151,39 @@ const DiagramAsTextInput = unstamped(
   ),
 );
 
+/**
+ * view_diagram's `maxWidth`, which the loose root passes unlisted: listed, it took the core tier
+ * past its 2,000-token budget. Pixels, 0 for no cap.
+ */
+function widthArgument(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) return value;
+  throw new ToolInputError(`maxWidth: expected a whole number of pixels, 0 or more`, {
+    code: ErrorCode.InvalidArgument,
+    hint: "maxWidth caps the inline PNG's width; 0 keeps it at full size, path writes a file.",
+  });
+}
+
 /** `diagram`, or the unlisted `id` it replaced. */
 function diagramArgument(input: { diagram?: string; id?: unknown }): string | undefined {
   return input.diagram ?? (typeof input.id === "string" ? input.id : undefined);
 }
 
 /**
- * The tier argument says what the server lets it do: without --allow-tier-switch a model reading
- * "tier to list" would otherwise try `core` from `oo` and meet TIER_LOCKED.
+ * The tier argument says what the server lets it do. A closed launch tier without
+ * --allow-tier-switch cannot widen (TIER_LOCKED), and a model reading only "tier to list" would
+ * try `core` from `oo`; an open one reaches every endpoint already, so any tier is taken.
  */
-const doctorInput = (allowTierSwitch: boolean) =>
+const doctorInput = (locked: boolean) =>
   unstamped(
     z.object({
       tools: z
         .string()
         .optional()
         .describe(
-          allowTierSwitch
-            ? "Tier to list: core, oo, all or comma-separated tool names."
-            : "Tier to list, never wider than at launch: core, oo, all or tool names.",
+          locked
+            ? "Tier: core, oo, all or tool names; never wider than at launch."
+            : "Tier to list: core, oo, all or tool names.",
         ),
     }),
   );
@@ -265,7 +285,9 @@ export function createServer(config: ServerConfig = {}): McpServer {
     {
       description: VIEW_DIAGRAM_DESCRIPTION,
       inputSchema: ViewDiagramInput,
-      annotations: READ_ONLY,
+      // path writes, and overwrites, a file (issue #19); a client that runs read-only tools
+      // without asking must not run this one so.
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
       _meta: VIEWER_TOOL_META,
     },
     async (input) =>
@@ -273,7 +295,11 @@ export function createServer(config: ServerConfig = {}): McpServer {
         const inline = viewerRead || declaresUi(server.server.getClientCapabilities());
         const diagram = diagramArgument(input);
         const exportTool = extensionTool(catalog, "export_diagram");
-        return viewDiagram(client, exportTool, diagram, inline, input.annotate);
+        return viewDiagram(client, exportTool, diagram, inline, {
+          annotate: input.annotate,
+          path: input.path,
+          maxWidth: widthArgument(input.maxWidth) ?? config.imageMaxWidth,
+        });
       }),
   );
 
@@ -299,7 +325,7 @@ export function createServer(config: ServerConfig = {}): McpServer {
     "doctor",
     {
       description: "Check StarUML, extension and Node setup; reloads the extension's tools.",
-      inputSchema: doctorInput(catalog.allowTierSwitch),
+      inputSchema: doctorInput(!catalog.allowTierSwitch && catalog.selection.closed),
       annotations: READ_ONLY,
     },
     async ({ tools }) =>
@@ -319,7 +345,9 @@ export function createServer(config: ServerConfig = {}): McpServer {
   const extensionTools: RegisteredExtensionTools = new Map();
   const prompts = registerPrompts(server, catalog);
   const sync = () => {
-    syncExtensionTools(server, client, catalog, extensionTools);
+    syncExtensionTools(server, client, catalog, extensionTools, {
+      imageMaxWidth: config.imageMaxWidth,
+    });
     for (const [name, tool] of Object.entries(handWritten)) {
       const wanted = listsHandWritten(catalog.selection, name);
       // Each change sends notifications/tools/list_changed, so unchanged tools are left alone.
