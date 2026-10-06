@@ -280,6 +280,29 @@ describe("view_diagram for a client without MCP Apps", () => {
     expect(exports().at(-1)).toEqual({ diagram: "D1", format: "png", scale: 0.5 });
   });
 
+  it.each([
+    ["a page width of 0", { profile: { layout: { page: { width: 0 } } } }],
+    ["a page width that is no number", { profile: { layout: { page: { width: "900" } } } }],
+  ])("caps at 1,600 px for %s", async (_, data) => {
+    extension.reply("/get_style_profile", { body: { success: true, data } });
+    servePng(3200, 1600);
+
+    await plain.call("view_diagram", { diagram: "D1" });
+
+    expect(exports().at(-1)).toEqual({ diagram: "D1", format: "png", scale: 0.5 });
+  });
+
+  it("exports once when the image is exactly as wide as the cap, or says no width", async () => {
+    servePng(1600);
+    await plain.call("view_diagram", { diagram: "D1" });
+    expect(exports()).toHaveLength(1);
+
+    extension.requests.length = 0;
+    extension.reply("/export_diagram", { body: { success: true, data: { base64: PNG } } });
+    await plain.call("view_diagram", { diagram: "D1" });
+    expect(exports()).toHaveLength(1);
+  });
+
   it("rounds the scale down, and never below 1/100", async () => {
     servePng(4801, 1599);
     await plain.call("view_diagram", { diagram: "D1" });
@@ -504,6 +527,20 @@ describe("view_diagram for a client without MCP Apps", () => {
         const result = await mcp.call("view_diagram", { path: file });
 
         expect(JSON.parse(text(result))).toEqual({ diagram: "D7", bytes: 8 });
+      } finally {
+        await mcp.close();
+      }
+    });
+
+    it("answers no size for 24 bytes or more that are not a PNG", async () => {
+      const notPng = Buffer.alloc(32, 7).toString("base64");
+      builtin.reply("/get_diagram_image_by_id", { body: { success: true, data: notPng } });
+      const file = join(mkdtempSync(join(tmpdir(), "staruml-mcp-view-")), "odd.png");
+      const mcp = await connect({ ...config(), catalog: disabled() });
+      try {
+        const result = await mcp.call("view_diagram", { diagram: "D1", path: file });
+
+        expect(JSON.parse(text(result))).toEqual({ bytes: 32 });
       } finally {
         await mcp.close();
       }

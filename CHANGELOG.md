@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-06
+
+Built against staruml-mcp-extension 0.3.0 (103 endpoints); the enforcement fixes from the `oo`
+tier's re-validation on ThingsBoard, which left the tier in one call, never met `STYLE_LOCKED`
+and received 25 diagrams as 8.7 MB of inline base64. In short, by phase:
+
+- **2l** (#19): the tier is fixed at launch and `doctor` may only narrow it; under `oo` the
+  project's style profile is strict before anything changes and `override` is not part of the
+  tier; `view_diagram` writes to a file with `path`, and inline images are capped in width.
+
+The core tier lists 19 tools in 1,998 tokens, the `oo` tier 13 in 1,119, `--tools all` 110 in
+14,294 (o200k_base). The four modelling scenarios cost 11,560 tokens counting the definitions
+once per scenario and 6,114 with prompt caching, 8 and 2 more than 0.8.0 for `view_diagram`'s
+`path` and `doctor`'s wording. ThingsBoard's 25 derived diagrams, viewed one by one: 9.0 MB of
+built-in PNG up to 5,942 px wide in 0.8.0, 2.8 MB capped at 1,599 px now, or 376 text tokens
+written to disk. Load (one session, eleven paths, two runs each at 50 and 200): 0 errors.
+Soak, four runs: RSS +6.0 to +9.2%, heap after GC +3.2 to +3.6%, 0 errors. Mutation 94.23% of
+4,090 mutants. Live: 176 of 176.
+
+### Changed
+- The tier is the user's choice at launch (#19): `doctor({tools})` refuses a selection that reaches an endpoint or lists a tool the current one does not, with the new `TIER_LOCKED` code and before anything is read. From an open tier (`core`, `all`, a list without `oo`) every endpoint is reachable through `call_endpoint` already, so any change is taken; from `oo`, `core`, `all`, `oo,<drawing endpoint>` and open lists are refused and narrowing is one-way. `--allow-tier-switch` (or `STARUML_MCP_ALLOW_TIER_SWITCH=1`) restores free switching; `doctor`'s `tools` description says which rule applies.
+- `NOT_IN_TIER` hints explain the model-first alternative (`build_model`, then `derive_diagrams` and `improve_diagram`) and no longer name `doctor({tools: "core"})`, which the re-validation's agent followed out of the tier (#19).
+- Under a closed tier every call the manifest does not mark read-only, saves and exports included (not `new_project` or `open_project`), first reads the project's style profile and, when it is not strict, sets `strict: true` and reads it back; `blockSaveOnErrors` stays as the profile has it. A profile that cannot be made strict refuses the call with the new `PROFILE_NOT_STRICT` code and nothing is sent. The read is one local request per change: a session-wide flag would miss an `undo`, a snapshot restore, another project or another client turning strict off (#19).
+- `override` is refused with `NOT_IN_TIER` on every endpoint the `oo` tier reaches by default and left out of the schemas `describe_endpoints` shows there, so `STYLE_LOCKED` is final in the tier; an endpoint the user adds at launch (`oo,move_views`) keeps it (#19).
+- `view_diagram`'s PNG comes from the extension's `export_diagram` (StarUML's built-in PNG when no extension answers), no wider than a cap: the call's unlisted `maxWidth`, else `--image-max-width` (`STARUML_MCP_IMAGE_MAX_WIDTH`), else the style profile's `layout.page.width` (1,600 px in `uml-standard`), else 1,600; 0 for full size. `export_diagram` without `path` or `scale` is capped the same way. A wider diagram is exported again at the scale that fits and the answer gives `fullWidth` (#19).
+- `view_diagram` is annotated as not read-only and destructive, since `path` writes and overwrites a file (#19).
+- The live contract test accepts a running manifest that contains the bundled endpoints, and ThingsBoard's floor of 80 applies to the mean score, while the extension's next release (a quality metric that scores what a reader sees) is in progress; the exact contract returns with the next manifest sync (#19).
+
+### Added
+- `view_diagram`'s `path`: an absolute file (`.svg`, `.jpg`/`.jpeg`, anything else PNG) the extension writes, or this server from StarUML's built-in PNG without one; the answer is the pixel size and bytes, with the diagram's id when the call named it by path, about 15 tokens (#19).
+- `--allow-tier-switch`, `--image-max-width <px>` and their environment variables (#19).
+- Contract tests for every refusal path of the `oo` tier and for `TIER_LOCKED`; property tests that no sequence of `doctor` selections from any launch tier widens what the server reaches, at the selection and through the MCP tool; a contract test that the manifest's strict-guarded endpoints the tier reaches are exactly `update_element`, whose view fields it refuses itself, and that `override` is refused on every overridable endpoint it reaches (#19).
+- `scripts/load-test.mjs`'s stub answers `/get_style_profile` with a strict profile, so `--derive` measures the read the `oo` tier now makes before each change (#19).
+- Live: the first change under `oo` makes the profile strict and a client talking to the extension directly then meets `STYLE_LOCKED`; a reset profile is strict again after the next change; `doctor` cannot widen a narrowed session; every derived ThingsBoard diagram viewed capped inline and written to disk (#19).
+
+### Fixed
+- The `oo` tier property test no longer fails when fast-check generates `all` or `core` as an added name (#19).
+
 ## [0.8.0] - 2026-10-06
 
 Built against staruml-mcp-extension 0.3.0 as finished (extension phase 1i: every diagram
@@ -324,7 +362,8 @@ The original 4 Mermaid/diagram tools continue to work without the extension.
 - Inspired by [`staruml/staruml-mcp-server`](https://github.com/staruml/staruml-mcp-server) by Minkyu Lee (StarUML creator).
 - Reimplemented with multi-transport support to work around stdio MCP registration issues in some clients (e.g., [Claude Code #36914](https://github.com/anthropics/claude-code/issues/36914)).
 
-[Unreleased]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/hqqw2h-lgtm/staruml-mcp/compare/v0.5.0...v0.6.0

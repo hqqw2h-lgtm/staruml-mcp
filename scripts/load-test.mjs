@@ -16,7 +16,8 @@
 // (src/model.ts, src/patterns.ts), or with --quality a diagram_quality of the current diagram, or
 // with --improve an improve_diagram dry run of it (src/quality.ts), or with --derive a
 // derive_diagrams dry run under --tools oo, whose answer is reshaped per diagram (src/model.ts),
-// which also runs the tier's checks. --lint lists lint_diagram
+// which also runs the tier's checks and, since 0.9.0, reads the style profile first. --lint lists
+// lint_diagram
 // with --tools core,lint_diagram, since it left the core tier in 0.7.0, and --pattern
 // apply_pattern with --tools core,apply_pattern, since it left in 0.8.0. By default StarUML is replaced by an in-process stub so the numbers
 // measure this server, not StarUML; --live targets the real StarUML on 58321 and the extension
@@ -444,6 +445,16 @@ async function startStub() {
           findings: [],
         },
         dryRun: true,
+      },
+    }),
+    // A strict profile: the oo tier reads it before every change (src/style.ts, #19), so
+    // --derive measures that read too.
+    "POST /get_style_profile": JSON.stringify({
+      success: true,
+      data: {
+        profile: { name: "uml-standard", strict: true, blockSaveOnErrors: false },
+        source: "project",
+        builtIns: ["uml-standard", "minimal", "presentation", "print"],
       },
     }),
     // A dry run of two derived diagrams in the shape src/handlers/oo.ts answers.
