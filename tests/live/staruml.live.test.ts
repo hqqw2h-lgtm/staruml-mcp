@@ -70,9 +70,17 @@ function payload<T>(result: CallToolResult): T {
   return JSON.parse(ok(result)) as T;
 }
 
-function failure(result: CallToolResult): { code: string; message: string; status?: number } {
+interface Failure {
+  code: string;
+  message: string;
+  status?: number;
+  hint?: string;
+  details?: unknown;
+}
+
+function failure(result: CallToolResult): Failure {
   expect(result.isError, text(result)).toBe(true);
-  return (result.structuredContent as { error: { code: string; message: string } }).error;
+  return (result.structuredContent as { error: Failure }).error;
 }
 
 describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3", () => {
@@ -1925,11 +1933,15 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         expect(
           listed.filter((n) => !["describe_endpoints", "call_endpoint"].includes(n)).sort(),
         ).toEqual([...OO_TOOLS].sort());
-        for (const name of ["build_diagram", "move_views", "batch", "set_view_style"]) {
+        for (const name of ["move_views", "batch", "set_view_style"]) {
           expect(failure(await oo.call("call_endpoint", { name, body: {} })).code).toBe(
             "NOT_IN_TIER",
           );
         }
+        // build_diagram is reached, through a template only (#20).
+        expect(
+          failure(await oo.call("call_endpoint", { name: "build_diagram", body: {} })).code,
+        ).toBe("TEMPLATE_ONLY");
         expect(
           text(await oo.call("generate_diagram", { code: "classDiagram\n  class A" })),
         ).toMatch(/disabled/);
@@ -2170,7 +2182,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           expect(refused.code).toBe("TIER_LOCKED");
           const names = (await session.client.listTools()).tools.map((t) => t.name);
           expect(names).not.toContain("build_diagram");
-          expect(failure(await session.call("call_endpoint", { name: "build_diagram" })).code).toBe(
+          expect(failure(await session.call("call_endpoint", { name: "move_views" })).code).toBe(
             "NOT_IN_TIER",
           );
         } finally {
@@ -2185,7 +2197,7 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           const names = async () => (await session.client.listTools()).tools.map((t) => t.name);
           expect(await names()).toContain("build_diagram");
           expect(text(await session.call("doctor", { tools: "oo" }))).toMatch(
-            /tier +ok +oo: 8 extension tools listed/,
+            /tier +ok +oo: 10 extension tools listed/,
           );
           expect(await names()).not.toContain("build_diagram");
           expect(await names()).toContain("derive_diagrams");
@@ -2195,6 +2207,125 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           await session.close();
         }
       });
+
+      it(
+        "asks for the view each question needs, and the decision table picks it (#20)",
+        { timeout: 600_000 },
+        async () => {
+          interface Requested {
+            choice: { viewpoint: string; kind: string; template: string; rule: string };
+            diagrams: { name: string; viewpoint: string; template: string; conforms?: boolean }[];
+          }
+          const cases: [string, string, string, string][] = [
+            ["how does telemetry ingestion over MQTT work", "developer", "runtime", "sequence"],
+            ["which states can an alarm be in", "tester", "lifecycle", "statemachine"],
+            ["what does the data model look like", "dba", "data", "erd"],
+            [
+              "what are the use cases of a tenant administrator",
+              "analyst",
+              "actors-goals",
+              "usecase",
+            ],
+            ["where is it deployed", "operator", "deployment", "deployment"],
+            ["which containers make up the system", "architect", "container", "c4"],
+            ["what classes are there in the domain model", "developer", "code", "class"],
+          ];
+          const seen: string[] = [];
+          for (const [intent, audience, viewpoint, kind] of cases) {
+            const answer = payload<Requested>(
+              await ooCall("request_diagram", { intent, audience, scope: tb.system }),
+            );
+            expect(answer.choice, intent).toMatchObject({ viewpoint, kind });
+            expect(answer.diagrams.length, intent).toBeGreaterThan(0);
+            for (const d of answer.diagrams) {
+              expect(d, intent).toMatchObject({ viewpoint, template: answer.choice.template });
+            }
+            seen.push(`${answer.choice.rule} ${viewpoint}/${kind}: ${answer.diagrams.length}`);
+          }
+          console.info(`[live] request_diagram on ThingsBoard (#20): ${seen.join("; ")}`);
+          // An audience the view is not written for: the hint names what fits.
+          const refused = failure(
+            await ooCall("request_diagram", {
+              intent: "class diagram",
+              audience: "business",
+              scope: tb.system,
+            }),
+          );
+          expect(refused).toMatchObject({ code: "VIEWPOINT_MISMATCH", status: 422 });
+          expect(refused.hint).toMatch(/^Views that fit: /);
+          expect(refused.hint).not.toMatch(/doctor|--tools|allow-tier/);
+        },
+      );
+
+      it(
+        "draws from a template and content only, and refuses the rest on both sides (#20)",
+        { timeout: 300_000 },
+        async () => {
+          const build = (body: Record<string, unknown>) =>
+            ooCall("call_endpoint", { name: "build_diagram", body });
+          const spec = { classes: [{ name: "Tenant" }, { name: "Customer" }] };
+          // The tier refuses before sending what a strict profile refuses after.
+          expect(failure(await build({ kind: "class", spec })).code).toBe("TEMPLATE_ONLY");
+          expect(
+            failure(await build({ template: "code-classes", layout: "flow-down", spec })).code,
+          ).toBe("TEMPLATE_ONLY");
+          expect(
+            failure(
+              await ooCall("derive_diagrams", {
+                scope: tb.system,
+                policy: { hideGetters: false },
+              }),
+            ).code,
+          ).toBe("TEMPLATE_ONLY");
+          expect(
+            failure(
+              await ooCall("call_endpoint", {
+                name: "create_diagram",
+                body: { type: "UMLClassDiagram" },
+              }),
+            ).code,
+          ).toBe("NOT_IN_TIER");
+          const built = payload<{
+            diagram: Summary;
+            template: { name: string };
+            viewpoint: { name: string; conforms: boolean };
+          }>(
+            await build({
+              template: "code-classes",
+              name: "Tenancy",
+              parent: tb.system,
+              spec,
+            }),
+          );
+          expect(built).toMatchObject({
+            template: { name: "code-classes" },
+            viewpoint: { name: "code" },
+          });
+          // The profile the tier made strict refuses the same to a client past the server.
+          const direct = new StarUMLClient({});
+          for (const [path, body, code] of [
+            ["/build_diagram", { kind: "class", spec }, "TEMPLATE_ONLY"],
+            ["/create_diagram", { type: "UMLClassDiagram" }, "VIEWPOINT_REQUIRED"],
+          ] as const) {
+            const refused = (await direct
+              .callExtension(path, body)
+              .catch((error: unknown) => error)) as Failure;
+            expect(refused, path).toMatchObject({ code, status: 403 });
+            expect(refused.hint, path).toContain("request_diagram");
+          }
+          // A derived diagram is the model's: renaming it by hand is refused.
+          const derivedOne = derived.diagrams.find((d) => d.kind === "sequence")!;
+          const locked = failure(
+            await ooCall("call_endpoint", {
+              name: "update_element",
+              body: { ref: derivedOne.diagram, field: "name", value: "Renamed" },
+            }),
+          );
+          expect(locked).toMatchObject({ code: "DIAGRAM_DERIVED", status: 409 });
+          expect(locked.hint).toMatch(/is drawn from the model: change the model/);
+          await call("delete_element", { ref: built.diagram._id });
+        },
+      );
 
       it("a strict profile still derives; the extension locks drawing and the tier refuses it", async () => {
         ok(await call("set_style_profile", { patch: { strict: true } }));

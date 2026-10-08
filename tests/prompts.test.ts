@@ -117,7 +117,7 @@ describe("prompts/list", () => {
         name: MODEL_FIRST,
         title: "Model a domain object-first",
         description:
-          "State a domain as objects, dry-run and build the model, derive every diagram, review.",
+          "State a domain as objects, build the model, ask for one view per question, review.",
         arguments: [
           {
             name: "system",
@@ -157,7 +157,7 @@ describe("prompts/list", () => {
 });
 
 describe("model-first", () => {
-  it("states the domain, dry-runs and builds the model, derives, looks and reviews (core tier)", async () => {
+  it("states the domain and its questions, builds the model, asks for each view, reviews (core tier)", async () => {
     expect(
       await promptText(MODEL_FIRST, { system: "Lending", description: "A library's loans." }),
     ).toBe(
@@ -166,13 +166,15 @@ describe("model-first", () => {
         "About it: A library's loans.",
         "",
         '1. Explain the domain back in a few sentences: its bounded contexts, the main classes with one responsibility each, how they relate (owns, has, uses, isA, implements, knows), the actors and their use cases, the collaborations worth a sequence diagram and the lifecycles worth a state machine. Write that as a build_model spec with system "Lending".',
-        '2. build_model({spec, dryRun: true}): check the paths it would create (the first 20 of each kind, the rest counted in omitted; detail: "full" lists all) and that each relationship verb points the right way (from is the whole, the client, the specific kind or the side that navigates).',
-        "3. build_model({spec}) builds the model in one undo step. classViews and useCaseViews in the spec group the class and use case diagrams as the user wants them.",
-        '4. call_endpoint({name: "derive_diagrams", body: {scope: "Lending"}}) draws every diagram the model implies, each laid out by the style profile and run through the quality loop; quality.failing names any below its target.',
-        '5. view_diagram({diagram: "<a derived diagram\'s name>"}) for the diagrams that matter most, diagram_as_text for their content, call_endpoint({name: "explain_model", body: {scope: "Lending"}}) for the whole model as text.',
-        '6. call_endpoint({name: "model_lint", body: {scope: "Lending"}}) reviews the object design. Fix what it reports in the spec, then build_model({spec, upsert: true}) and call_endpoint({name: "derive_diagrams", body: {scope: "Lending"}}) again: both update in place. Repeat until it reports no error or warning, at most three rounds.',
+        '2. List the questions the diagrams must answer, one per diagram, each with who asks it (business, analyst, architect, developer, tester, operator or dba): for example "how does a device publish telemetry" for a developer, "which states can an alarm be in" for a tester. A diagram no question needs is not drawn.',
+        '3. build_model({spec, dryRun: true}): check the paths it would create (the first 20 of each kind, the rest counted in omitted; detail: "full" lists all) and that each relationship verb points the right way (from is the whole, the client, the specific kind or the side that navigates).',
+        "4. build_model({spec}) builds the model in one undo step. classViews and useCaseViews in the spec group the class and use case diagrams as the user wants them.",
+        '5. For each question, call_endpoint({name: "request_diagram", body: {intent: "<the question>", audience: "<who asks>", scope: "Lending"}}): the engine picks the viewpoint, kind and template from its decision table, draws the view from the model and answers its choice and the question the view answers. A VIEWPOINT_MISMATCH lists the views that do fit and where: pick one, or narrow the scope to the package, class or collaboration the question is about.',
+        '6. call_endpoint({name: "derive_diagrams", body: {scope: "Lending"}}) draws every other diagram the model implies, each from its viewpoint\'s template and run through the quality loop; quality.failing names any below its target.',
+        '7. view_diagram({diagram: "<a requested diagram\'s id>"}) for each question: check the picture answers it. diagram_as_text gives the content, call_endpoint({name: "explain_model", body: {scope: "Lending"}}) the whole model as text.',
+        '8. call_endpoint({name: "model_lint", body: {scope: "Lending"}}) reviews the object design. Fix what it reports in the spec, then build_model({spec, upsert: true}) and ask for the views again: both update in place. Repeat until it reports no error or warning, at most three rounds.',
         "",
-        "Report the model in a few sentences, the diagrams derived with their scores, and what model_lint still reports.",
+        "Report the model in a few sentences, each question with the view that answers it (viewpoint, template, score), and what model_lint still reports.",
       ].join("\n"),
     );
   });
@@ -186,9 +188,12 @@ describe("model-first", () => {
 
       expect(text).toMatch(/^Model the system described below object-first/);
       expect(text).not.toContain("About it:");
-      expect(text).toContain('4. derive_diagrams({scope: "<system>"})');
+      expect(text).toContain(
+        '5. For each question, request_diagram({intent: "<the question>", audience: "<who asks>", scope: "<system>"})',
+      );
+      expect(text).toContain('6. derive_diagrams({scope: "<system>"})');
       expect(text).toContain('explain_model({scope: "<system>"})');
-      expect(text).toContain('6. model_lint({scope: "<system>"})');
+      expect(text).toContain('8. model_lint({scope: "<system>"})');
       expect(text).not.toContain("call_endpoint");
     } finally {
       await oo.close();

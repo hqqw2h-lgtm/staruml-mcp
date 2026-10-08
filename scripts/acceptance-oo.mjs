@@ -5,7 +5,7 @@
 // `failures` of extension #38) and view_diagram with `path`, which writes the PNG to disk and
 // answers a few tokens instead of an image. Every call's arguments and answer are counted in
 // o200k_base tokens. The class diagrams are derived per class view (the spec's default) and then
-// per package, the two sets the extension's reviewers rated.
+// per package (through request_diagram since 0.10.0), the two sets the extension's reviewers rated.
 //
 // Usage: npm run build && node scripts/acceptance-oo.mjs [--spec <file>] [--out <dir>]
 // (StarUML 7 with staruml-mcp-extension 0.3 on 58321/58322; STARUML_EXT_TOKEN reaches the
@@ -83,15 +83,10 @@ async function call(name, toolArgs) {
   return { row, data: answer.startsWith("{") ? JSON.parse(answer) : answer };
 }
 
-/** derive_diagrams with `policy`, then each diagram scored and written to disk. */
-async function derive(label, policy) {
-  const first = calls.length;
-  const { data } = await call("derive_diagrams", {
-    scope: spec.system,
-    ...(policy && { policy }),
-  });
+/** Each diagram of a set scored and written to disk. */
+async function scored(label, list) {
   const diagrams = [];
-  for (const [index, d] of data.diagrams.entries()) {
+  for (const [index, d] of list.entries()) {
     const ref = d.diagram ?? d.name;
     const { data: q } = await call("diagram_quality", { ref });
     const file = join(out, `${label}-${String(index).padStart(2, "0")}.png`);
@@ -99,6 +94,8 @@ async function derive(label, policy) {
     diagrams.push({
       kind: d.kind,
       name: d.name,
+      viewpoint: d.viewpoint,
+      template: d.template,
       score: q.score,
       loop: d.score,
       failures: q.failures ?? [],
@@ -106,16 +103,65 @@ async function derive(label, policy) {
       png: { bytes: statSync(file).size, answerTokens: row.resultTokens },
     });
   }
-  const own = calls.slice(first);
+  return diagrams;
+}
+
+function summary(label, own, diagrams, extra) {
+  const scores = diagrams.map((d) => d.score);
   return {
     label,
-    policy: policy ?? null,
-    quality: data.quality,
-    counts: data.counts,
+    ...extra,
+    quality: {
+      min: Math.min(...scores),
+      mean: Math.round(scores.reduce((n, x) => n + x, 0) / scores.length),
+      failing: diagrams.filter((d) => d.score < 80).map((d) => `${d.name} ${d.score}`),
+    },
     calls: own.length,
     resultTokens: own.reduce((n, c) => n + c.resultTokens, 0),
     diagrams,
   };
+}
+
+/** derive_diagrams of the model, then each diagram scored and written to disk. */
+async function derive(label) {
+  const first = calls.length;
+  const { data } = await call("derive_diagrams", { scope: spec.system });
+  const diagrams = await scored(label, data.diagrams);
+  return summary(label, calls.slice(first), diagrams, { counts: data.counts });
+}
+
+/**
+ * The class diagrams per package, which 0.9.1 derived with `policy: {classDiagrams:
+ * "perPackage"}`. Since 0.10.0 the oo tier refuses a policy (TEMPLATE_ONLY, issue #20): the view
+ * is asked for by intent with each package as the scope, and the extension draws a package's
+ * classes by package (src/handlers/viewpoints.ts candidatesFor).
+ */
+async function perPackage(label) {
+  const first = calls.length;
+  const { data } = await call("call_endpoint", {
+    name: "find_elements",
+    body: { type: "UMLPackage" },
+  });
+  const packages = data.elements.filter((e) => e.path?.startsWith(`${spec.system}/`));
+  const list = [];
+  const empty = [];
+  for (const p of packages) {
+    // "package" in the intent would pick the component view (decision rule D11).
+    try {
+      const { data: asked } = await call("request_diagram", {
+        intent: "what classes are there and how are they related",
+        audience: "developer",
+        scope: p.path,
+      });
+      list.push(...asked.diagrams);
+    } catch (error) {
+      // A package of containers or nodes has no class to show: VIEWPOINT_MISMATCH, reason empty.
+      if (!/VIEWPOINT_MISMATCH/.test(error.message)) throw error;
+      empty.push(p.path);
+    }
+  }
+  const diagrams = await scored(label, list);
+  return summary(label, calls.slice(first), diagrams, { packages: packages.length, empty });
 }
 
 let failed;
@@ -125,7 +171,7 @@ try {
   const started = performance.now();
   built = await call("build_model", { spec });
   sets.push(await derive("views"));
-  sets.push(await derive("perPackage", { classDiagrams: "perPackage" }));
+  sets.push(await perPackage("perPackage"));
   const seconds = Math.round((performance.now() - started) / 100) / 10;
   const versions = (await ext("/introspect", { include: [] })).data;
   const twoCalls = calls.filter((c) => c.tool !== "diagram_quality" && c.tool !== "view_diagram");

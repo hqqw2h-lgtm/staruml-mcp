@@ -302,7 +302,7 @@ default and reaches every other extension endpoint through two generic tools:
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
 | `core` (default) | the 7 above; `find_elements`, `quick_find`, `get_element_by_id`, `update_element`, `batch`, `build_diagram`, `export_diagram`, `build_model`, `diagram_quality`, `improve_diagram`; `describe_endpoints`, `call_endpoint` | 1,990 |
-| `oo` | model-first only: `build_model`, `derive_diagrams`, `explain_model`, `model_lint`, `apply_pattern`, `detect_patterns`, `validate_model`, `diagram_quality`; `view_diagram`, `diagram_as_text`, `doctor`; `describe_endpoints`, `call_endpoint` | 1,217 |
+| `oo` | model-first only: `build_model`, `derive_diagrams`, `request_diagram`, `list_templates`, `explain_model`, `model_lint`, `apply_pattern`, `detect_patterns`, `validate_model`, `diagram_quality`; `view_diagram`, `diagram_as_text`, `doctor`; `describe_endpoints`, `call_endpoint` | 1,412 |
 | `all` | the 7 above and one tool per manifest endpoint | 14,385 |
 | `core,create_diagram,…` | the 7 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
@@ -324,7 +324,8 @@ the `oo` tier and reached by the `apply-pattern` prompt through `call_endpoint`,
 lists them again. 0.9.1 lists `explain_model`'s `sections` and `cursor` and `detect_patterns`'
 `minConfidence` under `oo` (98 tokens, which the tier's 1,500 budget has room for); the core tier
 paid for `diagram_quality`'s `failures` and `build_model`'s `detail` hint with shorter
-`build_diagram` lines and stays at 1,998. 0.10.0 lists `build_diagram`'s `template` (extension #43:
+`build_diagram` lines and stays at 1,998. 0.10.0 lists `request_diagram` and `list_templates` under `oo`, and
+`derive_diagrams`' `viewpoints` and `template` (188 tokens; the tier is at 1,412 of its 1,500). It also lists `build_diagram`'s `template` (extension #43:
 a viewpoint, house style, layout preset and legend, and what a strict profile requires) in place of
 `direction` and `layout`, which still pass unlisted and which a template carries anyway; that and
 `export_diagram`'s draw.io line leave the core tier at 1,990. `request_diagram` and
@@ -1332,79 +1333,119 @@ both about twice what the phase 1h build took (23 s and 29 s).
 `scripts/acceptance-oo.mjs` runs the same domain the way a client of this server does: the built
 server started with `--tools oo` over stdio, `build_model` with the spec, `derive_diagrams`, then
 for every diagram `diagram_quality` (the score and extension #38's hard-limit `failures`) and
-`view_diagram` with `path`, which writes the PNG to disk. It derives the class diagrams per class
-view (the spec's default) and again per package (`policy: {classDiagrams: "perPackage"}`), the
-two sets the extension's reviewers rated, and records every call into
-`scripts/benchmark-data/oo-acceptance-7.1.1.json` (StarUML 7.1.1, extension 0.3.0 phase 1j,
-0.9.1 of this server).
+`view_diagram` with `path`, which writes the PNG to disk. The class diagrams are drawn per class
+view (the spec's default) and per package, the two sets the extension's reviewers rated. Since
+0.10.0 the per-package set is asked for, not configured: the tier refuses `policy` (issue #20), so
+the script finds the model's packages and sends `request_diagram({intent: "what classes are there
+and how are they related", audience: "developer", scope: <package>})` for each; the decision
+table picks the code viewpoint and the `code-classes` template, and the extension draws a
+package's classes by package. Every call goes into
+`scripts/benchmark-data/oo-acceptance-7.1.1.json` (StarUML 7.1.1, extension 0.3.0 phase 1l,
+0.10.0 of this server).
 
-| Step | Calls | Call tokens | Result tokens |
+| Step | Calls | Result tokens |
+|---|---|---|
+| `build_model` + `derive_diagrams` (class views) | 2 | 1,761 (518 + 1,243) |
+| per diagram `diagram_quality` + `view_diagram` to disk, 25 diagrams | 50 | 1,251 (378 for the images) |
+| `find_elements` of the packages, `request_diagram` for each of 17, then the same for the 11 class diagrams drawn | 34 | 3,614 |
+| Whole run | 86 | 7,144 |
+
+The 25 images are 3.7 MB of PNG on disk and 378 tokens of answers, the 11 per-package ones 1.1 MB
+and 159; inline, the 25 would be about 31,500 vision tokens (section "Image size"). The run took
+122 s on a loaded machine. Six packages (`Containers`, `Deployment`, the UI, the REST API, the
+packaging and the query service) answer `VIEWPOINT_MISMATCH`: the extension finds no class view
+to draw in them and names the views the model does have; the script records them as `empty`.
+
+Class-view set, every diagram 80 or more, none failing a hard limit (the live suite asserts both),
+each derived from its viewpoint's default template:
+
+| Diagram | Kind | Template | Score |
 |---|---|---|---|
-| `build_model` + `derive_diagrams` (class views) | 2 | 14,743 | 1,436 (518 + 918) |
-| per diagram `diagram_quality` + `view_diagram` to disk, 25 diagrams | 50 | | 1,763 (376 for the images) |
-| `derive_diagrams` per package, then the same for 30 diagrams | 61 | | 3,203 |
-| Whole run | 113 | 19,080 | 6,402 |
+| ThingsBoard packages | package | component-packages | 90 |
+| Class - Entities and DAO | class | code-classes | 93 |
+| Class - Application Services | class | code-classes | 94 |
+| Class - Rule Engine | class | code-classes | 93 |
+| Class - Transport | class | code-classes | 85 |
+| Class - Actor System | class | code-classes | 98 |
+| Class - Security | class | code-classes | 89 |
+| Seq - Telemetry ingestion over MQTT | sequence | runtime-sequence | 94 |
+| Seq - Rule chain processing | sequence | runtime-sequence | 92 |
+| Seq - Device provisioning | sequence | runtime-sequence | 97 |
+| Seq - Device claiming | sequence | runtime-sequence | 92 |
+| Seq - REST login | sequence | runtime-sequence | 94 |
+| Use Cases - Tenant Administrator | usecase | actors-goals-usecases | 85 |
+| Use Cases - Customer User | usecase | actors-goals-usecases | 96 |
+| Use Cases - Device | usecase | actors-goals-usecases | 85 |
+| Use Cases - System Administrator | usecase | actors-goals-usecases | 98 |
+| State - Device lifecycle | statemachine | lifecycle-states | 85 |
+| State - Alarm lifecycle | statemachine | lifecycle-states | 96 |
+| State - Rule node lifecycle | statemachine | lifecycle-states | 92 |
+| Activity - Rule chain execution | activity | runtime-activity | 82 |
+| ThingsBoard data model | erd | data-erd | 94 |
+| ThingsBoard containers | c4 | container-overview | 90 |
+| Deployment - Microservices | deployment | deployment-nodes | 83 |
+| Deployment - Monolith | deployment | deployment-nodes | 94 |
+| ThingsBoard Features | mindmap | actors-goals-features | 86 |
 
-The images are 3.2 MB (class views) and 3.7 MB (per package) of PNG on disk and 376 and 450
-tokens of answers; inline, the 25 would be about 29,200 vision tokens (section "Image size"). The
-run took 85 s.
+`derive_diagrams`' loop score is the score `diagram_quality` reads afterwards for every diagram;
+since phase 1l that includes `Deployment - Monolith`, which phase 1j answered 94 for and read
+back as 98. `Class - Rule Engine` is drawn past the profile's 3:1 and fails nothing: the limit
+applies to a diagram larger than the page.
 
-Class-view set, every diagram 80 or more, none failing a hard limit (the live suite asserts both):
-
-| Diagram | Kind | Score | Loop's score | Failures |
-|---|---|---|---|---|
-| ThingsBoard packages | package | 90 | 90 | none |
-| Class - Entities and DAO | class | 93 | 93 | none |
-| Class - Application Services | class | 94 | 94 | none |
-| Class - Rule Engine | class | 93 | 93 | none |
-| Class - Transport | class | 81 | 81 | none |
-| Class - Actor System | class | 98 | 98 | none |
-| Class - Security | class | 89 | 89 | none |
-| Seq - Telemetry ingestion over MQTT | sequence | 94 | 94 | none |
-| Seq - Rule chain processing | sequence | 92 | 92 | none |
-| Seq - Device provisioning | sequence | 97 | 97 | none |
-| Seq - Device claiming | sequence | 92 | 92 | none |
-| Seq - REST login | sequence | 94 | 94 | none |
-| Use Cases - Tenant Administrator | usecase | 85 | 85 | none |
-| Use Cases - Customer User | usecase | 96 | 96 | none |
-| Use Cases - Device | usecase | 85 | 85 | none |
-| Use Cases - System Administrator | usecase | 98 | 98 | none |
-| State - Device lifecycle | statemachine | 85 | 85 | none |
-| State - Alarm lifecycle | statemachine | 96 | 96 | none |
-| State - Rule node lifecycle | statemachine | 92 | 92 | none |
-| Activity - Rule chain execution | activity | 82 | 82 | none |
-| ThingsBoard data model | erd | 94 | 94 | none |
-| ThingsBoard containers | c4 | 90 | 90 | none |
-| Deployment - Microservices | deployment | 83 | 83 | none |
-| Deployment - Monolith | deployment | 98 | 94 | none |
-| ThingsBoard Features | mindmap | 86 | 86 | none |
-
-`Class - Rule Engine` is drawn at aspect 3.14, past the profile's 3:1, and still fails nothing: the
-limit applies to a diagram larger than the page. The loop's score in the `derive_diagrams` answer
-is the score `diagram_quality` reads afterwards for every diagram but `Deployment - Monolith`
-(94 in the answer, 98 read back and in every later derive with nothing changed), an extension
-0.3.0 quirk the live suite names.
-
-The per-package set has the same 18 other diagrams with the same scores and these class diagrams:
+Per-package class diagrams, through `request_diagram` and the `code-classes` template:
 
 | Class diagram (per package) | Score | Failures |
 |---|---|---|
-| Domain Model (common.data) | 98 | none |
-| Messaging (common.message, common.queue) | 100 | none |
+| Domain Model (common.data) | 96 | none |
+| Messaging (common.message, common.queue) | 99 | none |
 | Actor Framework (common.actor) | 99 | none |
-| Persistence (dao) | 94 | none |
-| Rule Engine API | 77 | none |
-| Rule Node Library | 81 | none |
-| Transport API (common.transport) | 98 | none |
-| Protocol Transports | 94 | none |
-| Actor System (application.actors) | 98 | none |
-| Application Services | 82 | none |
+| Persistence (dao) | 98 | none |
+| Rule Node Library | 100 | none |
+| Rule Engine API | 99 | none |
+| Transport API (common.transport) | 99 | none |
+| Protocol Transports | 99 | none |
+| Actor System (application.actors) | 99 | none |
+| Application Services | 94 | none |
 | Security | 89 | none |
 
-`Rule Engine API` is the one the extension's own #38 report lists short: eight rule nodes each
-depend on the same three services, and every drawing of them within 3:1 scores 69 to 77. It
-breaks no hard limit, so the score is not capped; `quality.failing` names it as `Rule Engine API
-77`, and the live suite asserts it is the only diagram below 80.
+`Rule Engine API`, which 0.9.1 derived with the per-package policy at 77 (eight rule nodes each
+depending on the same three services, extension #38's report), scores 99 drawn by its template.
+The live suite's per-package derivation through `core`, which still uses the policy, still gets
+77 and asserts it.
+
+### Readability check (issue #20)
+
+The quality score measures geometry; it cannot tell whether a diagram says what it is for.
+`scripts/readability-check.mjs` asks a lower-tier model: for every diagram `derive_diagrams` makes
+of ThingsBoard under `--tools oo`, the PNG (written to disk by `view_diagram`, at most 1,568 px
+wide, the size the Messages API scales larger images down to) and the question its viewpoint
+answers (`list_viewpoints`: "What happens, step by step and between which parts, when the scenario
+is triggered?" for a sequence diagram) go to `READABILITY_MODEL`, default
+`claude-haiku-4-5-20251001`, through the Anthropic SDK with `ANTHROPIC_API_KEY`. The model answers
+from the picture alone, as structured output: the answer, whether the picture holds enough to give
+it, a 0-100 confidence and what is missing. A diagram passes when it is answerable and the
+confidence reaches the threshold (`--threshold`, default 70); a refusal, a reply cut at
+`max_tokens` or an answer off the schema fails it. Results go to
+`scripts/benchmark-data/readability-7.1.1.json`, each next to the diagram's quality score.
+
+```bash
+npm run build
+ANTHROPIC_API_KEY=... npm run readability                       # live; --record <file> keeps the answers
+npm run readability -- --replay tests/fixtures/readability.messages.json   # no network
+```
+
+Without a key and without `--replay` the script says so and exits 0; the live workflow runs it on
+demand (`readability: true`) with the `ANTHROPIC_API_KEY` secret. The network sits behind
+`MessagesClient` in `src/readability.ts`, so the unit tests cover the request, the parsing and the
+verdicts at 100% from recorded responses, and `--record` turns a live run into fixtures.
+
+No key was available when 0.10.0 was released, so `readability-7.1.1.json` holds the fixture run:
+the three ThingsBoard diagrams `tests/fixtures/readability.messages.json` has responses for, judged
+from those hand-written responses (marked `[fixture]`, not model output) against the real
+exports: `Seq - Telemetry ingestion over MQTT` passes at 86, `Class - Rule Engine` fails at 55 and
+`State - Alarm lifecycle` fails as not answerable; the other 22 are listed as not judged. It
+shows the pipeline end to end; the verdicts say nothing about the diagrams until a live run
+replaces them.
 
 ## Architecture
 

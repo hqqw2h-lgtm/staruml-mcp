@@ -114,9 +114,12 @@ export function deriveDiagramsInput(entry: ManifestEntry): z.ZodObject {
       kinds:
         "Only these: package|class|sequence|usecase|statemachine|activity|erd|c4|deployment|mindmap.",
       dryRun: "Change nothing; answer what each diagram would change.",
+      viewpoints: "Only views of these: list_viewpoints names them.",
+      template: "Only this template's diagrams, drawn with it.",
     },
-    // The kinds enum is in the description; policy, a profile patch, passes unlisted.
-    new Set(["kinds", "dryRun"]),
+    // The kinds and viewpoints enums are in descriptions; policy, a profile patch, passes
+    // unlisted, and the oo tier refuses it (TEMPLATE_ONLY_FIELDS).
+    new Set(["kinds", "dryRun", "viewpoints"]),
   );
 }
 

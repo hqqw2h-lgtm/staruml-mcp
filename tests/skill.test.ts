@@ -153,6 +153,8 @@ describe("SKILL.md", () => {
         "derive_diagrams",
         "model_lint",
         "explain_model",
+        "request_diagram",
+        "list_templates",
       ]),
     );
     // Section 8's example runs in the oo tier, every other one in the default tier.
@@ -237,6 +239,11 @@ describe("SKILL.md", () => {
       "derive_diagrams",
       "model_lint",
       "explain_model",
+      "request_diagram",
+      "request_diagram",
+      "list_templates",
+      "derive_diagrams",
+      "call_endpoint",
     ]);
     const spec = oo[0]!.args.spec as Record<string, unknown[]>;
     // Every kind derive_diagrams draws from a model's own sections is in the example.
@@ -246,6 +253,36 @@ describe("SKILL.md", () => {
     expect(spec.collaborations).toHaveLength(1);
     expect(spec.lifecycles).toHaveLength(1);
     expect(oo[1]!.args).toEqual({ scope: (spec as unknown as { system: string }).system });
+  });
+
+  it("teaches asking for a view by intent, templates and the locked derived diagram (#20)", () => {
+    const section =
+      /^### Ask for a view, not a diagram\n([\s\S]*?)^## /m.exec(readSkill())?.[1] ?? "";
+    const asked = examples.filter((e) => e.tool === "request_diagram");
+
+    expect(asked.map((e) => e.tools)).toEqual(["oo", "oo"]);
+    for (const { args } of asked) {
+      expect(Object.keys(args).sort()).toEqual(["audience", "intent", "scope"]);
+    }
+    for (const word of [
+      "VIEWPOINT_MISMATCH",
+      "DIAGRAM_DERIVED",
+      "TEMPLATE_ONLY",
+      "list_templates",
+    ]) {
+      expect(readSkill()).toContain(word);
+    }
+    expect(section).toContain("viewpoint_lint");
+    const build = examples.find(
+      (e) => e.tool === "call_endpoint" && e.args.name === "build_diagram",
+    )!;
+    expect(build.tools).toBe("oo");
+    expect(Object.keys(build.args.body as object).sort()).toEqual([
+      "name",
+      "parent",
+      "spec",
+      "template",
+    ]);
   });
 
   it("teaches model first and patterns with tested examples by path (#13)", () => {

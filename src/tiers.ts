@@ -47,11 +47,15 @@ export const CORE_ENDPOINTS: readonly string[] = [
  * rule and lays each out by the style profile (`/derive_diagrams`), and the agent reads, reviews
  * and scores the result. Only these tools are listed, the hand-written ones included: StarUML's
  * built-in `generate_diagram` draws from Mermaid and `get_diagram_image_by_id` is
- * view_diagram's fallback anyway.
+ * view_diagram's fallback anyway. Since 0.10.0 (issue #20) the agent can also state what a reader
+ * wants to know and let the extension pick the view (`/request_diagram`), and name the templates
+ * diagrams are drawn with (`/list_templates`): 153 tokens, which the tier's 1,500 has room for.
  */
 export const OO_TOOLS: readonly string[] = [
   "build_model",
   "derive_diagrams",
+  "request_diagram",
+  "list_templates",
   "explain_model",
   "model_lint",
   "apply_pattern",
@@ -68,9 +72,10 @@ export const OO_TOOLS: readonly string[] = [
  * writes (elements, members, stereotypes, documentation, relationships without views), the
  * pattern library, history, the style profile's read side, the quality loop, saving and
  * exporting. Left out are the endpoints that place, size, colour or draw views
- * (`DRAWING_ENDPOINTS` in the extension's src/style/guard.ts: /build_diagram, /move_views,
- * /set_view_style, /layout_diagram, ...), `/set_style_profile`, which could turn strict mode off,
- * `/batch` and `/execute_command`, which run any of those, and the editor's UI state. The tier
+ * (`DRAWING_ENDPOINTS` in the extension's src/style/guard.ts: /move_views, /set_view_style,
+ * /layout_diagram, ...), except `/build_diagram`, which since 0.10.0 draws here through a template
+ * from content alone (TEMPLATE_ONLY_FIELDS); `/set_style_profile`, which could turn strict mode
+ * off; `/batch` and `/execute_command`, which run any of those; and the editor's UI state. The tier
  * makes the project's style profile strict before it changes anything (`needsStrictProfile`), so
  * the extension refuses the drawing endpoints as well (STYLE_LOCKED) and a client that bypasses
  * this server cannot draw either.
@@ -123,7 +128,49 @@ export const OO_REACHABLE: readonly string[] = [
   "apply_style_profile",
   "explain_style_violation",
   "improve_diagram",
+  // Viewpoints and templates (extension #42, #43): the catalogues, the conformance lint, and
+  // /build_diagram through a template from content alone (TEMPLATE_ONLY_FIELDS).
+  "list_viewpoints",
+  "describe_viewpoint",
+  "describe_template",
+  "viewpoint_lint",
+  "build_diagram",
 ];
+
+/**
+ * What a closed tier lets through to the endpoints that draw diagrams from content (issue #20):
+ * a template's name and the content, never a layout, a direction or a style. These are the
+ * fields extension #43's strict profile leaves open (`FREE_FORM` and `spec.styles` in
+ * src/handlers/build.ts, `policy` in src/handlers/oo.ts refused as TEMPLATE_ONLY), so the tier
+ * refuses before sending what the extension would refuse after, and lists only these.
+ * `required` must be given: a strict build without a template is refused too.
+ */
+export const TEMPLATE_ONLY_FIELDS: ReadonlyMap<
+  string,
+  { allowed: ReadonlySet<string>; required?: string }
+> = new Map([
+  [
+    "build_diagram",
+    {
+      allowed: new Set([
+        "template",
+        "kind",
+        "spec",
+        "mermaid",
+        "text",
+        "format",
+        "name",
+        "parent",
+        "upsert",
+        "prune",
+        "dryRun",
+        "result",
+      ]),
+      required: "template",
+    },
+  ],
+  ["derive_diagrams", { allowed: new Set(["scope", "kinds", "viewpoints", "template", "dryRun"]) }],
+]);
 
 /**
  * View attributes that place or style a view (`VIEW_STYLE_FIELDS`, extension

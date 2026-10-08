@@ -23,6 +23,7 @@ const CODES = new Set<string>([
   ErrorCode.InvalidArgument,
   ErrorCode.UnknownEndpoint,
   ErrorCode.EndpointNotFound,
+  ErrorCode.TemplateOnly,
 ]);
 
 beforeAll(async () => {

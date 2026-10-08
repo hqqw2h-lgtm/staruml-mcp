@@ -33,6 +33,7 @@ extension's endpoints, so run it after the user upgrades the extension.
 | The user wants | Use |
 |---|---|
 | A domain model from a description or requirements | `build_model` with an object spec (section 7), then diagrams of it |
+| The diagram that answers a question about a model | `request_diagram` with the question as `intent` (section 8, "Ask for a view, not a diagram") |
 | A new diagram of a kind below | `build_diagram` with a `spec`: exact names, one undo step |
 | A composite structure, object, communication, timing, SysML, BPMN, DFD, wireframe or cloud diagram | `build_diagram` with a family's nodes and edges (section 4) |
 | An element whose exact name the user does not give | `quick_find` (section 14) |
@@ -48,6 +49,7 @@ extension's endpoints, so run it after the user upgrades the extension.
 | Project metadata, preferences, templates, fragments, XMI | `call_endpoint` (section 14) |
 | Anything else StarUML can do | `describe_endpoints`, then `call_endpoint` |
 | To see a diagram | `view_diagram`; `export_diagram` for files |
+| A diagram as a draw.io file | `export_diagram` with `format: "drawio"` and an absolute `path` (never inline) |
 
 A user may also start the server's prompts `model-codebase` (reverse-engineer a source directory
 or build class diagrams from a description), `review-diagram`, `improve-diagram` (the quality
@@ -811,13 +813,14 @@ operation of their receiver, and `sync_operations` adds those operations to the 
 ## 8. Object-first, never draw
 
 When the server runs with `--tools oo` (or after `doctor({tools: "oo"})`), it lists only the
-model-first tools: `build_model`, `derive_diagrams`, `explain_model`, `model_lint`,
-`apply_pattern`, `detect_patterns`, `validate_model`, `diagram_quality`, `view_diagram`,
-`diagram_as_text`, `doctor` and the two generic ones. Nothing in that tier places, sizes or
-colours a view: `call_endpoint` answers `NOT_IN_TIER` for `build_diagram`, `move_views`,
-`batch` and the like. Before its first change the tier makes the project's style profile strict,
-so the extension refuses them too, and `override` is not part of the tier. The work is stating the
-domain; the diagrams follow from it.
+model-first tools: `build_model`, `derive_diagrams`, `request_diagram`, `list_templates`,
+`explain_model`, `model_lint`, `apply_pattern`, `detect_patterns`, `validate_model`,
+`diagram_quality`, `view_diagram`, `diagram_as_text`, `doctor` and the two generic ones. Nothing
+in that tier places, sizes or colours a view: `call_endpoint` answers `NOT_IN_TIER` for
+`move_views`, `batch` and the like, and `build_diagram` takes a template name and content only
+(`TEMPLATE_ONLY` for a layout, a direction, a style or no template). Before its first change the
+tier makes the project's style profile strict, so the extension refuses them too, and `override`
+is not part of the tier. The work is stating the domain; the diagrams follow from it.
 
 The tier is the user's choice when the server starts. `doctor({tools})` can narrow it but not
 widen it: asking for `core` or a drawing tool answers `TIER_LOCKED` unless the user started the
@@ -921,6 +924,55 @@ That is two calls for five diagrams: the package overview, the class diagram of 
 and of `billing`, the `Booking` sequence diagram, the use case diagram and the `Appointment
 states` state machine, every one a view of the model's own elements. `model_lint` points out
 that nothing calls `Invoice#pay()` (M007); add a collaboration that does, or let it be.
+
+### Ask for a view, not a diagram
+
+A diagram is worth drawing when it answers a question someone has. Say the question and who asks
+it, and let the engine choose the view: `request_diagram` maps the intent and the kind of scope
+to a viewpoint (context, container, component, code, runtime, lifecycle, actors-goals,
+deployment, data), a diagram kind and a template through a committed decision table, draws it
+from the model as `derive_diagrams` would, and answers its choice, the rule that made it, and
+the question the view answers. Kinds, layouts and styles are never parameters.
+
+```json request_diagram oo
+{ "intent": "which states can an appointment be in", "audience": "tester", "scope": "Clinic" }
+```
+
+```json request_diagram oo
+{ "intent": "how does booking an appointment work", "audience": "developer", "scope": "Clinic" }
+```
+
+The first draws `Appointment states` with the `lifecycle-states` template (rule D01), the second
+the `Booking` sequence diagram with `runtime-sequence` (D06). Each diagram in the answer names its
+`viewpoint` and `template`; `conforms: false` or `accepted: false` appear only on one that breaks
+its viewpoint's rules (`viewpoint_lint` says which) or does not pass as its template's.
+
+A question the table cannot place, an audience the view is not written for, or a scope with
+nothing to show is refused with `VIEWPOINT_MISMATCH`; the hint names the views that fit and the
+scopes that have them. Ask again with one of them, or narrow the scope to the package, class or
+collaboration the question is about. Phrase intents as the reader would: "what does the data
+model look like", "who uses the system and for what", "where is it deployed", "what happens when
+a device connects".
+
+`list_templates` names the templates (`code-classes`, `runtime-sequence`, `data-erd`, ...), each a
+viewpoint drawn as one kind in the house style. `derive_diagrams` takes `viewpoints` or a
+`template` to draw only those views, and `build_diagram` (through `call_endpoint` here) draws a
+diagram from a template and content, nothing else:
+
+```json list_templates oo
+{}
+```
+
+```json derive_diagrams oo
+{ "scope": "Clinic", "viewpoints": ["runtime", "lifecycle"] }
+```
+
+```json call_endpoint oo
+{ "name": "build_diagram", "body": { "template": "code-classes", "name": "Billing at a glance", "parent": "Clinic", "spec": { "classes": [{ "name": "Invoice" }, { "name": "Appointment" }] } } }
+```
+
+A derived or requested diagram belongs to the model: editing it by hand is refused with
+`DIAGRAM_DERIVED`. Change the model and ask for the view again.
 
 ## 9. Design patterns with correct properties
 

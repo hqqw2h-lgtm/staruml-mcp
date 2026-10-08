@@ -11,6 +11,10 @@ on:
       concurrency:
         description: Load test concurrency
         default: "50"
+      readability:
+        description: Readability check of the ThingsBoard set by a lower-tier model (needs the ANTHROPIC_API_KEY secret)
+        type: boolean
+        default: false
 
 jobs:
   live:
@@ -32,6 +36,14 @@ jobs:
 
       - name: Live integration tests
         run: npm run test:live
+
+      # Issue #20: each derived diagram's PNG and its viewpoint's question to READABILITY_MODEL;
+      # the script skips itself when the secret is absent.
+      - name: Readability check
+        if: ${{ inputs.readability }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npm run readability
 
       - name: Load test against StarUML (stateless, then one session)
         run: |

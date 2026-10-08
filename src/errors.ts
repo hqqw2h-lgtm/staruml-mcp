@@ -33,6 +33,11 @@ export const ErrorCode = {
    * anything (issue #19).
    */
   ProfileNotStrict: "PROFILE_NOT_STRICT",
+  /**
+   * Under the `oo` tier a diagram was asked for with a layout, a direction, a style or no
+   * template (issue #20). Extension #43's code for the same refusal under a strict profile.
+   */
+  TemplateOnly: "TEMPLATE_ONLY",
 } as const;
 
 export type Upstream = "builtin" | "extension";

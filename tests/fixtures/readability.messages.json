@@ -1,0 +1,59 @@
+{
+  "note": "Messages API responses in the shape the Anthropic API returns for a structured-output request (content[0].text holds the JSON). Written by hand for the offline tests, not recorded from a model; scripts/readability-check.mjs --record writes real ones.",
+  "recordings": [
+    {
+      "diagram": "Seq - Telemetry ingestion over MQTT",
+      "response": {
+        "id": "msg_fixture_1",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-haiku-4-5-20251001",
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"answer\":\"[fixture] The device publishes over MQTT to MqttTransportHandler, which converts the payload and hands it to DefaultTransportService; the message is queued, consumed by the rule engine and saved by TimeseriesService.\",\"answerable\":true,\"confidence\":86,\"missing\":\"\"}"
+          }
+        ],
+        "stop_reason": "end_turn",
+        "usage": { "input_tokens": 1720, "output_tokens": 74 }
+      }
+    },
+    {
+      "diagram": "Class - Rule Engine",
+      "response": {
+        "id": "msg_fixture_2",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-haiku-4-5-20251001",
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"answer\":\"[fixture] RuleChain owns RuleNodes; the relationships between the actors are hard to follow.\",\"answerable\":true,\"confidence\":55,\"missing\":\"[fixture] Multiplicities are too small to read.\"}"
+          }
+        ],
+        "stop_reason": "end_turn",
+        "usage": { "input_tokens": 1650, "output_tokens": 41 }
+      }
+    },
+    {
+      "diagram": "State - Alarm lifecycle",
+      "response": {
+        "id": "msg_fixture_3",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-haiku-4-5-20251001",
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"answer\":\"\",\"answerable\":false,\"confidence\":20,\"missing\":\"[fixture] The transitions carry no triggers.\"}"
+          }
+        ],
+        "stop_reason": "end_turn"
+      }
+    },
+    {
+      "diagram": "Refused",
+      "response": { "content": [], "stop_reason": "refusal" }
+    }
+  ]
+}

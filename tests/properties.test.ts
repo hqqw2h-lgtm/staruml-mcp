@@ -228,8 +228,8 @@ describe("tiers.ts", () => {
   });
 
   it("the oo tier reaches nothing that draws, whatever is added to it but a drawing name", () => {
+    // build_diagram is reached, through a template only (TEMPLATE_ONLY_FIELDS, issue #20).
     const DRAWING = [
-      "build_diagram",
       "create_element_with_view",
       "create_edge_with_view",
       "create_view_of",

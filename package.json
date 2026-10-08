@@ -53,6 +53,7 @@
     "load-test": "node scripts/load-test.mjs",
     "soak-test": "node scripts/soak-test.mjs",
     "benchmark:tokens": "node --import tsx scripts/token-benchmark.mjs",
+    "readability": "node --import tsx scripts/readability-check.mjs",
     "sync:manifest": "node scripts/sync-manifest.mjs",
     "sync:skills": "node scripts/sync-skills.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
@@ -68,6 +69,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.132.0",
     "@eslint/js": "^9.39.4",
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",

@@ -198,9 +198,11 @@ export interface ModelFirstArgs {
 
 /**
  * Object-first authoring (issue #17): the domain stated as objects, the model built from them
- * after a dry run, every diagram derived by rule and laid out by the style profile, then read,
- * reviewed with model_lint and refined through the spec. The agent never draws: the oo tier
- * lists nothing that could, and the prompt says so, but the tier is what keeps it so.
+ * after a dry run, then since issue #20 one view per question a reader has, asked for by intent
+ * (`request_diagram`): the extension's decision table picks the viewpoint, kind and template, so
+ * a diagram exists because it answers something. derive_diagrams draws the rest the model implies.
+ * The agent never draws: the oo tier lists nothing that could, and the prompt says so, but the
+ * tier is what keeps it so.
  */
 export function modelFirst(state: CatalogState, args: ModelFirstArgs): GetPromptResult {
   const system = args.system ?? "<system>";
@@ -217,25 +219,33 @@ export function modelFirst(state: CatalogState, args: ModelFirstArgs): GetPrompt
         "knows), the actors and their use cases, the collaborations worth a sequence diagram and " +
         "the lifecycles worth a state machine. Write that as a build_model spec with system " +
         `"${system}".`,
-      `2. ${call("build_model", "{spec, dryRun: true}")}: check the paths it would create (the ` +
+      "2. List the questions the diagrams must answer, one per diagram, each with who asks it " +
+        "(business, analyst, architect, developer, tester, operator or dba): for example " +
+        '"how does a device publish telemetry" for a developer, "which states can an alarm be ' +
+        'in" for a tester. A diagram no question needs is not drawn.',
+      `3. ${call("build_model", "{spec, dryRun: true}")}: check the paths it would create (the ` +
         'first 20 of each kind, the rest counted in omitted; detail: "full" lists all) and ' +
         "that each relationship verb points the right way (from is the whole, the client, the " +
         "specific kind or the side that navigates).",
-      `3. ${call("build_model", "{spec}")} builds the model in one undo step. classViews and ` +
+      `4. ${call("build_model", "{spec}")} builds the model in one undo step. classViews and ` +
         "useCaseViews in the spec group the class and use case diagrams as the user wants them.",
-      `4. ${call("derive_diagrams", scope)} draws every diagram the model implies, each laid ` +
-        "out by the style profile and run through the quality loop; quality.failing names any " +
-        "below its target.",
-      '5. view_diagram({diagram: "<a derived diagram\'s name>"}) for the diagrams that matter ' +
-        `most, diagram_as_text for their content, ${call("explain_model", scope)} for the whole ` +
-        "model as text.",
-      `6. ${call("model_lint", scope)} reviews the object design. Fix what it reports in the ` +
-        `spec, then ${call("build_model", "{spec, upsert: true}")} and ` +
-        `${call("derive_diagrams", scope)} again: both update in place. Repeat until it reports ` +
-        "no error or warning, at most three rounds.",
+      `5. For each question, ${call("request_diagram", `{intent: "<the question>", audience: "<who asks>", scope: "${system}"}`)}: ` +
+        "the engine picks the viewpoint, kind and template from its decision table, draws the " +
+        "view from the model and answers its choice and the question the view answers. A " +
+        "VIEWPOINT_MISMATCH lists the views that do fit and where: pick one, or narrow the scope " +
+        "to the package, class or collaboration the question is about.",
+      `6. ${call("derive_diagrams", scope)} draws every other diagram the model implies, each ` +
+        "from its viewpoint's template and run through the quality loop; quality.failing names " +
+        "any below its target.",
+      '7. view_diagram({diagram: "<a requested diagram\'s id>"}) for each question: check the ' +
+        `picture answers it. diagram_as_text gives the content, ${call("explain_model", scope)} ` +
+        "the whole model as text.",
+      `8. ${call("model_lint", scope)} reviews the object design. Fix what it reports in the ` +
+        `spec, then ${call("build_model", "{spec, upsert: true}")} and ask for the views again: ` +
+        "both update in place. Repeat until it reports no error or warning, at most three rounds.",
       "",
-      "Report the model in a few sentences, the diagrams derived with their scores, and what " +
-        "model_lint still reports.",
+      "Report the model in a few sentences, each question with the view that answers it " +
+        "(viewpoint, template, score), and what model_lint still reports.",
     ].join("\n"),
   );
 }
@@ -279,8 +289,14 @@ const NEEDS: Record<string, readonly string[]> = {
   [REVIEW_DIAGRAM]: ["describe_diagram", "validate_model"],
   [IMPROVE_DIAGRAM]: ["diagram_quality", "improve_diagram"],
   [APPLY_PATTERN_PROMPT]: ["describe_pattern", "apply_pattern"],
-  [MODEL_FIRST]: ["build_model", "derive_diagrams"],
+  [MODEL_FIRST]: ["build_model", "derive_diagrams", "request_diagram"],
 };
+
+/**
+ * Prompts that draw without a template: model-codebase builds its class diagram from a free spec,
+ * which a closed tier refuses (TEMPLATE_ONLY_FIELDS) though it reaches build_diagram since 0.10.0.
+ */
+const DRAWS_FREELY: ReadonlySet<string> = new Set([MODEL_CODEBASE]);
 
 /**
  * Lists each prompt whose endpoints the tier reaches (what a tier lists it reaches, tiers.ts);
@@ -289,7 +305,9 @@ const NEEDS: Record<string, readonly string[]> = {
 export function syncPrompts(state: CatalogState, prompts: Record<string, RegisteredPrompt>): void {
   const { selection } = state;
   for (const [name, prompt] of Object.entries(prompts)) {
-    const wanted = NEEDS[name]!.every((e) => reaches(selection, e));
+    const wanted =
+      NEEDS[name]!.every((e) => reaches(selection, e)) &&
+      !(selection.closed && DRAWS_FREELY.has(name));
     // Each change sends notifications/prompts/list_changed.
     if (prompt.enabled !== wanted) {
       if (wanted) prompt.enable();
@@ -346,7 +364,7 @@ export function registerPrompts(
       {
         title: "Model a domain object-first",
         description:
-          "State a domain as objects, dry-run and build the model, derive every diagram, review.",
+          "State a domain as objects, build the model, ask for one view per question, review.",
         argsSchema: ModelFirstPromptArgs,
       },
       (args) => modelFirst(state, args),

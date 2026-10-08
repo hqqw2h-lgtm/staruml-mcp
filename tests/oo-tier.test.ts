@@ -23,7 +23,13 @@ import {
 } from "../src/model.js";
 import { DETECT_PATTERNS_DESCRIPTION } from "../src/patterns.js";
 import { MODEL_LINT_DESCRIPTION } from "../src/quality.js";
-import { OO_REACHABLE, OO_TOOLS, parseToolSelection, reaches } from "../src/tiers.js";
+import {
+  OO_REACHABLE,
+  OO_TOOLS,
+  parseToolSelection,
+  reaches,
+  TEMPLATE_ONLY_FIELDS,
+} from "../src/tiers.js";
 import { styleProfile, UpstreamFixture } from "./support/fixture.js";
 import { connect, text, type ConnectedClient } from "./support/mcp.js";
 
@@ -64,9 +70,9 @@ const WAY_OUT = /doctor|tools:|\bcore\b|switch|--tools|allow-tier/i;
 /**
  * Endpoints that place, size, colour or draw views (`DRAWING_ENDPOINTS` and `STYLE_ENDPOINTS` in
  * the extension's src/style/guard.ts), and those that run any endpoint or change the profile.
+ * build_diagram is reached since 0.10.0, through a template from content alone (issue #20).
  */
 const DRAWING = [
-  "build_diagram",
   "create_element_with_view",
   "create_edge_with_view",
   "create_view_of",
@@ -91,18 +97,25 @@ describe("oo tier listing", () => {
       "view_diagram",
       "diagram_as_text",
       "doctor",
+      "list_templates",
       "validate_model",
       "build_model",
       "derive_diagrams",
       "explain_model",
       "model_lint",
+      "request_diagram",
       "apply_pattern",
       "detect_patterns",
       "diagram_quality",
       "describe_endpoints",
       "call_endpoint",
     ]);
-    for (const name of [...DRAWING, "generate_diagram", "get_diagram_image_by_id"]) {
+    for (const name of [
+      ...DRAWING,
+      "build_diagram",
+      "generate_diagram",
+      "get_diagram_image_by_id",
+    ]) {
       expect(await names()).not.toContain(name);
     }
   });
@@ -201,7 +214,7 @@ describe("oo tier refusals", () => {
       },
     });
     const { hint } = (result.structuredContent as { error: { hint: string } }).error;
-    expect(hint).toMatch(/build_model.*derive_diagrams.*improve_diagram/);
+    expect(hint).toMatch(/build_model.*request_diagram.*derive_diagrams.*improve_diagram/);
     expect(hint).not.toMatch(WAY_OUT);
     expect(extension.requests).toEqual([]);
   });
@@ -539,7 +552,7 @@ describe("doctor({tools}): the tier is fixed at launch", () => {
     const report = text(await mcp.call("doctor", { tools: "oo" }));
 
     expect(report).toMatch(
-      /tier +ok +oo: 8 extension tools listed, \d+ endpoints through call_endpoint/,
+      /tier +ok +oo: 10 extension tools listed, \d+ endpoints through call_endpoint/,
     );
     expect(catalog.selection.closed).toBe(true);
     expect(await names()).not.toContain("generate_diagram");
@@ -815,7 +828,203 @@ describe("model-first answers", () => {
     const index = describeEndpoints(state, {});
 
     expect(Object.values(index).flatMap((g) => Object.keys(g as object))).not.toContain(
-      "build_diagram",
+      "move_views",
     );
   });
+});
+
+/**
+ * Issue #20: under the oo tier build_diagram and derive_diagrams take a template's name and the
+ * content only. What the extension's strict profile refuses as TEMPLATE_ONLY is refused here first,
+ * with the same code, and no schema the tier shows offers it.
+ */
+describe("oo tier: a template and content only (#20)", () => {
+  const SPEC = { classes: [{ name: "Order" }] };
+  const sent = () => extension.requests.filter((r) => r.path !== "/get_style_profile");
+  const refusal = (result: Awaited<ReturnType<ConnectedClient["call"]>>) =>
+    (result.structuredContent as { error: { code: string; message: string; hint: string } }).error;
+
+  it("refuses a build without a template, or with a layout, a direction or a style, before sending", async () => {
+    await connectOo();
+    const build = (body: Record<string, unknown>) =>
+      mcp.call("call_endpoint", { name: "build_diagram", body });
+
+    const untemplated = refusal(await build({ kind: "class", spec: SPEC }));
+    const laidOut = refusal(
+      await build({
+        template: "code-classes",
+        spec: { ...SPEC, styles: {} },
+        layout: "flow-down",
+        direction: "LR",
+        autoLayout: false,
+      }),
+    );
+
+    expect(untemplated).toEqual({
+      code: "TEMPLATE_ONLY",
+      message: "template: the oo tier draws a diagram through a template",
+      endpoint: "/build_diagram",
+      hint: "Pass template (list_templates names them) with spec, mermaid or text, or ask request_diagram for the view by intent.",
+    });
+    expect(laidOut.code).toBe("TEMPLATE_ONLY");
+    expect(laidOut.message).toBe(
+      "layout, direction, autoLayout, spec.styles: the oo tier draws a diagram from a template and its content only",
+    );
+    expect(laidOut.hint).not.toMatch(WAY_OUT);
+    // override is refused as the tier's, before the template check.
+    expect(
+      refusal(await build({ template: "code-classes", spec: SPEC, override: true })).code,
+    ).toBe("NOT_IN_TIER");
+    expect(extension.requests).toEqual([]);
+  });
+
+  it("sends a templated build once the profile is strict, the parent alias renamed", async () => {
+    await connectOo();
+    extension.reply("/get_style_profile", styleProfile(true));
+    extension.reply("/build_diagram", { body: { success: true, data: { kind: "class" } } });
+
+    const result = await mcp.call("call_endpoint", {
+      name: "build_diagram",
+      body: { template: "code-classes", name: "Orders", parentId: "Shop", spec: SPEC },
+    });
+
+    expect(result.isError, text(result)).toBeFalsy();
+    expect(sent()).toEqual([
+      {
+        method: "POST",
+        path: "/build_diagram",
+        body: { template: "code-classes", name: "Orders", parent: "Shop", spec: SPEC },
+      },
+    ]);
+  });
+
+  it("refuses derive_diagrams' policy and sends its template and viewpoints", async () => {
+    await connectOo();
+    extension.reply("/get_style_profile", styleProfile(true));
+    extension.reply("/derive_diagrams", { body: { success: true, data: { diagrams: [] } } });
+
+    const policy = refusal(
+      await mcp.call("derive_diagrams", { scope: "Shop", policy: { hideGetters: true } }),
+    );
+    const chosen = await mcp.call("derive_diagrams", {
+      scope: "Shop",
+      viewpoints: ["runtime"],
+      template: "runtime-sequence",
+    });
+
+    expect(policy).toMatchObject({
+      code: "TEMPLATE_ONLY",
+      message: "policy: the oo tier draws a diagram from a template and its content only",
+      hint: "Choose the diagrams with kinds, viewpoints or template; what each shows and how it looks is its template's.",
+    });
+    expect(chosen.isError, text(chosen)).toBeFalsy();
+    expect(sent().map((r) => r.body)).toEqual([
+      { scope: "Shop", viewpoints: ["runtime"], template: "runtime-sequence" },
+    ]);
+  });
+
+  it("lets the core tier send a layout and a policy as the user wrote them", async () => {
+    mcp = await connect({ apiHost: HOST, apiPort: builtin.port, extPort: extension.port });
+    extension.reply("/build_diagram", { body: { success: true, data: {} } });
+
+    await mcp.call("build_diagram", { kind: "class", spec: SPEC, layout: "flow-down" });
+
+    expect(extension.requests.map((r) => r.body)).toEqual([
+      { kind: "class", spec: SPEC, layout: "flow-down" },
+    ]);
+  });
+
+  it("describes build_diagram and derive_diagrams with the fields it takes, template required", async () => {
+    await connectOo();
+    const described = JSON.parse(
+      text(await mcp.call("describe_endpoints", { names: ["build_diagram"] })),
+    ) as { build_diagram: { request: { properties: object; required: string[] } } };
+
+    const { request } = described.build_diagram;
+    expect(Object.keys(request.properties).sort()).toEqual(
+      [...TEMPLATE_ONLY_FIELDS.get("build_diagram")!.allowed].sort(),
+    );
+    expect(request.required).toEqual(["template"]);
+    const derive = describeEndpoints(catalog, { names: ["derive_diagrams"] }) as {
+      derive_diagrams: { request: { properties: object; required: string[] } };
+    };
+    expect(Object.keys(derive.derive_diagrams.request.properties)).not.toContain("policy");
+    expect(derive.derive_diagrams.request.required).toEqual(["scope"]);
+    // The core tier describes every field.
+    const core = describeEndpoints(new CatalogState(), { names: ["build_diagram"] }) as {
+      build_diagram: { request: { properties: object; required?: string[] } };
+    };
+    expect(Object.keys(core.build_diagram.request.properties)).toContain("layout");
+    expect(core.build_diagram.request.required).toBeUndefined();
+  });
+
+  it("describes an entry without required fields or properties without inventing any", () => {
+    const manifest = {
+      ...BUNDLED_MANIFEST,
+      endpoints: BUNDLED_MANIFEST.endpoints.map((e) =>
+        e.path === "/derive_diagrams"
+          ? { ...e, request: { type: "object" } }
+          : e.path === "/build_diagram"
+            ? { ...e, request: { type: "object", required: ["kind"] } }
+            : e,
+      ),
+    };
+    const state = new CatalogState(
+      { compiled: compileManifest(manifest, HAND_WRITTEN_TOOLS), source: "bundled", enabled: true },
+      parseToolSelection("oo"),
+    );
+
+    expect(describeEndpoints(state, { names: ["derive_diagrams", "build_diagram"] })).toEqual({
+      derive_diagrams: expect.objectContaining({ request: { type: "object", properties: {} } }),
+      build_diagram: expect.objectContaining({
+        request: { type: "object", properties: {}, required: ["kind", "template"] },
+      }),
+    });
+  });
+
+  it("sends only template and content, with a template, whatever fields a build is given", async () => {
+    await connectOo();
+    extension.reply("/get_style_profile", styleProfile(true));
+    extension.reply("/build_diagram", { body: { success: true, data: {} } });
+    const fields = [
+      "template",
+      "kind",
+      "spec",
+      "mermaid",
+      "name",
+      "upsert",
+      "dryRun",
+      "layout",
+      "direction",
+      "autoLayout",
+      "showNamespace",
+      "viewpoint",
+      "reuse",
+    ];
+    const value = fc.oneof(
+      fc.constantFrom("code-classes", "class", "flow-down", "LR", "code"),
+      fc.boolean(),
+      fc.constant(SPEC),
+    );
+    const allowed = TEMPLATE_ONLY_FIELDS.get("build_diagram")!.allowed;
+    await fc.assert(
+      fc.asyncProperty(fc.dictionary(fc.constantFrom(...fields), value), async (body) => {
+        const before = sent().length;
+        const result = await mcp.call("call_endpoint", { name: "build_diagram", body });
+        const out = sent().slice(before);
+        if (result.isError) {
+          expect(out).toEqual([]);
+          return;
+        }
+        expect(out).toHaveLength(1);
+        const keys = Object.keys(out[0]!.body as object);
+        expect(
+          keys.every((k) => allowed.has(k)),
+          keys.join(),
+        ).toBe(true);
+        expect(keys).toContain("template");
+      }),
+      { numRuns: 150 },
+    );
+  }, 60_000);
 });

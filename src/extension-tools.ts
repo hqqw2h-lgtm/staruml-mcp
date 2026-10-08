@@ -120,6 +120,7 @@ import {
   parseToolSelection,
   reaches,
   selects,
+  TEMPLATE_ONLY_FIELDS,
   VIEW_STYLE_FIELDS,
   widens,
   type ToolSelection,
@@ -168,7 +169,7 @@ export const HAND_WRITTEN_TOOLS: ReadonlySet<string> = new Set([
  * tier: the re-validation's agent followed exactly that advice and left it in one call.
  */
 export const MODEL_FIRST_HINT =
-  "The oo tier states the model and derives the diagrams: change the model with build_model (or the model endpoints describe_endpoints() lists), then derive_diagrams lays out every diagram the model implies and improve_diagram raises one's score.";
+  "The oo tier states the model and derives the diagrams: change the model with build_model (or the model endpoints describe_endpoints() lists), then request_diagram draws the view that answers a question, derive_diagrams every diagram the model implies, and improve_diagram raises one's score.";
 
 /** The extension tools a server offers, and where their definitions came from. */
 export interface ExtensionCatalog {
@@ -629,6 +630,7 @@ function validated(
   const { body, used } = canonicalBody(tool, input);
   refuseDrawing(state, tool, body);
   refuseOverride(state, tool, body);
+  refuseFreeForm(state, tool, body);
   const parsed = tool.requestSchema.safeParse(body);
   if (!parsed.success) {
     const issues = parsed.error.issues.map(
@@ -687,6 +689,39 @@ function refuseOverride(state: CatalogState, tool: GeneratedTool, body: Record<s
       code: ErrorCode.NotInTier,
       endpoint: tool.path,
       hint: `${MODEL_FIRST_HINT} A save or export the profile blocks needs uml_lint's and model_lint's errors fixed first.`,
+    },
+  );
+}
+
+/**
+ * Under a closed tier the endpoints that draw from content take a template's name and the content
+ * only (TEMPLATE_ONLY_FIELDS, issue #20): a layout, a direction, a style or a policy is refused
+ * before anything is sent, as is a build without a template, and so is a spec carrying `styles`,
+ * which extension #43 refuses under a strict profile too.
+ */
+function refuseFreeForm(state: CatalogState, tool: GeneratedTool, body: Record<string, unknown>) {
+  const rule = state.selection.closed ? TEMPLATE_ONLY_FIELDS.get(tool.name) : undefined;
+  if (rule === undefined) return;
+  const spec = body.spec;
+  const fields = [
+    ...Object.keys(body).filter((f) => !rule.allowed.has(f)),
+    ...(typeof spec === "object" && spec !== null && Object.hasOwn(spec, "styles")
+      ? ["spec.styles"]
+      : []),
+  ];
+  const missing = rule.required !== undefined && body[rule.required] === undefined;
+  if (fields.length === 0 && !missing) return;
+  throw new ToolInputError(
+    fields.length > 0
+      ? `${fields.join(", ")}: the ${state.selection.label} tier draws a diagram from a template and its content only`
+      : `${rule.required}: the ${state.selection.label} tier draws a diagram through a template`,
+    {
+      code: ErrorCode.TemplateOnly,
+      endpoint: tool.path,
+      hint:
+        tool.name === "derive_diagrams"
+          ? "Choose the diagrams with kinds, viewpoints or template; what each shows and how it looks is its template's."
+          : "Pass template (list_templates names them) with spec, mermaid or text, or ask request_diagram for the view by intent.",
     },
   );
 }
@@ -814,7 +849,11 @@ export function describe(
       ...(entry.readOnly ? { readOnly: true } : {}),
       ...(entry.destructive ? { destructive: true } : {}),
       request: withoutTrivialKeywords(
-        exposesOverride(state.selection, name) ? schema : withoutOverride(schema),
+        templateOnly(
+          state,
+          name,
+          exposesOverride(state.selection, name) ? schema : withoutOverride(schema),
+        ),
       ),
     };
   }
@@ -827,6 +866,36 @@ function withoutOverride(schema: Record<string, unknown>): Record<string, unknow
   if (!Object.hasOwn(properties, "override")) return schema;
   const { override: _override, ...rest } = properties;
   return { ...schema, properties: rest };
+}
+
+/**
+ * Under a closed tier, a request schema with only the fields {@link refuseFreeForm} lets through,
+ * and the template required where the tier requires it: describe_endpoints shows no field the call
+ * would be refused for.
+ */
+function templateOnly(
+  state: CatalogState,
+  name: string,
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  const rule = state.selection.closed ? TEMPLATE_ONLY_FIELDS.get(name) : undefined;
+  if (rule === undefined) return schema;
+  const {
+    properties = {},
+    required = [],
+    ...rest
+  } = schema as {
+    properties?: Record<string, unknown>;
+    required?: string[];
+  };
+  const kept = [...required, ...(rule.required === undefined ? [] : [rule.required])].filter(
+    (f, i, all) => rule.allowed.has(f) && all.indexOf(f) === i,
+  );
+  return {
+    ...rest,
+    properties: Object.fromEntries(Object.entries(properties).filter(([f]) => rule.allowed.has(f))),
+    ...(kept.length > 0 ? { required: kept } : {}),
+  };
 }
 
 const CallInput = unstamped(
