@@ -144,20 +144,32 @@ interface Derived {
   kind?: unknown;
   name?: unknown;
   quality?: { score?: unknown };
+  viewpoint?: unknown;
+  template?: unknown;
+  conforms?: unknown;
+  accepted?: unknown;
   [field: string]: unknown;
 }
 
 /**
- * A /derive_diagrams answer for the model: each diagram as its kind, its name, its id and its
- * non-zero counts, with the score its quality loop reached; the rating and `passes` are left out
- * (the totals' `quality.failing` names every diagram below its target). The id stays: a derived
- * sequence diagram is named like the collaboration and the interaction it shows, so its name
- * alone is an AMBIGUOUS_REF (extension 0.3.0, phase 1h). A dry run's "$diagram" placeholder is
- * dropped.
+ * A /derive_diagrams or /request_diagram answer for the model: each diagram as its kind, its
+ * name, its id and its non-zero counts, with the score its quality loop reached, and since
+ * extension #42/#43 the viewpoint it is a view of and the template it was drawn with; the rating
+ * and `passes` are left out (the totals' `quality.failing` names every diagram below its target).
+ * The id stays: a derived sequence diagram is named like the collaboration and the interaction it
+ * shows, so its name alone is an AMBIGUOUS_REF (extension 0.3.0, phase 1h). A dry run's
+ * "$diagram" placeholder is dropped.
+ *
+ * `conforms` (no viewpoint_lint error or warning) and `accepted` (it passes as one of its
+ * template's) are written per diagram only when false, and counted in `viewpoints`: on the 25
+ * ThingsBoard diagrams the two flags cost 225 tokens (9 a diagram) to say what two numbers say.
  */
 export function deriveResult(data: unknown, input: Json): CallToolResult {
   const diagrams = (data as { diagrams?: unknown } | null)?.diagrams;
   if (!Array.isArray(diagrams)) return jsonResult(data, input);
+  const flagged = (diagrams as Derived[]).filter(
+    (d) => typeof d === "object" && d !== null && typeof d.conforms === "boolean",
+  );
   return jsonResult(
     {
       ...(data as Json),
@@ -172,8 +184,20 @@ export function deriveResult(data: unknown, input: Json): CallToolResult {
           ...(id === undefined ? {} : { diagram: id }),
           ...Object.fromEntries(counts.map((c) => [c, d[c]])),
           ...(typeof d.quality?.score === "number" ? { score: d.quality.score } : {}),
+          ...(typeof d.viewpoint === "string" ? { viewpoint: d.viewpoint } : {}),
+          ...(typeof d.template === "string" ? { template: d.template } : {}),
+          ...(d.conforms === false ? { conforms: false } : {}),
+          ...(d.accepted === false ? { accepted: false } : {}),
         };
       }),
+      ...(flagged.length === 0
+        ? {}
+        : {
+            viewpoints: {
+              conforming: flagged.filter((d) => d.conforms === true).length,
+              accepted: flagged.filter((d) => d.accepted === true).length,
+            },
+          }),
     },
     input,
   );

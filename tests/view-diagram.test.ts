@@ -85,7 +85,7 @@ describe("view_diagram listing", () => {
     });
     expect(tool.inputSchema.required).toBeUndefined();
     expect(tool.inputSchema.properties).toMatchObject({
-      path: { description: "Absolute file to write instead." },
+      path: { description: "Absolute file to write instead; .drawio writes draw.io." },
     });
     // maxWidth is accepted unlisted, to keep the core tier under 2,000 tokens.
     expect(tool.inputSchema.properties).not.toHaveProperty("maxWidth");
@@ -516,6 +516,28 @@ describe("view_diagram for a client without MCP Apps", () => {
       }
     });
 
+    it("refuses a draw.io file, which only the extension writes", async () => {
+      const mcp = await connect({ ...config(), catalog: disabled() });
+      try {
+        const byName = await mcp.call("view_diagram", { diagram: "D1", path: "/tmp/m.drawio" });
+        const byFormat = await mcp.call("view_diagram", {
+          diagram: "D1",
+          path: "/tmp/m.png",
+          format: "drawio",
+        });
+
+        for (const result of [byName, byFormat]) {
+          expect(result.structuredContent).toMatchObject({
+            error: { code: "EXTENSION_REQUIRED" },
+          });
+          expect(text(result)).toContain("SVG, JPEG and draw.io");
+        }
+        expect(builtin.requests).toEqual([]);
+      } finally {
+        await mcp.close();
+      }
+    });
+
     it("answers no size for bytes that are not a PNG", async () => {
       builtin.reply("/get_diagram_image_by_id", { body: { success: true, data: PNG } });
       builtin.reply("/get_current_diagram_info", {
@@ -584,6 +606,8 @@ describe("view_diagram for a client without MCP Apps", () => {
       ["/tmp/out/main.jpeg", "jpeg"],
       ["/tmp/out/main.jpg", "jpeg"],
       ["/tmp/out/main", "png"],
+      ["/tmp/out/main.drawio", "drawio"],
+      ["/tmp/out/MAIN.DRAWIO", "drawio"],
     ])("has the extension write %s as %s and answers its path and size", async (file, format) => {
       extension.reply("/export_diagram", written(format, 5800, file));
 
@@ -639,6 +663,54 @@ describe("view_diagram for a client without MCP Apps", () => {
           code: "INVALID_ARGUMENT",
           message: 'path: must be an absolute path, got "out/main.png"',
           hint: "Pass an absolute file such as /tmp/diagram.png; the extension writes it.",
+        },
+      });
+      expect(extension.requests).toEqual([]);
+    });
+
+    it("writes a draw.io file whole and without labels, whatever maxWidth and annotate say", async () => {
+      extension.reply("/export_diagram", written("drawio", 900, "/tmp/x.drawio"));
+
+      const result = await plain.call("view_diagram", {
+        path: "/tmp/x.drawio",
+        annotate: "paths",
+        maxWidth: 100,
+      });
+
+      // The extension ignores annotate for draw.io (src/handlers/export.ts); none is sent.
+      expect(exports()).toEqual([{ format: "drawio", path: "/tmp/x.drawio" }]);
+      expect(JSON.parse(text(result))).toEqual({
+        diagram: "D1",
+        width: 900,
+        height: 100,
+        bytes: 5120,
+      });
+    });
+
+    it("takes format over the file's extension", async () => {
+      extension.reply("/export_diagram", written("drawio", 900, "/tmp/x.xml"));
+
+      await plain.call("view_diagram", { path: "/tmp/x.xml", format: "drawio" });
+
+      expect(exports()).toEqual([{ format: "drawio", path: "/tmp/x.xml" }]);
+    });
+
+    it("refuses draw.io without a path, and an unknown format, before anything is sent", async () => {
+      const inline = await plain.call("view_diagram", { format: "drawio" });
+      const unknown = await plain.call("view_diagram", { path: "/tmp/x.png", format: "gif" });
+
+      expect(inline.structuredContent).toEqual({
+        error: {
+          code: "INVALID_ARGUMENT",
+          message: "format drawio is written to a file, never answered inline",
+          hint: "Pass path, an absolute .drawio file; the answer is its path and size.",
+        },
+      });
+      expect(unknown.structuredContent).toEqual({
+        error: {
+          code: "INVALID_ARGUMENT",
+          message: "format: expected one of png, jpeg, svg, drawio",
+          hint: "format names the file's format; by default the path's extension does.",
         },
       });
       expect(extension.requests).toEqual([]);

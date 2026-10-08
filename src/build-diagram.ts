@@ -41,7 +41,13 @@ const FAMILIES =
   "other kinds{nodes[{name,type,in}],edges[{from,to,type,name}]}, ibd|parametric also block; " +
   "types and requirement|c4: describe_endpoints";
 
-/** Listed parameters with their shorter descriptions. */
+/**
+ * Listed parameters with their shorter descriptions. Since 0.10.0 `template` (extension #43) is
+ * listed in place of `direction` and `layout`: a template carries its layout preset, house style
+ * and parts, and is what a strict profile requires (TEMPLATE_ONLY); the two pass unlisted, and
+ * describe_endpoints shows their presets. The swap paid for the template and the draw.io line of
+ * export_diagram within the core tier's 2,000 tokens.
+ */
 const LISTED: Record<string, string> = {
   kind: "Required with spec; activity|usecase read a Mermaid flowchart so.",
   spec: `${SHAPES} ${FAMILIES}`,
@@ -50,18 +56,16 @@ const LISTED: Record<string, string> = {
   upsert: "Add only what the same-named diagram lacks.",
   prune: "With upsert, also delete what the spec lacks.",
   dryRun: "Change nothing; answer the plan.",
-  direction: "Layout direction.",
-  layout: "Preset flow-|hierarchy- + down|up|right|left; default by kind.",
+  template: "list_templates: its viewpoint, style, layout and legend.",
 };
 
 /**
  * kind is listed with the manifest's enum, so the kinds a model may name follow the running
  * extension. spec's record type lists as {type, propertyNames, properties,
- * additionalProperties} and layout's enum spells out eight presets the description composes
- * from two lists. The flags' descriptions say they are flags, so `type: "boolean"` adds 5 tokens
- * each. The whole request schema still checks them all.
+ * additionalProperties}. The flags' descriptions say they are flags, so `type: "boolean"` adds 5
+ * tokens each. The whole request schema still checks them all.
  */
-const UNTYPED = new Set(["spec", "layout", "upsert", "prune", "dryRun"]);
+const UNTYPED = new Set(["spec", "upsert", "prune", "dryRun"]);
 
 /**
  * The listed input schema: {@link LISTED} out of the entry's properties, loose so `parentId` and

@@ -15,7 +15,7 @@ import {
   exportDiagramInput,
 } from "./export-diagram.js";
 import { LruCache, memo } from "./cache.js";
-import { exportRaster, imageMaxWidth, inlineRaster } from "./images.js";
+import { checkDrawioFile, exportRaster, imageMaxWidth, inlineRaster } from "./images.js";
 import type { Check } from "./doctor.js";
 import {
   DELETE_ELEMENT,
@@ -125,6 +125,27 @@ import {
   type ToolSelection,
 } from "./tiers.js";
 import { exportResult, jsonResult, runTool } from "./tool-result.js";
+import {
+  DESCRIBE_TEMPLATE,
+  DESCRIBE_TEMPLATE_DESCRIPTION,
+  DESCRIBE_VIEWPOINT,
+  DESCRIBE_VIEWPOINT_DESCRIPTION,
+  describeTemplateInput,
+  describeViewpointInput,
+  LIST_TEMPLATES,
+  LIST_TEMPLATES_DESCRIPTION,
+  LIST_VIEWPOINTS,
+  LIST_VIEWPOINTS_DESCRIPTION,
+  listTemplatesInput,
+  listViewpointsInput,
+  REQUEST_DIAGRAM,
+  REQUEST_DIAGRAM_DESCRIPTION,
+  requestDiagramInput,
+  templatesResult,
+  VIEWPOINT_LINT,
+  VIEWPOINT_LINT_DESCRIPTION,
+  viewpointLintInput,
+} from "./viewpoints.js";
 
 /**
  * Tools written by hand: the four endpoints of StarUML's built-in API, which has no manifest, and
@@ -240,6 +261,12 @@ export class CatalogState {
     return this.listeners.size;
   }
 }
+
+/**
+ * /export_text writes no file: its draw.io text, every view of the diagram as mxGraph XML, would
+ * reach the model whole, so it is refused with export_diagram's file as the way to get one.
+ */
+const EXPORT_TEXT = "export_text";
 
 /** The summary tool replaces the endpoint's own: a full /introspect answer is about 250 KB. */
 const SUMMARIZED = "introspect";
@@ -393,6 +420,31 @@ const SHORT_LISTED: Record<
     description: DETECT_PATTERNS_DESCRIPTION,
     input: (tool) => detectPatternsInput(tool.entry),
   },
+  // Viewpoints and templates (extension #42, #43).
+  [REQUEST_DIAGRAM]: {
+    description: REQUEST_DIAGRAM_DESCRIPTION,
+    input: (tool) => requestDiagramInput(tool.entry),
+  },
+  [LIST_TEMPLATES]: {
+    description: LIST_TEMPLATES_DESCRIPTION,
+    input: (tool) => listTemplatesInput(tool.entry),
+  },
+  [DESCRIBE_TEMPLATE]: {
+    description: DESCRIBE_TEMPLATE_DESCRIPTION,
+    input: (tool) => describeTemplateInput(tool.entry),
+  },
+  [LIST_VIEWPOINTS]: {
+    description: LIST_VIEWPOINTS_DESCRIPTION,
+    input: (tool) => listViewpointsInput(tool.entry),
+  },
+  [DESCRIBE_VIEWPOINT]: {
+    description: DESCRIBE_VIEWPOINT_DESCRIPTION,
+    input: (tool) => describeViewpointInput(tool.entry),
+  },
+  [VIEWPOINT_LINT]: {
+    description: VIEWPOINT_LINT_DESCRIPTION,
+    input: (tool) => viewpointLintInput(tool.entry),
+  },
 };
 
 function specs(
@@ -484,6 +536,7 @@ async function send(
   body: Record<string, unknown>,
   options: SendOptions,
 ): Promise<unknown> {
+  checkDrawioFile(body.format, tool.name === EXPORT_TEXT ? undefined : body.path, tool.path);
   if (needsStrictProfile(state.selection, tool.name, tool.entry.readOnly === true)) {
     await ensureStrictProfile(client, tool.path);
   }
@@ -523,6 +576,10 @@ const RESULT_SHAPES: Record<
   [APPLY_PATTERN]: patternResult,
   [APPLY_PRESET]: patternResult,
   [DETECT_PATTERNS]: detectResult,
+  // request_diagram answers its choice and the diagrams it derived, as derive_diagrams does.
+  [REQUEST_DIAGRAM]: deriveResult,
+  [LIST_TEMPLATES]: templatesResult,
+  [VIEWPOINT_LINT]: findingsResult,
 };
 
 /**

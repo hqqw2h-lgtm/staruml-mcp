@@ -27,6 +27,7 @@ import {
   type TextFormat,
 } from "./diagram-text.js";
 import { generateDiagram } from "./generate-diagram.js";
+import { IMAGE_FORMATS, type ImageFormat } from "./images.js";
 import { nonEmpty, PROJECTION_INSTRUCTIONS, unlisted, unstamped, untrivial } from "./manifest.js";
 import { readProjectTree } from "./project-tree.js";
 import { registerPrompts, syncPrompts } from "./prompts.js";
@@ -137,7 +138,9 @@ const ViewDiagramInput = unstamped(
       annotate: unlisted(z.enum(ANNOTATE), "enum", "type")
         .optional()
         .describe("As export_diagram's."),
-      path: unlisted(nonEmpty(), "type").optional().describe("Absolute file to write instead."),
+      path: unlisted(nonEmpty(), "type")
+        .optional()
+        .describe("Absolute file to write instead; .drawio writes draw.io."),
     }),
   ),
 );
@@ -161,6 +164,20 @@ function widthArgument(value: unknown): number | undefined {
   throw new ToolInputError(`maxWidth: expected a whole number of pixels, 0 or more`, {
     code: ErrorCode.InvalidArgument,
     hint: "maxWidth caps the inline PNG's width; 0 keeps it at full size, path writes a file.",
+  });
+}
+
+/**
+ * view_diagram's `format`, which the loose root passes unlisted: the file's extension says it in
+ * every call seen so far, and `.drawio` is in path's description. It names the format of a file
+ * whose name does not.
+ */
+function formatArgument(value: unknown): ImageFormat | undefined {
+  if (value === undefined) return undefined;
+  if ((IMAGE_FORMATS as readonly unknown[]).includes(value)) return value as ImageFormat;
+  throw new ToolInputError(`format: expected one of ${IMAGE_FORMATS.join(", ")}`, {
+    code: ErrorCode.InvalidArgument,
+    hint: "format names the file's format; by default the path's extension does.",
   });
 }
 
@@ -298,6 +315,7 @@ export function createServer(config: ServerConfig = {}): McpServer {
         return viewDiagram(client, exportTool, diagram, inline, {
           annotate: input.annotate,
           path: input.path,
+          format: formatArgument(input.format),
           maxWidth: widthArgument(input.maxWidth) ?? config.imageMaxWidth,
         });
       }),

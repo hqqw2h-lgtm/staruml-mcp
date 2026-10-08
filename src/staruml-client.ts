@@ -335,6 +335,14 @@ export class StarUMLClient {
         return styleLockedHint(details);
       case "SAVE_BLOCKED":
         return saveBlockedHint(details);
+      case "TEMPLATE_ONLY":
+        return templateOnlyHint(slug, details);
+      case "VIEWPOINT_REQUIRED":
+        return VIEWPOINT_REQUIRED_HINT;
+      case "VIEWPOINT_MISMATCH":
+        return viewpointMismatchHint(details);
+      case "DIAGRAM_DERIVED":
+        return derivedHint(details);
       case "TIMEOUT":
         return `The extension stopped waiting after ${PREFERENCES} > Request Timeout (s), but StarUML may still finish the work; check its effect before retrying, or raise the limit.`;
       default:
@@ -446,6 +454,69 @@ function saveBlockedHint(details: unknown): string {
     `${errors}${first} ${count === 1 ? "blocks" : "block"} saving and exporting under the style profile's blockSaveOnErrors. ` +
     "Run uml_lint and model_lint, fix what they report, then retry; pass override: true to save or export anyway."
   );
+}
+
+/**
+ * TEMPLATE_ONLY (403, extension src/handlers/build.ts and oo.ts): under a strict profile a
+ * diagram is drawn through a template from content alone; `details.fields` names what was
+ * refused (layout, direction, autoLayout, showNamespace, spec.styles, or derive_diagrams'
+ * policy) and is empty when build_diagram was given no template.
+ */
+function templateOnlyHint(slug: string, details: unknown): string {
+  const raw = (details as { fields?: unknown } | null)?.fields;
+  const fields = Array.isArray(raw) ? raw.filter((f): f is string => typeof f === "string") : [];
+  const drop = fields.length > 0 ? `Leave out ${fields.join(", ")}: ` : "";
+  return slug === "/derive_diagrams"
+    ? `${drop}what a derived diagram shows and how it looks is its template's; pass template or viewpoints to choose the diagrams.`
+    : `${drop}a strict project builds a diagram from a template name (list_templates) and content (spec, mermaid or text) only, or asks request_diagram for the view by intent.`;
+}
+
+/** VIEWPOINT_REQUIRED (403, extension src/style/guard.ts): /create_diagram under a strict profile. */
+const VIEWPOINT_REQUIRED_HINT =
+  "Every diagram of a strict project declares its viewpoint: request_diagram({intent, scope}) picks and draws the view, derive_diagrams draws every view the model implies, build_diagram({template, spec}) draws one from content.";
+
+/** Alternatives a VIEWPOINT_MISMATCH hint names; the extension offers up to about ten. */
+const MAX_HINTED_ALTERNATIVES = 4;
+
+interface Alternative {
+  viewpoint?: unknown;
+  kind?: unknown;
+  why?: unknown;
+  template?: unknown;
+  candidates?: unknown;
+}
+
+/**
+ * VIEWPOINT_MISMATCH (422, extension src/handlers/viewpoints.ts and build.ts): the view asked for
+ * does not fit the scope, the audience, the content or the template, and `details.alternatives`
+ * lists the views that do, each with why and, from /request_diagram, the scopes that have one
+ * (`candidates`). The hint names them so the next call can pick one without reading `details`.
+ */
+function viewpointMismatchHint(details: unknown): string {
+  const raw = (details as { alternatives?: unknown } | null)?.alternatives;
+  const alternatives = Array.isArray(raw) ? (raw as Alternative[]) : [];
+  if (alternatives.length === 0) {
+    return "Nothing in that scope has such a view; list_viewpoints names the questions each view answers, and a narrower or wider scope may have one.";
+  }
+  const named = alternatives.slice(0, MAX_HINTED_ALTERNATIVES).map((a) => {
+    const template = typeof a.template === "string" ? `, template ${a.template}` : "";
+    const scopes = Array.isArray(a.candidates) && a.candidates.length > 0;
+    const where = scopes ? ` in ${(a.candidates as unknown[]).slice(0, 3).join(" or ")}` : "";
+    return `${String(a.viewpoint)} as ${String(a.kind)}${template}${where} (${String(a.why)})`;
+  });
+  const more = alternatives.length - named.length;
+  return `Views that fit: ${named.join("; ")}${more > 0 ? `; and ${more} more in details.alternatives` : ""}. Ask request_diagram with an intent for one of them and its scope.`;
+}
+
+/**
+ * DIAGRAM_DERIVED (409, extension src/templates/lock.ts): the diagram belongs to
+ * /derive_diagrams (`details.path`, `details.template`), so edits to it would be lost on the next
+ * derivation and are refused. The model is what to change.
+ */
+function derivedHint(details: unknown): string {
+  const path = (details as { path?: unknown } | null)?.path;
+  const which = typeof path === "string" ? path : "The diagram";
+  return `${which} is drawn from the model: change the model (build_model with upsert, or the model endpoints), then derive_diagrams or request_diagram draws it again.`;
 }
 
 function parseEnvelope(text: string): StarUMLResponse | undefined {

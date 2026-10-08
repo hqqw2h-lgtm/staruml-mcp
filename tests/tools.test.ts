@@ -129,6 +129,12 @@ const SHORT = new Set([
   "/explain_model",
   "/model_lint",
   "/detect_patterns",
+  "/request_diagram",
+  "/list_templates",
+  "/describe_template",
+  "/list_viewpoints",
+  "/describe_viewpoint",
+  "/viewpoint_lint",
 ]);
 
 /** One case per manifest endpoint: required arguments only, an element summary as the answer. */
@@ -211,7 +217,7 @@ describe("tool registry", () => {
         ...BUNDLED_MANIFEST.endpoints.map((e) => toolName(e.path)),
       ].sort(),
     );
-    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(103);
+    expect(BUNDLED_MANIFEST.endpoints).toHaveLength(108);
   });
 
   it("lists no $schema on any input schema", async () => {

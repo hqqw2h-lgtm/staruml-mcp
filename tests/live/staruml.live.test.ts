@@ -1997,16 +1997,14 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           const again = payload<Derived>(await ooCall("derive_diagrams", { scope: tb.system }));
 
           expect(again.counts).toMatchObject({ created: 0, updated: 0, deleted: 0 });
-          // Extension 0.3.0 (phase 1j) answers Deployment - Monolith's first derive with the
-          // loop's 94, while diagram_quality of the stored diagram, and every derive after, reads
-          // 98 with nothing changed: the one score the first answer understates.
+          // Phase 1j answered Deployment - Monolith's first derive with 94 and every later one
+          // with 98; since phase 1l the first answer is the stored diagram's score too.
           const scores = (list: Derived["diagrams"]) =>
             Object.fromEntries(list.map((d) => [d.name, d.score]));
           const changed = Object.entries(scores(again.diagrams)).filter(
             ([name, score]) => scores(derived.diagrams)[name] !== score,
           );
-          expect(changed).toEqual([["Deployment - Monolith", 98]]);
-          expect(scores(derived.diagrams)["Deployment - Monolith"]).toBe(94);
+          expect(changed).toEqual([]);
           expect(again.diagrams.map((d) => d.name)).toEqual(derived.diagrams.map((d) => d.name));
           expect(text(await ooCall("diagram_as_text", { diagram: first.name }))).toBe(before);
         },
@@ -2205,15 +2203,16 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
             await ooCall("derive_diagrams", { scope: tb.system, kinds: ["package"], dryRun: true }),
           );
           expect(planned.diagrams).toHaveLength(1);
-          // Core lists the endpoint; the extension refuses it (layer 2 of the issue's comment).
-          expect(
-            failure(
-              await call("route_edges", {
-                diagram: derived.diagrams[0]!.name,
-                lineStyle: "rectilinear",
-              }),
-            ).code,
-          ).toBe("STYLE_LOCKED");
+          // Core lists the endpoint; the extension refuses it (layer 2 of the issue's comment):
+          // since phase 1l a derived diagram is locked before the profile is asked (#43).
+          const locked = failure(
+            await call("route_edges", {
+              diagram: derived.diagrams[0]!.name,
+              lineStyle: "rectilinear",
+            }),
+          ) as { code: string; hint?: string };
+          expect(locked.code).toBe("DIAGRAM_DERIVED");
+          expect(locked.hint).toMatch(/is drawn from the model: change the model/);
           // The oo tier never sends it (layer 1).
           expect(
             failure(
@@ -2264,11 +2263,30 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
         "derives the per-package set at 80 or more but for the one the extension reports short (#38)",
         { timeout: 600_000 },
         async () => {
+          // A strict profile refuses policy (TEMPLATE_ONLY, extension #43), so the per-package
+          // set is derived through the core tier under the default profile.
+          expect(
+            failure(
+              await ooCall("derive_diagrams", {
+                scope: tb.system,
+                policy: { classDiagrams: "perPackage" },
+              }),
+            ).code,
+          ).toMatch(/^(TEMPLATE_ONLY|NOT_IN_TIER)$/);
+          ok(await call("set_style_profile", { reset: true }));
+          called.add("derive_diagrams");
           const perPackage = payload<Derived>(
-            await ooCall("derive_diagrams", {
-              scope: tb.system,
-              policy: { classDiagrams: "perPackage" },
-            }),
+            (await mcp.client.callTool(
+              {
+                name: "call_endpoint",
+                arguments: {
+                  name: "derive_diagrams",
+                  body: { scope: tb.system, policy: { classDiagrams: "perPackage" } },
+                },
+              },
+              undefined,
+              { timeout: 300_000 },
+            )) as CallToolResult,
           );
           const scores = Object.fromEntries(perPackage.diagrams.map((d) => [d.name, d.score]));
           console.info(`[live] ThingsBoard per package (#38): ${JSON.stringify(scores)}`);
@@ -2289,6 +2307,191 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
           expect(short.failures).toBeUndefined();
         },
       );
+    });
+
+    /**
+     * Extension #41's draw.io files, #42's viewpoints and #43's templates through the core tier:
+     * the catalogue reads, request_diagram on a small model, a .drawio file on disk, and the
+     * refusals of a strict profile with the hints this server adds.
+     */
+    describe("viewpoints, templates and draw.io (#41, #42, #43)", { timeout: 120_000 }, () => {
+      const shop = {
+        system: "VpShop",
+        contexts: [{ id: "sales", name: "Sales", responsibility: "Orders" }],
+        classes: [
+          { name: "Customer", context: "sales", responsibility: "Buys" },
+          {
+            name: "Order",
+            context: "sales",
+            responsibility: "What a customer buys",
+            operations: ["+place()", "+cancel()"],
+          },
+          { name: "Payment", context: "sales", responsibility: "Pays an order" },
+        ],
+        relationships: [
+          { from: "Customer", to: "Order", type: "owns", fromMult: "1", toMult: "0..*" },
+          { from: "Order", to: "Payment", type: "uses" },
+        ],
+        actors: [{ name: "Shopper", kind: "human", goals: ["buy"] }],
+        useCases: [{ name: "Place order", system: "VpShop", actors: ["Shopper"] }],
+        collaborations: [
+          {
+            name: "Checkout",
+            participants: [{ name: "Shopper", kind: "actor" }, "Order", "Payment"],
+            messages: [
+              ["Shopper", "Order", "place()", "sync"],
+              ["Order", "Payment", "pay()", "sync"],
+            ],
+          },
+        ],
+        lifecycles: [
+          {
+            name: "Order lifecycle",
+            subject: "Order",
+            states: [{ id: "i", type: "initial" }, "Open", "Paid"],
+            transitions: [
+              { from: "i", to: "Open", trigger: "place" },
+              { from: "Open", to: "Paid", trigger: "pay" },
+            ],
+          },
+        ],
+      };
+      interface Requested {
+        choice: { viewpoint: string; kind: string; template: string; rule: string };
+        diagrams: { name: string; diagram: string; viewpoint: string; template: string }[];
+      }
+      let checkout: string;
+
+      beforeAll(async () => {
+        ok(await call("build_model", { spec: shop }));
+      }, 120_000);
+
+      afterAll(async () => {
+        await call("set_style_profile", { reset: true });
+        await call("delete_element", { ref: shop.system });
+      }, 60_000);
+
+      it("reads the viewpoint and template catalogues", async () => {
+        const viewpoints = payload<{ viewpoints: { name: string; question: string }[] }>(
+          await call("list_viewpoints"),
+        ).viewpoints;
+        expect(viewpoints.map((v) => v.name)).toEqual([
+          "context",
+          "container",
+          "component",
+          "code",
+          "runtime",
+          "lifecycle",
+          "actors-goals",
+          "deployment",
+          "data",
+        ]);
+        const runtime = payload<{ rules: { id: string }[]; templates: string[] }>(
+          await call("describe_viewpoint", { name: "runtime" }),
+        );
+        expect(runtime.templates).toContain("runtime-sequence");
+        const templates = payload<{ diagramTemplates: { name: string; version?: number }[] }>(
+          await call("list_templates"),
+        ).diagramTemplates;
+        expect(templates.length).toBeGreaterThanOrEqual(14);
+        expect(templates.every((t) => t.version === undefined)).toBe(true);
+        const template = payload<{ template: { kind: string }; question: string }>(
+          await call("describe_template", { name: "lifecycle-states" }),
+        );
+        expect(template.template.kind).toBe("statemachine");
+      });
+
+      it("draws the view an intent asks for, by the decision table", async () => {
+        const cases: [string, string, string][] = [
+          ["how does checkout work", "runtime", "sequence"],
+          ["which states can an order be in", "lifecycle", "statemachine"],
+        ];
+        for (const [intent, viewpoint, kind] of cases) {
+          const answer = payload<Requested>(
+            await call("request_diagram", { intent, scope: shop.system, audience: "developer" }),
+          );
+          expect(answer.choice, intent).toMatchObject({ viewpoint, kind });
+          expect(answer.diagrams[0], intent).toMatchObject({ viewpoint });
+        }
+        checkout = payload<Requested>(
+          await call("request_diagram", { intent: "how does checkout work", scope: shop.system }),
+        ).diagrams[0]!.diagram;
+        const lint = payload<{ diagrams: number; count: number }>(
+          await call("viewpoint_lint", { scope: shop.system }),
+        );
+        expect(lint.diagrams).toBeGreaterThanOrEqual(2);
+      });
+
+      it("writes a draw.io file through export_diagram and view_diagram, never inline", async () => {
+        const file = join(dir, "checkout.drawio");
+        const exported = payload<{ bytes: number }>(
+          await call("export_diagram", { diagram: checkout, format: "drawio", path: file }),
+        );
+        expect(exported.bytes).toBeGreaterThan(100);
+        expect(readFileSync(file, "utf8")).toMatch(/^<mxfile/);
+        const viewed = join(dir, "viewed.drawio");
+        const shown = payload<{ bytes: number }>(
+          await call("view_diagram", { diagram: checkout, path: viewed }),
+        );
+        expect(shown.bytes).toBe(exported.bytes);
+        expect(readFileSync(viewed, "utf8")).toMatch(/^<mxfile/);
+        expect(
+          failure(await call("export_diagram", { diagram: checkout, format: "drawio" })).code,
+        ).toBe("INVALID_ARGUMENT");
+        expect(
+          failure(await call("export_text", { diagram: checkout, format: "drawio" })).code,
+        ).toBe("INVALID_ARGUMENT");
+      });
+
+      it("explains a strict profile's refusals and the locked derived diagram", async () => {
+        const derived = failure(
+          await call("call_endpoint", {
+            name: "move_views",
+            body: { refs: [`Order@${checkout}`], dx: 10, dy: 0 },
+          }),
+        ) as { code: string; hint?: string };
+        expect(derived.code).toBe("DIAGRAM_DERIVED");
+        expect(derived.hint).toMatch(/is drawn from the model: change the model/);
+        ok(await call("set_style_profile", { patch: { strict: true } }));
+        const untemplated = failure(
+          await call("build_diagram", { kind: "class", spec: { classes: [{ name: "X" }] } }),
+        ) as { code: string; status: number; hint?: string };
+        expect(untemplated).toMatchObject({ code: "TEMPLATE_ONLY", status: 403 });
+        expect(untemplated.hint).toMatch(/^a strict project builds a diagram from a template/);
+        const laidOut = failure(
+          await call("build_diagram", {
+            template: "code-classes",
+            layout: "flow-down",
+            spec: { classes: [{ name: "X" }] },
+          }),
+        ) as { hint?: string };
+        expect(laidOut.hint).toMatch(/^Leave out layout: /);
+        const created = failure(
+          await call("create_diagram", { type: "UMLClassDiagram", parent: shop.system }),
+        ) as { code: string; hint?: string };
+        expect(created.code).toBe("VIEWPOINT_REQUIRED");
+        expect(created.hint).toContain("request_diagram({intent, scope})");
+        const mismatch = failure(
+          await call("request_diagram", {
+            intent: "what does the data model look like",
+            scope: shop.system,
+          }),
+        ) as { code: string; status: number; hint?: string; details?: unknown };
+        expect(mismatch).toMatchObject({ code: "VIEWPOINT_MISMATCH", status: 422 });
+        expect(mismatch.hint).toMatch(/^Views that fit: .*code as class in VpShop/);
+        const built = payload<{ template: { name: string }; viewpoint: { name: string } }>(
+          await call("build_diagram", {
+            template: "code-classes",
+            name: "Templated",
+            parent: shop.system,
+            spec: { classes: [{ name: "Customer" }, { name: "Order" }] },
+          }),
+        );
+        expect(built).toMatchObject({
+          template: { name: "code-classes" },
+          viewpoint: { name: "code" },
+        });
+      });
     });
 
     /**
@@ -2337,10 +2540,9 @@ describe.runIf(LIVE).sequential("live StarUML 7.1.1 + staruml-mcp-extension 0.3"
       });
 
       it("lists the templates and extensions StarUML loads", async () => {
-        const { templates } = payload<{ templates: { name: string; source: string }[] }>(
-          await call("list_templates"),
-        );
-        expect(templates.map((t) => t.name)).toEqual(
+        // Project templates by name since 0.10.0; their install paths are StarUML's to resolve.
+        const { templates } = payload<{ templates: string[] }>(await call("list_templates"));
+        expect(templates).toEqual(
           expect.arrayContaining(["Default", "UMLConventional", "C4Model", "WireframeModel"]),
         );
         const { extensions } = payload<{ extensions: { name: string; commands?: string[] }[] }>(

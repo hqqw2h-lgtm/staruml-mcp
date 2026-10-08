@@ -5,12 +5,14 @@ import type { GeneratedTool } from "./manifest.js";
 import type { StarUMLClient } from "./staruml-client.js";
 import {
   checkAbsolute,
+  checkDrawioFile,
   exportRaster,
   formatOf,
   imageMaxWidth,
   unreachable,
   writePng,
   type ExportedImage,
+  type ImageFormat,
 } from "./images.js";
 import { VIEWER_URI, type ViewerData } from "./viewer.js";
 
@@ -22,6 +24,8 @@ export interface ViewOptions {
   annotate?: Annotate;
   /** An absolute file to write the image to; the answer is its path and size. */
   path?: string;
+  /** The file's format; default by its extension (`formatOf`). drawio needs `path`. */
+  format?: ImageFormat;
   /**
    * The inline PNG's width cap in pixels, 0 for none: the call's `maxWidth`, else
    * `--image-max-width`; undefined reads the style profile's page width (images.ts).
@@ -46,6 +50,7 @@ export async function viewDiagram(
   options: ViewOptions = {},
 ): Promise<CallToolResult> {
   const annotate = options.annotate ?? "none";
+  checkDrawioFile(options.format, options.path);
   if (options.path !== undefined) checkAbsolute(options.path);
   if (exportTool === undefined) {
     if (annotate !== "none") {
@@ -56,10 +61,11 @@ export async function viewDiagram(
     }
     return options.path === undefined
       ? pngResult(client, diagram)
-      : builtinFile(client, diagram, options.path);
+      : builtinFile(client, diagram, options.path, options.format);
   }
   if (options.path !== undefined) {
-    return fileResult(client, exportTool, diagram, annotate, options.path, options.maxWidth);
+    const file = { path: options.path, format: options.format ?? formatOf(options.path) };
+    return fileResult(client, exportTool, diagram, annotate, file, options.maxWidth);
   }
   if (inline) return svgResult(client, exportTool, diagram, annotate);
   try {
@@ -127,21 +133,24 @@ async function rasterResult(
   return { content: [image, { type: "text", text: serialize(size) }] };
 }
 
-/** The image written by the extension to `file`, in the format its name asks for. */
+/**
+ * The image written by the extension to `file.path`, in `file.format`. A draw.io file carries no
+ * labels (the extension ignores annotate for it), so none are asked for.
+ */
 async function fileResult(
   client: StarUMLClient,
   exportTool: GeneratedTool,
   diagram: string | undefined,
   annotate: Annotate,
-  file: string,
+  file: { path: string; format: ImageFormat },
   maxWidth: number | undefined,
 ): Promise<CallToolResult> {
-  const format = formatOf(file);
-  const body = { ...exportBody(format, annotate), path: file };
-  // A file is written at full size unless the call caps it; SVG has no pixel width to cap.
-  const cap = format === "svg" ? undefined : maxWidth;
-  const data = await exportOf(client, exportTool, diagram, body, cap);
-  return written(data, { diagram, path: file });
+  const { format, path } = file;
+  const raster = format === "png" || format === "jpeg";
+  const body = { ...exportBody(format, format === "drawio" ? "none" : annotate), path };
+  // A file is written at full size unless the call caps it; SVG and draw.io have no pixel width.
+  const data = await exportOf(client, exportTool, diagram, body, raster ? maxWidth : undefined);
+  return written(data, { diagram, path });
 }
 
 /** StarUML's built-in PNG written to `file`, when no extension answers. */
@@ -149,11 +158,12 @@ async function builtinFile(
   client: StarUMLClient,
   diagram: string | undefined,
   file: string,
+  format: ImageFormat = formatOf(file),
 ): Promise<CallToolResult> {
-  if (formatOf(file) !== "png") {
+  if (format !== "png") {
     throw new ToolInputError(`${file}: only PNG is written without the extension`, {
       code: ErrorCode.ExtensionRequired,
-      hint: "Name a .png file, or run doctor to set up staruml-mcp-extension for SVG and JPEG.",
+      hint: "Name a .png file, or run doctor to set up staruml-mcp-extension for SVG, JPEG and draw.io.",
     });
   }
   const diagramId = diagram ?? (await currentDiagramId(client));

@@ -17,7 +17,7 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 ```
   AI Agent  ──MCP──►  staruml-mcp (this package)  ──HTTP──►  StarUML
                                                   :58321 (built-in, 4 tools)
-                                                  :58322 (extension 0.3.x, 103 endpoints
+                                                  :58322 (extension 0.3.x, 108 endpoints
                                                           from its manifest: core ones as
                                                           tools, the rest via call_endpoint)
 ```
@@ -25,10 +25,10 @@ Model Context Protocol (MCP) server for [StarUML](https://staruml.io). Lets AI a
 | Package | What it is | Where it runs |
 |---|---|---|
 | **`staruml-mcp`** (this repo) | MCP server for AI agents | your machine via `npx -y staruml-mcp` |
-| **[`staruml-mcp-extension`](https://github.com/hqqw2h-lgtm/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 103 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
+| **[`staruml-mcp-extension`](https://github.com/hqqw2h-lgtm/staruml-mcp-extension)** 0.3.x | StarUML plugin adding 108 HTTP endpoints and a manifest of them (`POST /introspect`) | inside StarUML (install once via Extension Manager) |
 
 - Using only Mermaid-based diagram tools? Install `staruml-mcp` only. The 4 built-in tools, `doctor` and `view_diagram` (as a PNG) work.
-- Want the extension's 103 endpoints (whole diagrams from a spec or Mermaid in one call, 29 diagram kinds from class and sequence to SysML, BPMN, timing, wireframes and AWS/Azure/GCP, models from an object spec with every diagram derived from them, a project style profile and a quality loop that scores and re-lays out diagrams, elements addressed by path instead of id, diagram and UML lint with fixes, diffs and snapshots, diagrams read back as Mermaid, PlantUML or a text summary, type search, model validation, project save/open, element CRUD, relationships, attributes and operations, layout presets and edge routing, styling, export, undo, batches, code generation, quick find, preferences, templates, model fragments, XMI, any StarUML command)? Install **both**.
+- Want the extension's 108 endpoints (whole diagrams from a spec or Mermaid in one call, 29 diagram kinds from class and sequence to SysML, BPMN, timing, wireframes and AWS/Azure/GCP, models from an object spec with every diagram derived from them, views asked for by intent and drawn from templates by viewpoint, a project style profile and a quality loop that scores and re-lays out diagrams, elements addressed by path instead of id, diagram and UML lint with fixes, diffs and snapshots, diagrams read back as Mermaid, PlantUML or a text summary, type search, model validation, project save/open, element CRUD, relationships, attributes and operations, layout presets and edge routing, styling, export, undo, batches, code generation, quick find, preferences, templates, model fragments, XMI, any StarUML command)? Install **both**.
 
 ## Prerequisites
 
@@ -228,7 +228,7 @@ node         ok    22.23.3
 staruml api  ok    http://localhost:58321
 extension    ok    0.3.0 at http://localhost:58322
 staruml      ok    7.1.1
-manifest     ok    103 endpoints from the live manifest
+manifest     ok    108 endpoints from the live manifest
 tier         ok    core: 10 extension tools listed, 93 endpoints through call_endpoint
 ```
 
@@ -301,12 +301,12 @@ default and reaches every other extension endpoint through two generic tools:
 
 | Tier | Listed as tools | Definition tokens |
 |---|---|---|
-| `core` (default) | the 7 above; `find_elements`, `quick_find`, `get_element_by_id`, `update_element`, `batch`, `build_diagram`, `export_diagram`, `build_model`, `diagram_quality`, `improve_diagram`; `describe_endpoints`, `call_endpoint` | 1,998 |
+| `core` (default) | the 7 above; `find_elements`, `quick_find`, `get_element_by_id`, `update_element`, `batch`, `build_diagram`, `export_diagram`, `build_model`, `diagram_quality`, `improve_diagram`; `describe_endpoints`, `call_endpoint` | 1,990 |
 | `oo` | model-first only: `build_model`, `derive_diagrams`, `explain_model`, `model_lint`, `apply_pattern`, `detect_patterns`, `validate_model`, `diagram_quality`; `view_diagram`, `diagram_as_text`, `doctor`; `describe_endpoints`, `call_endpoint` | 1,217 |
 | `all` | the 7 above and one tool per manifest endpoint | 14,385 |
 | `core,create_diagram,…` | the 7 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
-Token counts include the server instructions (o200k_base, extension 0.3.0 with 103 endpoints, `npm run
+Token counts include the server instructions (o200k_base, extension 0.3.0 with 108 endpoints, `npm run
 benchmark:tokens`). 0.6.0 added `build_model` and `apply_pattern` (237 tokens) to the core tier
 and, to stay under 2,000, moved four endpoints out: `introspect` (`doctor` reports the versions),
 `describe_diagram` (`diagram_as_text`, always listed, reads a diagram in as many tokens),
@@ -324,7 +324,12 @@ the `oo` tier and reached by the `apply-pattern` prompt through `call_endpoint`,
 lists them again. 0.9.1 lists `explain_model`'s `sections` and `cursor` and `detect_patterns`'
 `minConfidence` under `oo` (98 tokens, which the tier's 1,500 budget has room for); the core tier
 paid for `diagram_quality`'s `failures` and `build_model`'s `detail` hint with shorter
-`build_diagram` lines and stays at 1,998. Pick the tier with `--tools`, or `STARUML_MCP_TOOLS` for clients that pass
+`build_diagram` lines and stays at 1,998. 0.10.0 lists `build_diagram`'s `template` (extension #43:
+a viewpoint, house style, layout preset and legend, and what a strict profile requires) in place of
+`direction` and `layout`, which still pass unlisted and which a template carries anyway; that and
+`export_diagram`'s draw.io line leave the core tier at 1,990. `request_diagram` and
+`list_templates` (153 tokens) would take it to 2,143, so they are listed by the `oo` tier and
+reached from `core` through `call_endpoint`. Pick the tier with `--tools`, or `STARUML_MCP_TOOLS` for clients that pass
 environment but no arguments; the flag wins. An agent can change it at runtime with
 `doctor({tools: "all"})`; the server then sends `notifications/tools/list_changed`, as it does when
 `doctor` finds a manifest with other endpoints. Names that are neither endpoints nor tools are
@@ -422,7 +427,7 @@ project down, or only the trailing steps when they name one element), `Order.tot
 with `AMBIGUOUS_REF` and the candidates' ids and paths. Element summaries carry the `path` each
 element resolves by.
 
-A copy of the 0.3.0 manifest (103 endpoints) is bundled (`src/extension-manifest.json`), so `tools/list` is
+A copy of the 0.3.0 manifest (108 endpoints) is bundled (`src/extension-manifest.json`), so `tools/list` is
 complete while StarUML is closed; calls then fail with `EXTENSION_UNREACHABLE` and an install hint.
 `npm run sync:manifest` refreshes the copy from a running extension (`-- --url <base>`) or from a
 recorded `/introspect` response (`-- --from <file>`). When the running extension's version is
@@ -660,6 +665,13 @@ full size unless the call passes `maxWidth`; SVG is never scaled. For a picture 
 to keep, pass `path`: the answer is the pixel size and bytes, and the diagram's id when the call
 named it by path, about 15 tokens instead of an image.
 
+A draw.io file (extension #41: every view at its StarUML bounds, uncompressed, MIME
+`application/vnd.jgraph.mxfile`) is only ever written to disk: `export_diagram({format: "drawio",
+path})`, or `view_diagram` with a `.drawio` path (or `format: "drawio"`), answers its path and
+bytes. Without a path the call is refused (`INVALID_ARGUMENT`) before anything is sent, and so is
+`export_text`'s `drawio`, which has no path: the XML of a 25-class diagram runs to several
+thousand tokens a model has no use for, and draw.io is what opens it.
+
 The 25 diagrams `derive_diagrams` makes of ThingsBoard, viewed one by one under `--tools oo`
 against StarUML 7.1.1 (live suite, "views every derived diagram capped inline and writes each to
 disk"; vision tokens estimated as Anthropic's vision docs bill them, the long edge scaled to
@@ -704,6 +716,7 @@ A failed tool call returns `isError: true` with a one-line cause, a hint where o
 | `PROFILE_NOT_STRICT` | Under `--tools oo`, before a call that changes something: the project's style profile could not be made strict (reading or setting it failed, or it still reads `strict: false`). The message says which; nothing was sent. |
 | `TIER_LOCKED` | `doctor({tools})` asked for a tier that reaches more than the current one, without `--allow-tier-switch`; nothing changed. The hint gives the model-first alternative and says only the user can start the server with a wider tier. |
 | extension style codes | Passed through with a hint: `STYLE_LOCKED` (403: the project's style profile is `strict`, so the endpoints that place, size or colour views by hand refuse; the hint names `improve_diagram`, `apply_style_profile`, a rebuild, `override: true` for a change the user asked for, and `set_style_profile({patch: {strict: false}})`), `SAVE_BLOCKED` (409: the profile's `blockSaveOnErrors` refuses saving and exporting while `uml_lint` or `model_lint` report errors; the hint names the first ones from `details.findings` and `override: true`). |
+| extension viewpoint and template codes | Passed through with a hint (extension #42, #43): `TEMPLATE_ONLY` (403: under a strict profile a diagram is built from a template name and content only; the hint names the refused fields from `details.fields` and points to `list_templates` and `request_diagram`), `VIEWPOINT_REQUIRED` (403: `create_diagram` under a strict profile; the hint names `request_diagram`, `derive_diagrams` and `build_diagram({template, spec})`), `VIEWPOINT_MISMATCH` (422: the view asked for does not fit its scope, audience, content or template; the hint names up to four of `details.alternatives` with their template and scopes), `DIAGRAM_DERIVED` (409: the diagram is drawn from the model by `derive_diagrams`; the hint says to change the model and derive it again). |
 | extension request checks | Passed through with a hint naming the setting: `UNAUTHORIZED` (401: no or wrong access token; how to set or clear it), `FORBIDDEN_ORIGIN` (403: an `Origin` header not in Allowed Origins), `PAYLOAD_TOO_LARGE` (413: Max Request Body (KiB) or Max Batch Ops), `UNSUPPORTED_MEDIA_TYPE` (415: not `application/json`), `RATE_LIMITED` (429: Commands per Minute, with the `Retry-After` seconds), `TIMEOUT` (504: Request Timeout (s); the work may still complete). A 401/403/413/415/429/504 without these codes, as from a proxy, gets the same hint. |
 
 Arguments are checked against the tool's schema before any request, so a wrong-typed field fails

@@ -288,6 +288,10 @@ const GROUP_RULES: readonly (readonly [string, RegExp])[] = [
   ["quality", /lint|^validate_model$|^diff_diagram$|^diagram_quality$|^improve_diagram$/],
   // Model checkpoints and the undo history they restore through.
   ["history", /snapshot|^diff_since$|^(undo|redo)$/],
+  // Extension #42 and #43: the views a model has, asked for by intent, and the templates they are
+  // drawn with. list_templates names StarUML's project templates too, but what an agent reads it
+  // for since #43 is the diagram templates build_diagram requires under a strict profile.
+  ["viewpoint", /viewpoints?$|^request_diagram$|^(list|describe)_templates?$/],
   // Extension #28: model fragments (.mfj) and XMI in and out. divide_fragment splits a combined
   // fragment of a sequence diagram and stays in diagram.
   ["io", /^(export|import)_(fragment|xmi)$/],

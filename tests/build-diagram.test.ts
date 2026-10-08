@@ -59,8 +59,7 @@ describe("build_diagram tool", () => {
       "upsert",
       "prune",
       "dryRun",
-      "direction",
-      "layout",
+      "template",
     ]);
     expect(tool.inputSchema.required).toBeUndefined();
     expect(tool.annotations).toEqual({
@@ -324,8 +323,7 @@ describe("buildDiagramInput", () => {
       upsert: _upsert,
       prune: _prune,
       dryRun: _dryRun,
-      direction: _direction,
-      layout: _layout,
+      template: _template,
       ...rest
     } = properties;
 
@@ -336,18 +334,20 @@ describe("buildDiagramInput", () => {
     expect(Object.keys(schema.properties)).toEqual(["kind", "spec", "mermaid", "name"]);
   });
 
-  it("lists spec, layout and the flags without the types the whole schema checks", () => {
+  it("lists spec, the template and the flags without the types the whole schema checks", () => {
     const schema = z.toJSONSchema(buildDiagramInput(entry)) as {
       properties: Record<string, Record<string, unknown>>;
     };
 
     expect(Object.keys(schema.properties.spec!)).toEqual(["description"]);
     expect(Object.keys(schema.properties.kind!)).toEqual(["type", "enum", "description"]);
-    expect(Object.keys(schema.properties.layout!)).toEqual(["description"]);
+    expect(Object.keys(schema.properties.template!)).toEqual(["type", "description"]);
     for (const flag of ["upsert", "prune", "dryRun"]) {
       expect(Object.keys(schema.properties[flag]!), flag).toEqual(["description"]);
     }
-    expect(schema.properties.direction!.enum).toEqual(["TB", "BT", "LR", "RL"]);
+    // A template carries its layout preset; direction and layout pass unlisted (0.10.0).
+    expect(schema.properties.direction).toBeUndefined();
+    expect(schema.properties.layout).toBeUndefined();
   });
 
   it("lists nothing for an entry without properties", () => {

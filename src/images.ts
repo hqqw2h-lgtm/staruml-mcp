@@ -84,13 +84,35 @@ export function inlineRaster(body: Record<string, unknown>): boolean {
   return body.path === undefined && body.scale === undefined && body.format !== "svg";
 }
 
-export type ImageFormat = "png" | "jpeg" | "svg";
+export const IMAGE_FORMATS = ["png", "jpeg", "svg", "drawio"] as const;
+export type ImageFormat = (typeof IMAGE_FORMATS)[number];
 
-/** The format a file name asks for: `.svg`, `.jpg` or `.jpeg`, anything else PNG. */
+/**
+ * The format a file name asks for: `.svg`, `.jpg` or `.jpeg`, `.drawio` (extension #41's
+ * uncompressed draw.io file), anything else PNG.
+ */
 export function formatOf(file: string): ImageFormat {
   const extension = extname(file).toLowerCase();
   if (extension === ".svg") return "svg";
+  if (extension === ".drawio") return "drawio";
   return extension === ".jpg" || extension === ".jpeg" ? "jpeg" : "png";
+}
+
+/**
+ * Refuses a draw.io export that would answer its XML inline: a .drawio file is the diagram's
+ * every view with its bounds and style, thousands of tokens of XML a model has no use for and a
+ * person opens in draw.io. It is only ever written to a file.
+ */
+export function checkDrawioFile(format: unknown, path: unknown, slug?: string): void {
+  if (format !== "drawio" || path !== undefined) return;
+  throw new ToolInputError("format drawio is written to a file, never answered inline", {
+    code: ErrorCode.InvalidArgument,
+    ...(slug === undefined ? {} : { endpoint: slug }),
+    hint:
+      slug === "/export_text"
+        ? 'export_diagram({format: "drawio", path}) writes it to an absolute .drawio file.'
+        : "Pass path, an absolute .drawio file; the answer is its path and size.",
+  });
 }
 
 /** Refuses a relative file before anything is exported; the extension refuses one too. */

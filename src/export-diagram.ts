@@ -16,11 +16,11 @@ export const EXPORT_DIAGRAM = "export_diagram";
 export const ANNOTATE_DESCRIPTION = "paths|ids: label each view, on the image only.";
 
 export const EXPORT_DIAGRAM_DESCRIPTION =
-  "Export a diagram as PNG, JPEG or SVG, inline or to a file.";
+  "Export a diagram as PNG, JPEG or SVG, inline or to a file; draw.io to a file.";
 
 const LISTED: Record<string, string> = {
   diagram: "Diagram id or path; default the current one.",
-  format: "png (default), jpeg or svg.",
+  format: "png (default), jpeg, svg; drawio with path.",
   scale: "PNG/JPEG pixels per unit, up to 4.",
   background: "CSS colour; default transparent.",
   path: "Absolute file to write it to.",

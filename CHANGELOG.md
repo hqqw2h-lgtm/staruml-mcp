@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The bundled manifest is the final extension's, 108 endpoints (phase 1l): `/list_viewpoints`, `/describe_viewpoint`, `/viewpoint_lint`, `/request_diagram` and `/describe_template` are new; `build_diagram` takes `viewpoint`, `template` and `override`, `derive_diagrams` `viewpoints` and `template`, `list_templates` answers `diagramTemplates`, and the export endpoints take `format: "drawio"`. The live contract stays exact (#4).
+- `build_diagram` lists `template` in place of `direction` and `layout`, which pass unlisted; the core tier is 1,990 tokens. `request_diagram` and `list_templates` would take it to 2,143 and are reached from it through `call_endpoint` (#20).
+- Live, for phase 1l: a derived diagram is refused as `DIAGRAM_DERIVED` before a strict profile's `STYLE_LOCKED`; Deployment - Monolith's first derived score is its stored one; the per-package ThingsBoard set is derived through `core` under the default profile, since a strict one refuses `policy` (#4).
+- `derive_diagrams` answers each diagram's `viewpoint` and `template`, `conforms` and `accepted` where false, and counts both in `viewpoints` (#20).
+
+### Added
+- Short listings for the new endpoints, which `--tools` can name: `request_diagram` (`intent`, `audience`, `scope`, `dryRun`), `list_templates` (diagram templates without `version`, project templates by name), `describe_template`, `list_viewpoints`, `describe_viewpoint`, and `viewpoint_lint`, whose findings are shaped as the other lints' (#20).
+- `export_diagram({format: "drawio", path})` and `view_diagram` with a `.drawio` path (or an unlisted `format`) write a draw.io file and answer its path and bytes; a draw.io export without a path, and `export_text`'s `drawio`, are refused before sending (#20).
+- Hints for the extension's `TEMPLATE_ONLY`, `VIEWPOINT_REQUIRED`, `VIEWPOINT_MISMATCH` (naming up to four of its alternatives with their templates and scopes) and `DIAGRAM_DERIVED` (#20).
+- A `viewpoint` group for `describe_endpoints`: `list_templates`, `list_viewpoints`, `describe_viewpoint`, `describe_template`, `request_diagram`; `viewpoint_lint` sits in `quality` (#20).
+- Live: the catalogues, `request_diagram` on a small model, draw.io files on disk and the strict refusals with their hints (#20).
+
 ## [0.9.1] - 2026-10-06
 
 Built against staruml-mcp-extension 0.3.0 as finished (extension phase 1j: the quality metric

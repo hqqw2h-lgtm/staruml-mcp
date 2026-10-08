@@ -104,7 +104,7 @@ describe("parseToolSelection", () => {
 });
 
 describe("endpointGroup", () => {
-  it("groups every endpoint of the 103-endpoint manifest", () => {
+  it("groups every endpoint of the 108-endpoint manifest", () => {
     const groups: Record<string, string[]> = {};
     for (const e of BUNDLED_MANIFEST.endpoints) {
       (groups[endpointGroup(toolName(e.path))] ??= []).push(toolName(e.path));
@@ -117,7 +117,6 @@ describe("endpointGroup", () => {
         "save_project_as",
         "new_project",
         "open_project",
-        "list_templates",
         "new_from_template",
         "get_project_metadata",
         "set_project_metadata",
@@ -195,8 +194,16 @@ describe("endpointGroup", () => {
         "uml_lint",
         "diff_diagram",
         "model_lint",
+        "viewpoint_lint",
         "diagram_quality",
         "improve_diagram",
+      ],
+      viewpoint: [
+        "list_templates",
+        "list_viewpoints",
+        "describe_viewpoint",
+        "describe_template",
+        "request_diagram",
       ],
       model: [
         "build_model",
@@ -223,9 +230,11 @@ describe("endpointGroup", () => {
     expect(endpointGroup("derive_operations")).toBe("model");
     expect(endpointGroup("reset_style_profile")).toBe("style");
     expect(endpointGroup("reset_preferences")).toBe("project");
+    expect(endpointGroup("compare_viewpoints")).toBe("viewpoint");
     expect(ENDPOINT_GROUPS).toEqual([
       "quality",
       "history",
+      "viewpoint",
       "io",
       "perf",
       "project",
@@ -488,6 +497,7 @@ describe("describe_endpoints", () => {
       "uml_lint",
       "diff_diagram",
       "model_lint",
+      "viewpoint_lint",
     ]);
     expect(await group("history")).toEqual([
       "undo",

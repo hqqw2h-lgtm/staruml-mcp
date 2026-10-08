@@ -623,6 +623,88 @@ describe("StarUMLClient", () => {
       );
     });
 
+    it("explains TEMPLATE_ONLY by what to leave out, for a build and for a derivation", async () => {
+      const fields = { profile: "uml-standard", fields: ["layout", "spec.styles"] };
+      expect((await reference("/build_diagram", "TEMPLATE_ONLY", fields)).hint).toBe(
+        "Leave out layout, spec.styles: a strict project builds a diagram from a template name (list_templates) and content (spec, mermaid or text) only, or asks request_diagram for the view by intent.",
+      );
+      // No template at all: details.fields is empty.
+      expect(
+        (await reference("/build_diagram", "TEMPLATE_ONLY", { profile: "p", fields: [] })).hint,
+      ).toMatch(/^a strict project builds a diagram from a template name/);
+      expect(
+        (await reference("/derive_diagrams", "TEMPLATE_ONLY", { fields: ["policy", 3] })).hint,
+      ).toBe(
+        "Leave out policy: what a derived diagram shows and how it looks is its template's; pass template or viewpoints to choose the diagrams.",
+      );
+      expect((await reference("/derive_diagrams", "TEMPLATE_ONLY")).hint).toMatch(
+        /^what a derived diagram shows/,
+      );
+    });
+
+    it("explains VIEWPOINT_REQUIRED with the three ways a strict project draws", async () => {
+      const error = await reference("/create_diagram", "VIEWPOINT_REQUIRED", { profile: "p" });
+      expect(error.hint).toContain("request_diagram({intent, scope})");
+      expect(error.hint).toContain("build_diagram({template, spec})");
+    });
+
+    it("names the alternatives of VIEWPOINT_MISMATCH, with their templates and scopes", async () => {
+      const alternatives = [
+        {
+          viewpoint: "runtime",
+          kind: "activity",
+          why: "the steps as an activity",
+          candidates: ["Model/Telemetry", "Model/Rules", "Model/Alarms", "Model/Other"],
+        },
+        { viewpoint: "code", kind: "class", why: "What classes?", template: "code-classes" },
+        { viewpoint: "data", kind: "erd", why: "What is stored?", candidates: [] },
+        { viewpoint: "lifecycle", kind: "statemachine", why: "Which states?" },
+        { viewpoint: "deployment", kind: "deployment", why: "Where does it run?" },
+      ];
+      const error = await reference("/request_diagram", "VIEWPOINT_MISMATCH", {
+        reason: "scope",
+        alternatives,
+      });
+      expect(error.hint).toBe(
+        "Views that fit: runtime as activity in Model/Telemetry or Model/Rules or Model/Alarms (the steps as an activity); " +
+          "code as class, template code-classes (What classes?); data as erd (What is stored?); " +
+          "lifecycle as statemachine (Which states?); and 1 more in details.alternatives. " +
+          "Ask request_diagram with an intent for one of them and its scope.",
+      );
+      expect(
+        (await reference("/request_diagram", "VIEWPOINT_MISMATCH", { alternatives: [] })).hint,
+      ).toMatch(/^Nothing in that scope has such a view; list_viewpoints/);
+      expect((await reference("/build_diagram", "VIEWPOINT_MISMATCH")).hint).toMatch(
+        /^Nothing in that scope/,
+      );
+      expect(
+        (
+          await reference("/build_diagram", "VIEWPOINT_MISMATCH", {
+            alternatives: [alternatives[1]],
+          })
+        ).hint,
+      ).toBe(
+        "Views that fit: code as class, template code-classes (What classes?). Ask request_diagram with an intent for one of them and its scope.",
+      );
+    });
+
+    it("explains DIAGRAM_DERIVED: change the model and derive again", async () => {
+      expect(
+        (
+          await reference("/move_views", "DIAGRAM_DERIVED", {
+            diagram: "D1",
+            path: "Model/Orders",
+            template: "code-classes",
+          })
+        ).hint,
+      ).toBe(
+        "Model/Orders is drawn from the model: change the model (build_model with upsert, or the model endpoints), then derive_diagrams or request_diagram draws it again.",
+      );
+      expect((await reference("/delete_element", "DIAGRAM_DERIVED")).hint).toMatch(
+        /^The diagram is drawn from the model/,
+      );
+    });
+
     it("keeps the details of a success:false answer on HTTP 200", async () => {
       fetchSpy.mockResolvedValueOnce(
         new Response(
