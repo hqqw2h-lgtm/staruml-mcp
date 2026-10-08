@@ -97,6 +97,15 @@ const ROTATION = [
     name: "build_model",
     arguments: { spec: { system: "Soak", classes: [{ name: "Order" }] }, dryRun: true },
   },
+  // Issue #20: an intent's view and the template list, both shaped by this server.
+  {
+    name: "call_endpoint",
+    arguments: {
+      name: "request_diagram",
+      body: { intent: "which states can an order be in", scope: "Soak", dryRun: true },
+    },
+  },
+  { name: "call_endpoint", arguments: { name: "list_templates" } },
   {
     name: "call_endpoint",
     arguments: {
@@ -339,6 +348,48 @@ async function startStub() {
       ],
       counts: { diagrams: 1, created: 1, updated: 0, unchanged: 0, deleted: 0 },
       dryRun: true,
+    }),
+    "POST /request_diagram": ok({
+      choice: {
+        viewpoint: "lifecycle",
+        kind: "statemachine",
+        template: "lifecycle-states",
+        rule: "D01",
+        reason: "the intent asks for states",
+        question: "Which states can this object be in, and what moves it between them?",
+        matched: ["states"],
+      },
+      scope: "Soak",
+      diagrams: [
+        {
+          kind: "statemachine",
+          name: "Order lifecycle",
+          diagram: "$diagram",
+          created: 4,
+          updated: 0,
+          unchanged: 0,
+          ops: 6,
+          viewpoint: "lifecycle",
+          conforms: true,
+          template: "lifecycle-states",
+          accepted: true,
+        },
+      ],
+      counts: { diagrams: 1, created: 4, updated: 0, unchanged: 0, deleted: 0 },
+      dryRun: true,
+    }),
+    "POST /list_templates": ok({
+      templates: [{ name: "Default", source: "core", path: "/StarUML/templates/Default.mdj" }],
+      diagramTemplates: [
+        {
+          name: "lifecycle-states",
+          version: 1,
+          title: "Lifecycle",
+          viewpoint: "lifecycle",
+          kind: "statemachine",
+          default: true,
+        },
+      ],
     }),
     "POST /lint_diagram": ok({
       diagram: { _id: "D1", _type: "UMLClassDiagram", name: "soak", path: "soak" },

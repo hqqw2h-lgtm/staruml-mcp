@@ -1,7 +1,7 @@
 {
   "name": "staruml",
   "description": "StarUML from AI agents: whole UML diagrams from a spec or Mermaid, diagrams read back as Mermaid or PlantUML, model edits and validation, batches, export and an inline diagram viewer, through the staruml MCP server and a skill that teaches it.",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "author": { "name": "Ezra Brilliant Konterliem", "url": "https://github.com/ezrabrilliant" },
   "homepage": "https://github.com/hqqw2h-lgtm/staruml-mcp/tree/master/plugins/copilot",
   "repository": "https://github.com/hqqw2h-lgtm/staruml-mcp",

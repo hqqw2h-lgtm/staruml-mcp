@@ -53,8 +53,16 @@ describe("readabilityRequest", () => {
       source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" },
     });
     expect(question).toMatchObject({ type: "text" });
+    expect(request.messages[0]!.role).toBe("user");
     const asked = (question as { text: string }).text;
-    expect(asked).toContain("using only what the picture shows");
+    // The instructions whole: each clause changes what the reader does.
+    expect(asked.split("\n\n")[0]).toBe(
+      "You are shown one diagram as an image and a question the diagram is meant to answer. " +
+        "Answer the question using only what the picture shows: do not use outside knowledge of the " +
+        "system or guess what the names usually mean. If the picture does not hold enough to answer, " +
+        "set answerable to false and say in missing what it lacks. Rate confidence from 0 to 100: how " +
+        "sure you are that your answer is right and that every part of it can be read off the picture.",
+    );
     expect(asked).toMatch(/The diagram is "Checkout" \(sequence\)\. Question: What happens/);
     expect(request.output_config).toEqual({
       format: { type: "json_schema", schema: JUDGEMENT_SCHEMA },
@@ -84,6 +92,23 @@ describe("parseJudgement", () => {
     expect(odd(140)).toBe(100);
     expect(odd(-3)).toBe(0);
     expect(odd(71.6)).toBe(72);
+  });
+
+  it("reads the text block after a thinking block, and quotes at most 80 characters of a bad reply", () => {
+    const judged = { answer: "a", answerable: true, confidence: 80, missing: "" };
+    expect(
+      parseJudgement({
+        content: [
+          { type: "thinking", text: "not this" },
+          { type: "text", text: JSON.stringify(judged) },
+        ],
+      }),
+    ).toEqual(judged);
+    const long = "x".repeat(200);
+    expect(() => parseJudgement(text(long))).toThrow(`the reply is not JSON: ${"x".repeat(80)}`);
+    expect(() => parseJudgement(text(long))).not.toThrow("x".repeat(81));
+    const offSchema = JSON.stringify({ answer: "a".repeat(200) });
+    expect(() => parseJudgement(text(offSchema))).not.toThrow(offSchema.slice(0, 81));
   });
 
   it("refuses a refusal, a cut reply, a reply without text, text that is not JSON or off the schema", () => {

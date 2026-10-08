@@ -303,7 +303,7 @@ default and reaches every other extension endpoint through two generic tools:
 |---|---|---|
 | `core` (default) | the 7 above; `find_elements`, `quick_find`, `get_element_by_id`, `update_element`, `batch`, `build_diagram`, `export_diagram`, `build_model`, `diagram_quality`, `improve_diagram`; `describe_endpoints`, `call_endpoint` | 1,990 |
 | `oo` | model-first only: `build_model`, `derive_diagrams`, `request_diagram`, `list_templates`, `explain_model`, `model_lint`, `apply_pattern`, `detect_patterns`, `validate_model`, `diagram_quality`; `view_diagram`, `diagram_as_text`, `doctor`; `describe_endpoints`, `call_endpoint` | 1,412 |
-| `all` | the 7 above and one tool per manifest endpoint | 14,385 |
+| `all` | the 7 above and one tool per manifest endpoint | 15,004 |
 | `core,create_diagram,…` | the 7 above and the named endpoints (`core` expands as above); `describe_endpoints`, `call_endpoint` while any endpoint is left out | |
 
 Token counts include the server instructions (o200k_base, extension 0.3.0 with 108 endpoints, `npm run
@@ -858,6 +858,44 @@ warm-up requests, stub upstream, load average 10–16 from other agents' work, 0
 | `lint_diagram` | 50 | 1348–1446 | 32–36 ms | 61–67 ms |
 | `lint_diagram` | 200 | 1063–1681 | 110–163 ms | 186–445 ms |
 
+Re-run for 0.10.0 in one session, as for 0.9.1 below, two runs per path, 5000 requests per level
+after 500 warm-up requests, stub upstream, 0 errors throughout, on a machine shared with other
+agents' builds (load average 22–75 during the runs, against about 10 for 0.9.1). `request_diagram`
+(issue #20) is a new path: a dry run under `--tools oo`, which reads the style profile first as
+`derive_diagrams` does, and whose answer is shaped as derive's:
+
+| Tool | Concurrency | req/s | p50 | p99 |
+|---|---|---|---|---|
+| `get_all_diagrams_info` | 50 | 1412–1418 | 34 ms | 61–67 ms |
+| `get_all_diagrams_info` | 200 | 1857–1882 | 92–93 ms | 188 ms |
+| `call_endpoint` | 50 | 1475–1495 | 31–32 ms | 58–64 ms |
+| `call_endpoint` | 200 | 1905–1915 | 91–93 ms | 159–180 ms |
+| `batch` (4 ops) | 50 | 1418–1443 | 33–34 ms | 57–61 ms |
+| `batch` (4 ops) | 200 | 1765–1778 | 100–102 ms | 184–224 ms |
+| `build_diagram` | 50 | 1326–1471 | 33–36 ms | 57–63 ms |
+| `build_diagram` | 200 | 1468–1565 | 109–122 ms | 240–680 ms |
+| `lint_diagram` | 50 | 1117–1164 | 38–43 ms | 76–83 ms |
+| `lint_diagram` | 200 | 1179–1272 | 148–150 ms | 280–347 ms |
+| `build_model` (dry run) | 50 | 906–927 | 51–52 ms | 89–115 ms |
+| `build_model` (dry run) | 200 | 1104–1136 | 150–153 ms | 938–951 ms |
+| `apply_pattern` (dry run) | 50 | 686–904 | 54–63 ms | 95–181 ms |
+| `apply_pattern` (dry run) | 200 | 241–336 | 546–747 ms | 1080–1930 ms |
+| `diagram_quality` | 50 | 370–761 | 57–75 ms | 325–401 ms |
+| `diagram_quality` | 200 | 1077–1257 | 148–173 ms | 244–336 ms |
+| `improve_diagram` (dry run) | 50 | 961–1108 | 43–50 ms | 80–86 ms |
+| `improve_diagram` (dry run) | 200 | 1218–1407 | 128–148 ms | 221–371 ms |
+| `derive_diagrams` (dry run, `oo`) | 50 | 722–778 | 60–68 ms | 103–121 ms |
+| `derive_diagrams` (dry run, `oo`) | 200 | 929–984 | 192–207 ms | 313–332 ms |
+| `request_diagram` (dry run, `oo`) | 50 | 292–468 | 67–191 ms | 382–394 ms |
+| `request_diagram` (dry run, `oo`) | 200 | 391–813 | 218–282 ms | 515–1451 ms |
+| `quick_find` | 50 | 1014–1308 | 37–44 ms | 69–145 ms |
+| `quick_find` | 200 | 1532–1817 | 97–116 ms | 196–203 ms |
+
+The load average, five times 0.9.1's, explains the spread better than the code does: 0.10.0
+changes no request path but adds the template-only check on two endpoints under `oo`, and
+`derive_diagrams` and `request_diagram`, run back to back twice more, traded places (derive
+979 and 680 req/s at 50, request 901 and 561), one derive run falling to 198 req/s at 200.
+
 Re-run for 0.9.1 in one session, as for 0.9.0 below, two runs per path, 5000 requests per level
 after 500 warm-up requests, stub upstream, load average about 10, 0 errors throughout. 0.9.1
 changes no request path; the dry-run answers' `omitted` count and the kept `failures` are a few
@@ -1052,10 +1090,22 @@ invalidation path.
 calls, then 2,000 measured calls rotating `get_all_diagrams_info`, `quick_find`, `get_preference` and
 `performance_stats` through `call_endpoint`, `call_endpoint`, a two-op `batch`,
 `build_diagram`, `lint_diagram` through `call_endpoint`, `diagram_quality` and dry runs of
-`improve_diagram`, `build_model`, `apply_pattern` and `derive_diagrams`, and fails when the mean RSS, the live heap after a full GC or the p99 latency
+`improve_diagram`, `build_model`, `apply_pattern`, `derive_diagrams` and (since 0.10.0)
+`request_diagram`, and `list_templates`, and fails when the mean RSS, the live heap after a full GC or the p99 latency
 of the last 200 calls exceeds the first 200 by more than 25%, or any call fails; a p99 increase must
 also exceed 2 ms to count, since the p99 of 200 calls of about 1 ms is their second slowest and
 doubles on one scheduler stall. The live workflow runs it.
+
+Three runs for 0.10.0, `request_diagram` and `list_templates` added to the rotation (load average
+46–51 from other agents' work), 0 errors, all within budget:
+
+| Window | RSS | Live heap after GC | p50 | p99 |
+|---|---|---|---|---|
+| first 200 | 153.7–160.0 MB | 26.3 MB | 1.03–1.70 ms | 1.60–3.91 ms |
+| last 200 | 166.9–170.4 MB | 27.0 MB | 0.85–1.66 ms | 2.16–4.80 ms |
+| growth | 6.1–8.6% | 2.6–2.7% | | −14.4% to +35.1% |
+
+The third run's p99 rose 0.56 ms (+35.1%), under the 2 ms floor; the second's 0.89 ms (+22.9%).
 
 Four runs for 0.9.1, the same rotation (load average about 9), 0 errors, all within budget:
 
@@ -1160,54 +1210,55 @@ Two accountings, side by side:
 | | pre-#5 | #5 | phase 2a | now batch | now (core) |
 |---|---|---|---|---|---|
 | Tools listed | 21 | 21 | 34 | 19 | 19 |
-| Definitions + instructions | 3011 | 1831 | 6154 | 1998 | 1998 |
+| Definitions + instructions | 3011 | 1831 | 6154 | 1990 | 1990 |
 
 (a) Definitions once per scenario, plus results:
 
 | Scenario | Calls before / now | pre-#5 | #5 | phase 2a | now batch | now | vs pre-#5 | vs #5 |
 |---|---|---|---|---|---|---|---|---|
-| Mermaid class diagram + preview | 4 / 4 | 3197 | 1951 | 6274 | 2118 | 2118 | −33.8% | +8.6% |
-| Native use-case diagram | 11 / 2 | 3982 | 2497 | 6820 | 3982 | 2367 | −40.6% | −5.2% |
-| Inspect and refactor a class model | 8 / 8 | 6227 | 4234 | 8557 | 4698 | 4698 | −24.6% | +11.0% |
-| Native class diagram + export | 11 / 3 | 3917 | 2458 | 6781 | 3988 | 2377 | −39.3% | −3.3% |
-| All scenarios | 34 / 17 | 17323 | 11140 | 28432 | 14786 | 11560 | −33.3% | +3.8% |
+| Mermaid class diagram + preview | 4 / 4 | 3197 | 1951 | 6274 | 2110 | 2110 | −34.0% | +8.1% |
+| Native use-case diagram | 11 / 2 | 3982 | 2497 | 6820 | 4022 | 2359 | −40.8% | −5.5% |
+| Inspect and refactor a class model | 8 / 8 | 6227 | 4234 | 8557 | 4714 | 4714 | −24.3% | +11.3% |
+| Native class diagram + export | 11 / 3 | 3917 | 2458 | 6781 | 4028 | 2369 | −39.5% | −3.6% |
+| All scenarios | 34 / 17 | 17323 | 11140 | 28432 | 14874 | 11552 | −33.3% | +3.7% |
 
 (b) Definitions once per session, plus results and calls:
 
 | Scenario | pre-#5 | #5 | phase 2a | now batch | now | vs pre-#5 | vs #5 |
 |---|---|---|---|---|---|---|---|
 | Mermaid class diagram + preview | 282 | 216 | 216 | 216 | 216 | −23.4% | 0.0% |
-| Native use-case diagram | 1490 | 1185 | 1185 | 2449 | 478 | −67.9% | −59.7% |
-| Inspect and refactor a class model | 3369 | 2556 | 2556 | 2910 | 2910 | −13.6% | +13.8% |
-| Native class diagram + export | 1434 | 1155 | 1155 | 2472 | 512 | −64.3% | −55.7% |
-| Definitions, once | 3011 | 1831 | 6154 | 1998 | 1998 | | |
-| Session | 9586 | 6943 | 11266 | 10045 | 6114 | −36.2% | −11.9% |
+| Native use-case diagram | 1490 | 1185 | 1185 | 2497 | 478 | −67.9% | −59.7% |
+| Inspect and refactor a class model | 3369 | 2556 | 2556 | 2934 | 2934 | −12.9% | +14.8% |
+| Native class diagram + export | 1434 | 1155 | 1155 | 2520 | 512 | −64.3% | −55.7% |
+| Definitions, once | 3011 | 1831 | 6154 | 1990 | 1990 | | |
+| Session | 9586 | 6943 | 11266 | 10157 | 6130 | −36.1% | −11.7% |
 
 Targets of issues #5 and #8, under each accounting:
 
 | Target | (a) per scenario | (b) per session |
 |---|---|---|
-| #5 / #8: 60% below pre-#5, first three scenarios | not met: 9183 against ≤ 5362 (−31.5%) | not met: 5602 against ≤ 3260 (−31.3%) |
-| #5 / #8: 60% below pre-#5, all four scenarios | not met: 11560 against ≤ 6929 (−33.3%) | not met: 6114 against ≤ 3834 (−36.2%) |
-| #8: core definitions ≤ 2,000 | met: 1998 | met: 1998 |
-| #8: all scenarios below #5 | not met: 11560 against 11140 (+3.8%) | met: 6114 against 6943 (−11.9%) |
+| #5 / #8: 60% below pre-#5, first three scenarios | not met: 9183 against ≤ 5362 (−31.5%) | not met: 5618 against ≤ 3260 (−31.1%) |
+| #5 / #8: 60% below pre-#5, all four scenarios | not met: 11552 against ≤ 6929 (−33.3%) | not met: 6130 against ≤ 3834 (−36.1%) |
+| #8: core definitions ≤ 2,000 | met: 1990 | met: 1990 |
+| #8: all scenarios below #5 | not met: 11552 against 11140 (+3.7%) | met: 6130 against 6943 (−11.7%) |
 
 `build_diagram` does what it is for: a native diagram costs 478 and 512 tokens of results and calls
 (the spec it is given included; its answer carries the style and quality reports since 0.7.0),
-against 1185 and 1155 for #5's one call per element and 2449 and 2472 for one `batch`, whose ops repeat every parent and diagram id, whose results now carry each
+against 1185 and 1155 for #5's one call per element and 2497 and 2520 for one `batch`, whose ops repeat every parent and diagram id, whose results now carry each
 element's path, and which needs `describe_endpoints` for four endpoint schemas. Under (a) that
-saving is hidden by the definitions, counted four times (7992 of 11560 tokens); under (b) the
-session is 11.9% below #5 and 36.2% below pre-#5. The refactor scenario grew 29 tokens in 0.7.0:
+saving is hidden by the definitions, counted four times (7960 of 11552 tokens); under (b) the
+session is 11.7% below #5 and 36.1% below pre-#5. The refactor scenario grew 29 tokens in 0.7.0:
 `save_project`'s schema, which `describe_endpoints` returns, gained `override`; and 64 (76 under
 (b)) in 0.8.0, since its deletion goes through `call_endpoint` after `describe_endpoints` reads
 `delete_element`'s schema; and 8 (2 under (b)) in 0.9.0, for `view_diagram`'s `path` and
-`doctor`'s wording. What keeps
-(b) above the 60% target is the fixed definitions (1998, a third of the session) and the refactor
+`doctor`'s wording; and 16 (24 under (b)) in 0.10.0, since `delete_element`'s schema gained the
+`override` of derived diagrams. What keeps
+(b) above the 60% target is the fixed definitions (1990, a third of the session) and the refactor
 scenario, whose `get_all_commands` result alone is 1947 tokens of the 322 command ids; neither is
 touched by diagram building. The `batch` and `build_diagram` answers here are recorded in the
 extension's full form; since its phase 1g it answers each op's success and id, and a build's
-counts, unless asked for more, so both cost less against it. `--tools all` lists 110 tools for 14385 tokens (all scenarios (a)
-60621, (b) 17911). Generated descriptions stay one line of at most 100 characters (a test enforces
+counts, unless asked for more, so both cost less against it. `--tools all` lists 115 tools for 15004 tokens (all scenarios (a)
+63097, (b) 18530). Generated descriptions stay one line of at most 100 characters (a test enforces
 it on every listed tool), and a test keeps the core listing within 2,000 tokens.
 
 ### Reading a diagram back
@@ -1309,17 +1360,18 @@ counted once ("total") and, for a client without prompt caching, once per call.
 
 | Plan | Calls | Definitions | Call tokens | Result text | Total | Definitions each turn | Diagrams | Scores | Below 80 |
 |---|---|---|---|---|---|---|---|---|---|
-| `oo` tier: `build_model`, `derive_diagrams` | 2 | 1217 | 14758 | 1449 | 17424 | 18641 | 25 | 81–98 | 0 |
-| Drawing: 25 `build_diagram` calls | 25 | 1998 | 12385 | 2642 | 17025 | 64977 | 25 | 79–100 | 2 |
+| `oo` tier: `build_model`, `derive_diagrams` | 2 | 1412 | 14758 | 1449 | 17619 | 19031 | 25 | 81–98 | 0 |
+| Drawing: 25 `build_diagram` calls | 25 | 1990 | 12385 | 2642 | 17017 | 64777 | 25 | 79–100 | 2 |
 
 Both write the domain once, and that dominates: the spec is 14,758 tokens, the 25 drawing specs
 12,385 (they leave out what only the model holds: responsibilities, collaborations' contexts,
-`knows`/`does`), so with prompt caching the two cost the same within 3% (17,424 against 17,025).
+`knows`/`does`), so with prompt caching the two cost the same within 4% (17,619 against 17,017).
 Everything around it differs: 2 calls against 25, 1,449 tokens of answers against 2,642 (the
 extension's own are 523 for the build, 1,529 for the derivation and 3,715 for the 25 builds; each
 derived diagram keeps its id, since a derived sequence diagram is named like its collaboration
-and interaction), a tier listing 781 tokens shorter, and without prompt caching, where every turn
-resends the definitions, 18,641 against 64,977 tokens. Every
+and interaction), a tier listing 578 tokens shorter (since 0.10.0 it also lists `request_diagram` and
+`list_templates`), and without prompt caching, where every turn resends the definitions, 19,031
+against 64,777 tokens. Every
 derived diagram reaches the profile's target and two drawn diagrams do not; the derived ones
 show the model's own elements, so a change to the model is a `build_model` upsert and one
 `derive_diagrams` (a second derivation of the unchanged model created, updated and deleted

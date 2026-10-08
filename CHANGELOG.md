@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-08
+
+Built against staruml-mcp-extension 0.3.0 as finished in phase 1l (108 endpoints: viewpoints,
+diagram templates, draw.io export, locked derived diagrams). In short, by phase:
+
+- **2n** (#4, #20): the final manifest sync; a view asked for by intent and drawn through a
+  template, the only way the `oo` tier draws; draw.io files to disk only; hints for the strict
+  refusals; a readability check by a lower-tier model.
+
+The core tier lists 19 tools in 1,990 tokens, the `oo` tier 15 in 1,412, `--tools all` 115 in
+15,004 (o200k_base); the four modelling scenarios cost 11,552 and 6,130 tokens. ThingsBoard
+through `--tools oo` (`scripts/acceptance-oo.mjs`): the 25 class-view diagrams score 82–98, the
+11 per-package class diagrams asked for with `request_diagram` 89–100. Readability: no
+`ANTHROPIC_API_KEY` was available, so `scripts/benchmark-data/readability-7.1.1.json` holds the
+fixture run (3 diagrams judged from hand-written responses, not model output). Load (one session,
+twelve paths, two runs each at 50 and 200, load average 22–75): 0 errors. Soak, three runs: RSS
++6.1 to +8.6%, heap after GC +2.6 to +2.7%, 0 errors. Mutation 95.46% of 4,673 mutants. Live: 189 of 189.
+
 ### Changed
+- `scripts/load-test.mjs --request` measures a `request_diagram` dry run under `--tools oo`; the soak rotation adds `request_diagram` and `list_templates` (#20).
 - `scripts/acceptance-oo.mjs` asks for the per-package class diagrams with `request_diagram` per package, since the `oo` tier refuses `policy` (#20).
 - The bundled manifest is the final extension's, 108 endpoints (phase 1l): `/list_viewpoints`, `/describe_viewpoint`, `/viewpoint_lint`, `/request_diagram` and `/describe_template` are new; `build_diagram` takes `viewpoint`, `template` and `override`, `derive_diagrams` `viewpoints` and `template`, `list_templates` answers `diagramTemplates`, and the export endpoints take `format: "drawio"`. The live contract stays exact (#4).
 - `build_diagram` lists `template` in place of `direction` and `layout`, which pass unlisted; the core tier is 1,990 tokens. `request_diagram` and `list_templates` would take it to 2,143 and are reached from it through `call_endpoint` (#20).

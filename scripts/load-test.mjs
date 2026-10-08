@@ -25,14 +25,16 @@
 // the first call builds it and every later one finds nothing to add. --model and --pattern are
 // dry runs and change nothing, and so do --quality and --improve; --pattern --live needs a model in
 // the open project, where Strategy's new elements would go, and --quality --live and --improve
-// --live an open diagram, --derive --live a model named LoadTest. --quick-find runs quick_find
+// --live an open diagram, --derive --live a model named LoadTest. --request runs a
+// request_diagram dry run under --tools oo (issue #20), shaped as derive_diagrams' answer; --live
+// needs the LoadTest model too. --quick-find runs quick_find
 // (core since 0.8.0) for "order", which reads the whole repository in StarUML.
 //
 // Usage: npm run build && node scripts/load-test.mjs
 //          [--concurrency 50,200] [--requests 5000] [--warmup 500]
 //          [--max-p99-ms N] [--min-rps N] [--live] [--session]
 //          [--call-endpoint | --batch | --build | --lint | --model | --pattern | --quality
-//           | --improve | --derive]
+//           | --improve | --derive | --request]
 // STARUML_EXT_TOKEN reaches the server, so --live works with an extension that requires a token.
 // Exits non-zero on any failed request or a breached budget.
 
@@ -60,6 +62,7 @@ const { values: args } = parseArgs({
     quality: { type: "boolean", default: false },
     improve: { type: "boolean", default: false },
     derive: { type: "boolean", default: false },
+    request: { type: "boolean", default: false },
     session: { type: "boolean", default: false },
   },
 });
@@ -119,6 +122,20 @@ const MODES = [
     "derive",
     { name: "derive_diagrams", arguments: { scope: "LoadTest", dryRun: true } },
     "derive_diagrams (dry run, oo tier)",
+    "oo",
+  ],
+  [
+    "request",
+    {
+      name: "request_diagram",
+      arguments: {
+        intent: "what classes are there and how are they related",
+        audience: "developer",
+        scope: "LoadTest",
+        dryRun: true,
+      },
+    },
+    "request_diagram (dry run, oo tier)",
     "oo",
   ],
   ["build", { name: "build_diagram", arguments: BUILD }, "build_diagram (3 classes, upsert)"],
@@ -485,6 +502,39 @@ async function startStub() {
           },
         ],
         counts: { diagrams: 2, created: 7, updated: 0, unchanged: 0, deleted: 0 },
+        dryRun: true,
+      },
+    }),
+    // The choice and one derived diagram, as src/handlers/viewpoints.ts answers a dry run.
+    "POST /request_diagram": JSON.stringify({
+      success: true,
+      data: {
+        choice: {
+          viewpoint: "code",
+          kind: "class",
+          template: "code-classes",
+          rule: "D12",
+          reason: "the intent asks which types there are",
+          question: "Which types make up this part of the system, and how are they related?",
+          matched: ["classes"],
+        },
+        scope: "LoadTest",
+        diagrams: [
+          {
+            kind: "class",
+            name: "LoadTest",
+            diagram: "$diagram",
+            created: 5,
+            updated: 0,
+            unchanged: 0,
+            ops: 9,
+            viewpoint: "code",
+            conforms: true,
+            template: "code-classes",
+            accepted: true,
+          },
+        ],
+        counts: { diagrams: 1, created: 5, updated: 0, unchanged: 0, deleted: 0 },
         dryRun: true,
       },
     }),
