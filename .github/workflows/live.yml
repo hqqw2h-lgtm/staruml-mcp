@@ -1,0 +1,60 @@
+name: Live
+
+# Needs a machine with StarUML 7.x running and staruml-mcp-extension 0.3.x installed, so it runs
+# on demand on a self-hosted runner labelled "staruml" rather than on push.
+on:
+  workflow_dispatch:
+    inputs:
+      requests:
+        description: Load test request count
+        default: "1000"
+      concurrency:
+        description: Load test concurrency
+        default: "50"
+      readability:
+        description: Readability check of the ThingsBoard set by a lower-tier model (needs the ANTHROPIC_API_KEY secret)
+        type: boolean
+        default: false
+
+jobs:
+  live:
+    runs-on: [self-hosted, staruml]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Wait for the extension
+        run: for i in $(seq 1 30); do curl -sf http://localhost:58322/ >/dev/null && exit 0; sleep 1; done; exit 1
+
+      - name: Live integration tests
+        run: npm run test:live
+
+      # Issue #20: each derived diagram's PNG and its viewpoint's question to READABILITY_MODEL;
+      # the script skips itself when the secret is absent.
+      - name: Readability check
+        if: ${{ inputs.readability }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npm run readability
+
+      - name: Load test against StarUML (stateless, then one session)
+        run: |
+          npm run load-test -- --live --requests ${{ inputs.requests }} --concurrency ${{ inputs.concurrency }}
+          npm run load-test -- --live --session --requests ${{ inputs.requests }} --concurrency ${{ inputs.concurrency }}
+          npm run load-test -- --live --session --lint --requests ${{ inputs.requests }} --concurrency ${{ inputs.concurrency }}
+          npm run load-test -- --live --session --model --requests ${{ inputs.requests }} --concurrency ${{ inputs.concurrency }}
+          npm run load-test -- --live --session --pattern --requests ${{ inputs.requests }} --concurrency ${{ inputs.concurrency }}
+          npm run load-test -- --live --session --quality --requests ${{ inputs.requests }} --concurrency ${{ inputs.concurrency }}
+          npm run load-test -- --live --session --improve --requests ${{ inputs.requests }} --concurrency ${{ inputs.concurrency }}
+          npm run load-test -- --live --session --quick-find --requests ${{ inputs.requests }} --concurrency ${{ inputs.concurrency }}
+
+      - name: Soak test (2000 calls over stdio)
+        run: npm run soak-test

@@ -1,0 +1,180 @@
+# Verification
+
+How staruml-mcp is checked, layer by layer: what each layer proves, where it lives and how to run
+it. Every command runs from the repository root with Node 22 (`npm ci` first). The layers that
+need no StarUML run in CI on every push (`.github/workflows/ci.yml`); mutation testing runs weekly
+(`mutation.yml`); the layers that drive a real StarUML run on demand on a self-hosted runner
+(`live.yml`).
+
+| Layer | Proves | Where | Run | CI |
+|---|---|---|---|---|
+| Unit and tool-level | Every production behaviour: each tool through the MCP SDK's in-memory transport against `http.Server` stand-ins of ports 58321 and 58322, the HTTP transport and its sessions over a real socket, the CLI. 100% line, branch, function and statement coverage is a vitest threshold. | `tests/*.test.ts`, `tests/support/` | `npm test -- --coverage` | every push |
+| Property | Invariants for every input, not only chosen examples: `prune` keeps every non-empty property and every array item, and is idempotent except that a second pass drops the `{}` it keeps for an object whose properties it emptied (deliberate: `{owner: {stereotype: null}}` says there is an owner); a `__proto__` key stays data; `serialize` leaves no null or empty property; `omitEcho` drops only echoed primitives; the core tier is a subset of `all` with unique names for any manifest subset, a selection selects exactly its names (tiers expanded) and every name has one group; only `oo` without `core` or `all` closes a selection, a closed one lists hand-written tools only when named and reaches its names and the oo set only, and whatever it lists it reaches; nothing that draws is reachable from `oo` unless named; no sequence of `doctor` selections from any launch tier reaches or lists more at any step than the step before unless `--allow-tier-switch` was given, and with it every selection is taken (#19); a batch `$name` reference to the op itself or a later op is always refused, one to an earlier op with any path accepted, and a `$$`-escaped string is never read as a reference and passes through unchanged; diagram resource URIs carry any id through percent-encoding and back; `terseDescription` stays within 100 characters on one line; `isLoopback` accepts all of 127/8 and no `localhost.` suffix; no listed schema shows an alias of extension 0.3.0's old field names and every alias's canonical field is listed; renaming aliases keeps every value, is idempotent and refuses two spellings of one field; every field the manifest documents as taking an id or a path accepts any string over the path alphabet (`/ . # @ ( ) , \`, `@current`, `@project`). `apply_pattern` accepts every binding of a path, a name, `{new: {name}}` or a list of those under any role, and refuses an empty name, a number, a nameless new element or a bad list item anywhere among valid ones; `build_model` refuses a spec with any key outside the object vocabulary, and geometry or colour on the spec or a class (strict since extension #33); `improve_diagram` takes an integer target 0–100 and one of the eight presets, `diagram_quality` only a diagram reference; a dry run's answer keeps every value but the `/batch` ops, which it counts, and placeholder ids; every property a pattern or preset sets appears once under its path, the last value of a field winning, `__proto__` included; pattern resource URIs carry any name through percent-encoding and back. Since 0.10.0 (#20): each listed schema of extension #42 and #43's endpoints (`request_diagram`, `list_templates`, `describe_template`, `list_viewpoints`, `describe_viewpoint`, `viewpoint_lint`) either refuses a call before sending or sends a body the endpoint's whole request schema accepts; `request_diagram` passes any intent of 1 to 500 characters as written; under `oo`, `build_diagram` with any mix of template, content, layout, direction, style and viewpoint fields sends only template and content fields, never without a template; the readability judgement read from any reply text is a confidence of 0 to 100 or an `Error`. fast-check prints the shrunk counterexample and the seed. | `tests/properties.test.ts` | `npx vitest run tests/properties.test.ts` | every push |
+| Fuzz | Random JSON as `call_endpoint` and `batch` arguments (any value, bodies over an endpoint's own parameter names, aliases included, unknown endpoints, malformed ops) never throws and never becomes a JSON-RPC error: every call resolves to a result, and every refusal carries `INVALID_ARGUMENT`, `UNKNOWN_ENDPOINT` or `ENDPOINT_NOT_FOUND`, or is the SDK's own input validation. The run also requires that some inputs got through every check to the stand-in. Random paths in every field of the core tools, `apply_pattern` and `delete_element` that takes an element reach the extension unchanged. Random JSON as `apply_pattern`'s `bindings`, `build_model`'s `spec` and `improve_diagram`'s arguments resolves to a result, and a refused one never reaches the extension. Under `--tools oo`, random `call_endpoint` calls never send an endpoint the tier leaves out, nor `set_style_profile` with anything but the `{patch: {strict: true}}` the server sends itself before a change (#19); every such name is refused with `NOT_IN_TIER`, and since 0.10.0 a `build_diagram` without a template or with a layout or style field with `TEMPLATE_ONLY` (#20). | `tests/fuzz.test.ts` | `npx vitest run tests/fuzz.test.ts` | every push |
+| Contract | The bundled manifest (`src/extension-manifest.json`) is exactly the manifest the running extension publishes, endpoint for endpoint and schema for schema (since 0.8.0, the extension being final at 0.3.0; before, newer live endpoints were tolerated). 0.9.0 relaxed the live check to "contains" while the extension's last release was in progress; 0.9.1 synced its final manifest (phase 1j) and the check is exact again, as are ThingsBoard's per-diagram floor of 80 (the per-package set's `Rule Engine API`, which the extension reports short, asserted at its 77) and `layout_diagram`'s fit. `build_diagram` lists the manifest's kind enum, and every kind without a hand-written shape is one of the families whose manifest description gives the shared node and edge shape. Every enforcement layer of #17: the `oo` listing has no drawing tool and stays within 1,500 tokens, `call_endpoint` and `describe_endpoints` refuse the drawing endpoints and view attributes before sending, the strict OO schema refuses geometry, `doctor` narrows the tier and refuses to widen it (`TIER_LOCKED`) unless started with `--allow-tier-switch`, and no refusal's hint names a way out of the tier (#19); before every change the `oo` tier makes the profile strict and refuses with `PROFILE_NOT_STRICT` when it cannot; the strict-guarded endpoints the tier reaches are exactly `update_element`, whose view fields it refuses itself, and `override` is refused on every overridable endpoint it reaches and shown in no schema (#19); live, the first `oo` change makes the profile strict and a client talking to the extension directly then gets `STYLE_LOCKED`, a strict profile answers `STYLE_LOCKED` to the core tier while the `oo` tier never sends the call, and a second `derive_diagrams` changes nothing. 0.10.0 syncs the final phase 1l manifest (108 endpoints) and keeps the check exact; under `oo`, `build_diagram` and `derive_diagrams` take a template name and content only, refused as `TEMPLATE_ONLY` before sending and shown that way by `describe_endpoints`; a draw.io export is only ever written to a file; live, `request_diagram` picks the expected viewpoint and kind for seven intents on ThingsBoard, a strict profile refuses a client past the server with `TEMPLATE_ONLY` and `VIEWPOINT_REQUIRED`, a derived diagram refuses a hand edit with `DIAGRAM_DERIVED` before any `STYLE_LOCKED`, and every refusal carries this server's hint (#20). | `tests/oo-tier.test.ts`; `tests/live/staruml.live.test.ts`, "called every listed tool and every endpoint of the bundled manifest" and "oo tier" | `npx vitest run tests/oo-tier.test.ts`; `npm run test:live` | every push; `live.yml` |
+| Mutation | The tests fail when the code changes: Stryker mutates `src/` (4,673 mutants in 0.10.0) and runs the tests covering each mutant. The run fails below 85% killed (`stryker.config.mjs`); the HTML report lands in `reports/mutation/`. | `stryker.config.mjs` | `npm run test:mutation` | weekly, `mutation.yml` |
+| Live | Every tool, resource and prompt and every manifest endpoint against StarUML 7.1.1 with the extension, including the HTTP transport's loopback binding, the inline viewer in an HTTP session and `list_changed` reaching every session. The suite saves the open project to a temp file, works in a fresh one and reopens the original. | `tests/live/staruml.live.test.ts` | `npm run test:live` (StarUML running) | `live.yml` |
+| Load | The HTTP transport under concurrency, stateless and in one session, for a plain call, `call_endpoint`, a four-op `batch`, `build_diagram`, `lint_diagram`, `diagram_quality`, `quick_find` and dry runs of `build_model`, `apply_pattern`, `improve_diagram`, `derive_diagrams` and `request_diagram` (both under `--tools oo`): req/s, p50/p90/p99, zero errors; a body over 4 MiB is refused with 413 (`tests/http-transport.test.ts`). `--max-p99-ms` and `--min-rps` make it a budget. | `scripts/load-test.mjs` | `npm run build && npm run load-test -- [--session] [--call-endpoint\|--batch\|--build\|--lint\|--model\|--pattern\|--quality\|--improve\|--derive\|--request\|--quick-find] [--live]` | every push (stub), `live.yml` (StarUML) |
+| Soak | 2,000 tool calls over stdio after 2,000 warm-up calls: RSS, live heap after a full GC and p99 of the last 200 calls within 25% of the first 200 (a p99 rise must also exceed 2 ms), no failed call. | `scripts/soak-test.mjs` | `npm run build && npm run soak-test` | `live.yml` |
+| Skill-example replay | Every tool call written in the agent skill is accepted by the server and reaches StarUML as written; the Codex and Copilot copies match the source; every `build_diagram` kind and diagram family has its example. Live, the same calls run against StarUML, and each family's diagram is read back as a spec that builds a copy with the same spec. | `tests/skill.test.ts`, `tests/support/skill.ts`, live suite "skill examples" | `npx vitest run tests/skill.test.ts`; live with `npm run test:live` | every push; `live.yml` |
+| Readability | Whether a derived diagram answers its viewpoint's question to a lower-tier model reading only the PNG (#20): `src/readability.ts` builds the request (image, then the question, structured output), reads the judgement, fails a refusal, a cut reply or an answer off the schema, and passes an answerable diagram at or above the threshold; replay and record clients keep the network out of the tests, which cover it at 100% from recorded responses. | `scripts/readability-check.mjs`, `src/readability.ts`, `tests/readability.test.ts`, `tests/fixtures/readability.messages.json` | `npm run build && ANTHROPIC_API_KEY=... npm run readability` (skips without a key; `--replay <file>` offline) | `live.yml` on demand (`readability: true`) |
+| Static | Types (`tsc` strict, `noUncheckedIndexedAccess`) over src and tests, ESLint, Prettier, and the build. | `tsconfig*.json`, `eslint.config.mjs`, `.prettierrc` | `npm run typecheck && npm run lint && npm run format:check && npm run build` | every push; pre-commit (lint-staged) |
+
+## Results
+
+Recorded for 0.10.0 (#4, #20) on the same machine, shared with other agents' builds (load average
+22–75 for the load and soak runs, 160–270 during the mutation run):
+
+- **Unit, property, fuzz:** 1,791 tests, 100% lines, branches, functions and statements, the new
+  `src/viewpoints.ts` and `src/readability.ts` included.
+- **Mutation:** 95.46%: of 4,673 mutants 4,019 killed, 442 timed out (counted as detected), 212
+  survived, none uncovered; 71 minutes with 15 runners at a load average near 200, which is why
+  timeouts more than doubled (196 in 0.9.1). `src/tiers.ts`, with the template-only fields,
+  scores 100%, `src/prompts.ts` 99.13%, `src/staruml-client.ts` with the four new hints 98.43%,
+  `src/extension-tools.ts` 97.28%, `src/viewpoints.ts` 97.22%, `src/view-diagram.ts` 95.48%.
+  `src/readability.ts` scored 93.98% with eight survivors: the reader's instructions word by
+  word, the 80-character quotes of a bad reply, the request's `role` and a text block found
+  after another block; tests written after the run match the instructions whole and cover the
+  other three.
+- **Live:** 189 of 189 against StarUML 7.1.1 and the extension's final phase 1l build, whose
+  manifest equals the bundled one exactly (108 endpoints). `request_diagram` on ThingsBoard under
+  `--tools oo` picks D06 runtime/sequence, D01 lifecycle/statemachine, D02 data/erd, D08
+  actors-goals/usecase, D03 deployment (2 diagrams), D10 container/c4 and D12 code/class (6) for
+  seven intents; the template-only refusals hold on both sides of the server; a derived diagram
+  answers `DIAGRAM_DERIVED` to a hand edit. Phase 1l changed three expectations: a derived
+  diagram is refused before a strict profile's `STYLE_LOCKED`, Deployment - Monolith's first
+  derived score is its stored one, and a strict profile refuses `derive_diagrams`' `policy`.
+  `scripts/acceptance-oo.mjs`: 25 class-view diagrams at 82–98, 11 per-package class diagrams
+  through `request_diagram` at 89–100 (README, "ThingsBoard acceptance through the `oo` tier").
+- **Readability:** no `ANTHROPIC_API_KEY` was set, so no model judged the diagrams. The fixture
+  run (`--replay tests/fixtures/readability.messages.json`, hand-written responses marked
+  `[fixture]`) judged three of the 25 real exports: one pass, two fails, mean confidence 54; it
+  proves the pipeline, not the diagrams.
+- **Load:** see README, Performance, "Re-run for 0.10.0": one session, twelve paths, 0 errors.
+- **Soak:** three runs, RSS +6.1 to +8.6%, live heap after GC +2.6 to +2.7%, 0 errors, all within
+  budget.
+
+Recorded for 0.9.1 (#4, #19) on the same machine, load average about 9–10 for the load and soak
+runs:
+
+- **Unit, property, fuzz:** 1,697 tests, 100% lines, branches, functions and statements.
+- **Mutation:** 94.95%: of 4,135 mutants 3,730 killed, 196 timed out (counted as detected), 209
+  survived, none uncovered; 32 minutes with 15 runners. The new code (the summary dry run's
+  `omitted` count, `failures` kept in quality reports, the extension's own cut marker) has no
+  survivor: `src/reports.ts` scores 91.67% with nine survivors, all in code 0.9.0 had;
+  `src/model.ts` 95.91%, `src/tiers.ts` 98.82%. The model-first prompt's dry-run line changed
+  after the run, a string the prompt test matches whole.
+- **Live:** 178 of 178 against StarUML 7.1.1 and the extension's final phase 1j build, whose
+  manifest equals the bundled one exactly. ThingsBoard through the `oo` tier: 25 class-view
+  diagrams at 81–98, none failing a hard limit; per package 30 at 77–100, `Rule Engine API` (77)
+  the extension's known shortfall; the whole-model dry run 914 tokens as a summary against 20,131
+  in full. `scripts/acceptance-oo.mjs` records the same run per diagram (README, "ThingsBoard
+  acceptance through the `oo` tier").
+- **Load:** see README, Performance, "Re-run for 0.9.1": one session, eleven paths, 0 errors.
+- **Soak:** four runs, RSS +6.5 to +8.4%, live heap after GC +2.9 to +3.4%, 0 errors, all within
+  budget.
+
+Recorded for 0.9.0 (#19) on the same machine, other agents' test runs sharing it (load average
+18–58 for the load and soak runs):
+
+- **Unit, property, fuzz:** 1,695 tests, 100% lines, branches, functions and statements. Fuzz
+  outcomes of one run (1,700 calls): `INVALID_ARGUMENT` 676, `UNKNOWN_ENDPOINT` 221, SDK input
+  validation 512, `NOT_IN_TIER` 58, success 233.
+- **Mutation:** 94.23%: of 4,090 mutants 3,683 killed, 171 timed out (counted as detected), 236
+  survived, none uncovered; 44 minutes with 15 runners. `src/tiers.ts`, with the tier lock,
+  scores 99.21%, `src/view-diagram.ts` 95.73%, `src/style.ts` 91.11%, `src/images.ts` 88.89%.
+  Of `src/images.ts`'s 11 survivors, the optional chaining ones are equivalent (a missing level
+  throws inside the `try` and lands on the same default); the run named four more that tests
+  added after it now kill: a cap exactly as wide as the image, an export without a width, a
+  page width of 0 or not a number, and 24 bytes that are not a PNG.
+- **Live:** 176 of 176 against StarUML 7.1.1 and the running extension, whose next release is in
+  progress (five endpoints' descriptions and schemas differ from the bundled manifest); the
+  contract is "contains" for this phase, and the layout fit and ThingsBoard's minimum score are
+  asserted while those endpoints match the bundled ones.
+- **Load:** see README, Performance, "Re-run for 0.9.0": one session, eleven paths, 0 errors.
+- **Soak:** four runs, RSS +6.0 to +9.2%, live heap after GC +3.2 to +3.6%, 0 errors, all within
+  budget.
+
+Recorded for 0.8.0 (#15) on the same machine, other agents' work sharing it (load average 6–17
+for the load and soak runs, up to 92 while the mutation run's 15 runners shared it with them):
+
+- **Unit, property, fuzz:** 1,605 tests, 100% lines, branches, functions and statements. Fuzz
+  outcomes of one run (1,700 calls): `INVALID_ARGUMENT` 694, `UNKNOWN_ENDPOINT` 199, SDK input
+  validation 519, `NOT_IN_TIER` 49, success 239.
+- **Mutation:** 94.82%: of 3,766 mutants 3,377 killed, 195 timed out (counted as detected), 194
+  survived, none uncovered; 31 minutes with 15 runners. `src/elements.ts`, with `quick_find`'s
+  listing, scores 100% and `src/build-diagram.ts` 97.44%; one of `src/diagram-text.ts`'s two
+  survivors makes every format pass through the spec's one-line rewrite, which leaves Mermaid and
+  PlantUML unchanged, since neither parses as JSON.
+- **Live:** 172 of 172 against StarUML 7.1.1 and the extension's phase 1i build, whose manifest
+  equals the bundled one exactly: every new endpoint, the sixteen family examples of the skill,
+  and each family read back as a spec that builds a copy with the same spec. That round trip
+  found what extension 0.3.0 does not carry back (README and the skill's section 4): the spec
+  leaves out `documentation` and `properties`, a composite structure's class lists its parts and
+  ports among its attributes too, and an upsert of the spec into its own diagram adds composite
+  parts, communication messages, timing states and segments and overview control nodes again.
+- **Load:** see README, Performance, "Re-run for 0.8.0": one session, eleven paths, 0 errors.
+- **Soak:** four runs with `quick_find`, `get_preference` and `performance_stats` in the rotation,
+  RSS +6.3 to +7.8%, live heap after GC +2.4 to +3.5%, 0 errors; one run's p99 rose 2.37 ms (1.38
+  to 3.75 ms), over the 2 ms floor, and failed that budget, the other three fell.
+
+Recorded for 0.6.0 (#13) on the same machine, other agents' test suites and a second StarUML
+client sharing it (load average 13–21):
+
+- **Unit, property, fuzz:** 1,291 tests, 100% lines, branches, functions and statements. Fuzz
+  outcomes of one run (1,200 calls, the bindings and spec runs included): `INVALID_ARGUMENT` 498,
+  `UNKNOWN_ENDPOINT` 111, SDK input validation 350, success 241. The binding property found that
+  zod's record skips a `"__proto__"` role, so such a binding is ignored rather than refused, here
+  and in the extension alike; a batch op that gives an alias beside its field was covered only
+  when the fuzz test happened to generate one, and has a test of its own now.
+- **Mutation:** 93.95%: of 3,125 mutants 2,861 killed, 75 timed out (counted as detected), 189
+  survived, none uncovered; 23 minutes with 15 runners. The new `src/model.ts` scores 94.92% and
+  `src/patterns.ts` 92.11%; their survivors are guards for answers not shaped like the
+  extension's.
+- **Live:** 103 of 104 passed against StarUML 7.1.1 and the extension's working tree after phase
+  1g (79 endpoints bundled; the running build offered six more, which the suite tolerates),
+  including the ThingsBoard object spec planned from `tests/fixtures/thingsboard.oo.json` (93
+  classifiers, 644 ops) and Strategy applied by path and detected back at confidence 1. The one
+  failure is `restore_snapshot` answering `SNAPSHOT_STALE` in the improve-diagram loop, against
+  that working tree's uncommitted undo recording (`src/undo.ts`); the test passed against the
+  phase 1g build.
+- **Load:** see README, Performance, "Re-run for 0.6.0": one session, seven paths, 0 errors.
+- **Soak:** three runs with dry runs of `build_model` and `apply_pattern` in the rotation, RSS
+  +6.0 to +7.6%, live heap after GC +2.9 to +3.7%, p99 within the 2 ms floor, 0 errors.
+
+Recorded for 0.5.0 (#13) on the same machine, other agents' test suites sharing it (load average
+10–16):
+
+- **Unit, property, fuzz:** 1,155 tests, 100% lines, branches, functions and statements. Fuzz
+  outcomes of one run (800 calls, the path run included): `INVALID_ARGUMENT` 138,
+  `UNKNOWN_ENDPOINT` 113, SDK input validation 346, success 203. The alias property found that
+  two aliases of one field (`/diff_diagram`'s `diagramId` and `id`) are refused like an alias
+  beside its field, which is what the extension does; the property was written too narrowly.
+- **Mutation:** 93.51%: of 2,791 mutants 2,518 killed, 92 timed out (counted as detected), 181
+  survived, none uncovered; 20 minutes with 15 runners.
+- **Live:** 88 passed against StarUML 7.1.1 and the extension's phase 1g build (69 endpoints
+  bundled; the running build offered three more, which the suite tolerates).
+- **Load:** see README, Performance, "Re-run for 0.5.0": one session, five paths, 0 errors.
+- **Soak:** three runs with `lint_diagram` in the rotation, RSS +5.1 to +6.9%, live heap after GC
+  +3.0 to +3.8%, p99 within the 2 ms floor, 0 errors.
+
+Recorded for #14 on an Intel i9-9980HK (8 cores / 16 threads), macOS, Node 22.23.3, with other
+test suites sharing the machine.
+
+- **Unit, property, fuzz:** 1,044 tests, 100% lines, branches, functions and statements. The
+  property tests found two faults, both fixed: `endpointGroup("")` threw, because the catch-all
+  group's pattern `/./` needs one character (now `/^/`); and `prune` and `omitEcho` lost a
+  `__proto__` key of an upstream answer, since `out[key] = value` sets the prototype instead of a
+  property (now `Object.fromEntries`). Fuzz outcomes of one run (600 calls):
+  `INVALID_ARGUMENT` 118, `UNKNOWN_ENDPOINT` 116, SDK input validation 363, success 3.
+- **Mutation:** 92.89%: of 2,477 mutants 2,260 killed, 41 timed out (counted as detected), 176
+  survived, none uncovered; 16 minutes with 15 runners. Most survivors are wording: CLI help
+  text, hint and error prose the tests match only in part. Three runs over this work scored
+  92.94%, 91.97% and 92.89%; the spread comes from static mutants (module-level constants, about
+  29% of the total), whose covering tests Stryker attributes from one coverage run.
+- **Live:** 80 passed against StarUML 7.1.1 and extension 0.3.0.
+- **Load:** see README, Performance; one session serves 2–4x the requests per second of the
+  stateless fallback.
+- **Soak:** three runs, RSS +3.9 to +8.3%, live heap after GC +2.8 to +4.0%, p99 −14 to −18%
+  between the first and last 200 of 2,000 calls after 2,000 warm-up calls, 0 errors. A cold run
+  grows RSS by 51% while the heap after GC grows 5%: V8 sizing its spaces (README, Soak).

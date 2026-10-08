@@ -1,0 +1,6 @@
+package-lock.json
+dist/
+coverage/
+CHANGELOG.md
+# Written by `npm run sync:manifest`; kept byte-identical to its output.
+src/extension-manifest.json

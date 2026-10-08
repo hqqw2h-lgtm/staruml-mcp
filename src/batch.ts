@@ -1,0 +1,152 @@
+/**
+ * Client side of extension 0.3.0's `/batch` (src/handlers/batch.ts there): the listed input
+ * schema, a check of every op before anything is sent, and a compact result.
+ */
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
+import { compactOpResults, serialize } from "./compact.js";
+import { ErrorCode, ToolInputError } from "./errors.js";
+import {
+  canonicalBody,
+  issuePath,
+  unlisted,
+  unstamped,
+  untrivial,
+  type GeneratedTool,
+} from "./manifest.js";
+import { textResult } from "./tool-result.js";
+
+export const BATCH = "batch";
+
+/** One line for tools/list; the extension's description is 290 characters. */
+export const BATCH_DESCRIPTION =
+  'Run endpoint calls in order as one undo step; "$a", "$a.view", "$a.model" are op a\'s result ids.';
+
+/** The extension's patterns for a path and an `as` name. */
+const OP_NAME = /^[A-Za-z_][\w-]*$/;
+/**
+ * "$name" or "$name.path", where a numeric segment indexes a list ("$frag.model.operands.0");
+ * "$$" escapes a literal "$" (batch.ts `REFERENCE`).
+ */
+const REFERENCE = /^\$([A-Za-z_][\w-]*)((?:\.(?:[A-Za-z_$][\w$]*|\d+))*)$/;
+
+/**
+ * Shorter than the manifest's request schema, which repeats the refused paths and the limit
+ * preference in parameter descriptions. The manifest schema still decides: a batch is checked
+ * against it before it is sent. The patterns of `path` and `as` and the minimum of `ops` are
+ * checked here too but not listed; the descriptions say as much in fewer tokens. The root is loose
+ * so that `result` (how much of each op's answer comes back; terse by default), which
+ * describe_endpoints shows, reaches that check unlisted.
+ */
+export const BatchInput = unstamped(
+  untrivial(
+    z.looseObject({
+      ops: z
+        .array(
+          z.object({
+            path: unlisted(z.string().regex(/^\//), "pattern").describe(
+              "Endpoint path, e.g. /create_element.",
+            ),
+            body: untrivial(z.record(z.string(), z.unknown()))
+              .optional()
+              .describe("Its request body."),
+            as: unlisted(z.string().regex(OP_NAME), "pattern")
+              .optional()
+              .describe("Name later ops refer to as $name."),
+          }),
+        )
+        .min(1)
+        .meta({ minItems: undefined })
+        .describe("Calls in order."),
+      atomic: z.boolean().optional().describe("Default true: one failing op undoes all."),
+    }),
+  ),
+);
+
+interface Op {
+  path: string;
+  body?: Record<string, unknown>;
+  as?: string;
+}
+
+/**
+ * Throws {@link ToolInputError} for the first op whose path the manifest lacks, whose body its
+ * schema rejects or that refers to a name no earlier op defines. An atomic batch that failed in
+ * the extension is rolled back, so catching these first saves the work of the ops before it.
+ * A reference stands for a value only known once the batch runs, so schema issues on a reference
+ * string are ignored; the extension checks the resolved value.
+ */
+export function checkBatch(tools: readonly GeneratedTool[], ops: readonly Op[]): void {
+  const named = new Set<string>();
+  ops.forEach((op, i) => {
+    const tool = tools.find((t) => t.path === op.path);
+    if (tool === undefined) {
+      throw new ToolInputError(`ops.${i}.path: no endpoint ${op.path}`, {
+        code: ErrorCode.InvalidArgument,
+        endpoint: `/${BATCH}`,
+        hint: "describe_endpoints() lists the endpoints.",
+      });
+    }
+    const fail = (message: string): never => {
+      throw new ToolInputError(`ops.${i}.${message}`, {
+        code: ErrorCode.InvalidArgument,
+        endpoint: `/${BATCH}`,
+        hint: `describe_endpoints({names: ["${tool.name}"]}) shows its schema.`,
+      });
+    };
+    const written = op.body ?? {};
+    const dangling = references(written).find((r) => !named.has(r.name));
+    if (dangling !== undefined) {
+      fail(`body.${dangling.at}: ${dangling.text} names no earlier op`);
+    }
+    let renamed: ReturnType<typeof canonicalBody>;
+    try {
+      renamed = canonicalBody(tool, written);
+    } catch (error) {
+      return fail(`body.${(error as Error).message}`);
+    }
+    const { body, used } = renamed;
+    const parsed = tool.requestSchema.safeParse(body);
+    const issues = parsed.success
+      ? []
+      : parsed.error.issues.filter((issue) => !isReference(valueAt(body, issue.path)));
+    if (issues.length > 0) {
+      fail(
+        issues
+          .map((issue) => `${["body", ...issuePath(issue.path, used)].join(".")}: ${issue.message}`)
+          .join("; "),
+      );
+    }
+    if (op.as !== undefined) named.add(op.as);
+  });
+}
+
+function isReference(value: unknown): boolean {
+  return typeof value === "string" && REFERENCE.test(value);
+}
+
+function valueAt(value: unknown, path: readonly PropertyKey[]): unknown {
+  let current = value;
+  for (const key of path) current = (current as Record<PropertyKey, unknown> | undefined)?.[key];
+  return current;
+}
+
+/** Every reference string in `value`, with its location. */
+function references(
+  value: unknown,
+  at: string[] = [],
+): { name: string; text: string; at: string }[] {
+  if (typeof value === "string") {
+    const match = REFERENCE.exec(value);
+    return match === null ? [] : [{ name: match[1]!, text: value, at: at.join(".") }];
+  }
+  if (typeof value !== "object" || value === null) return [];
+  return Object.entries(value).flatMap(([key, item]) => references(item, [...at, key]));
+}
+
+/** The answer with each result compacted by {@link compactOpResults}. */
+export function batchResult(data: unknown, input: Record<string, unknown>): CallToolResult {
+  const results = (data as { results?: unknown } | null)?.results;
+  if (!Array.isArray(results)) return textResult(serialize(data, input));
+  return textResult(serialize({ ...(data as object), results: compactOpResults(results) }, input));
+}

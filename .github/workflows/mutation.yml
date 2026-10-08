@@ -1,0 +1,33 @@
+name: Mutation
+
+# Stryker over src/ takes tens of minutes, too long for every push, so it runs weekly and on
+# demand. The run fails below a mutation score of 85% (stryker.config.mjs `thresholds.break`).
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      # Stryker 10 needs Node 22.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Mutation testing
+        run: npm run test:mutation
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: reports/mutation/

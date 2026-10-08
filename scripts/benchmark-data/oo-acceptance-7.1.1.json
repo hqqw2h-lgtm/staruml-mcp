@@ -1,0 +1,797 @@
+{
+  "versions": {
+    "staruml": {
+      "version": "7.1.1",
+      "apiVersion": "7.1.1"
+    },
+    "extension": {
+      "name": "staruml-mcp-extension",
+      "version": "0.3.0"
+    }
+  },
+  "seconds": 122,
+  "build": {
+    "tool": "build_model",
+    "callTokens": 14737,
+    "resultTokens": 518,
+    "ms": 6302
+  },
+  "model": {
+    "calls": 2,
+    "resultTokens": 1761
+  },
+  "sets": [
+    {
+      "label": "views",
+      "counts": {
+        "diagrams": 25,
+        "created": 758,
+        "updated": 0,
+        "unchanged": 0,
+        "deleted": 2
+      },
+      "quality": {
+        "min": 82,
+        "mean": 91,
+        "failing": []
+      },
+      "calls": 51,
+      "resultTokens": 3012,
+      "diagrams": [
+        {
+          "kind": "package",
+          "name": "ThingsBoard packages",
+          "viewpoint": "component",
+          "template": "component-packages",
+          "score": 90,
+          "loop": 90,
+          "failures": [],
+          "penalties": {
+            "edgeEdge": 5.7,
+            "shared": 1.9,
+            "length": 1.4,
+            "bends": 0.5,
+            "alignment": 0.3
+          },
+          "png": {
+            "bytes": 100219,
+            "answerTokens": 15
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Class - Entities and DAO",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 93,
+          "loop": 93,
+          "failures": [],
+          "penalties": {
+            "shared": 3.1,
+            "page": 1.7,
+            "length": 1.5,
+            "bends": 0.3,
+            "alignment": 0.1
+          },
+          "png": {
+            "bytes": 347430,
+            "answerTokens": 16
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Class - Application Services",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 94,
+          "loop": 94,
+          "failures": [],
+          "penalties": {
+            "nodeEdge": 4.3,
+            "length": 1,
+            "alignment": 0.6,
+            "bends": 0.3
+          },
+          "png": {
+            "bytes": 126534,
+            "answerTokens": 15
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Class - Rule Engine",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 93,
+          "loop": 93,
+          "failures": [],
+          "penalties": {
+            "shared": 5,
+            "length": 1.5,
+            "bends": 0.6,
+            "aspect": 0.2
+          },
+          "png": {
+            "bytes": 138302,
+            "answerTokens": 15
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Class - Transport",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 85,
+          "loop": 85,
+          "failures": [],
+          "penalties": {
+            "nodeEdge": 8.7,
+            "edgeEdge": 4,
+            "length": 1.5,
+            "bends": 0.5
+          },
+          "png": {
+            "bytes": 180076,
+            "answerTokens": 15
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Class - Actor System",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 98,
+          "loop": 98,
+          "failures": [],
+          "penalties": {
+            "length": 1.4,
+            "alignment": 0.8,
+            "bends": 0.3
+          },
+          "png": {
+            "bytes": 181336,
+            "answerTokens": 16
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Class - Security",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 89,
+          "loop": 89,
+          "failures": [],
+          "penalties": {
+            "nodeEdge": 8.7,
+            "length": 1.3,
+            "whitespace": 0.6,
+            "bends": 0.3
+          },
+          "png": {
+            "bytes": 136359,
+            "answerTokens": 15
+          }
+        },
+        {
+          "kind": "sequence",
+          "name": "Seq - Telemetry ingestion over MQTT",
+          "viewpoint": "runtime",
+          "template": "runtime-sequence",
+          "score": 94,
+          "loop": 94,
+          "failures": [],
+          "penalties": {
+            "whitespace": 2.2,
+            "page": 2,
+            "borders": 1.3,
+            "length": 0.8,
+            "bends": 0.1
+          },
+          "png": {
+            "bytes": 190601,
+            "answerTokens": 16
+          }
+        },
+        {
+          "kind": "sequence",
+          "name": "Seq - Rule chain processing",
+          "viewpoint": "runtime",
+          "template": "runtime-sequence",
+          "score": 92,
+          "loop": 92,
+          "failures": [],
+          "penalties": {
+            "borders": 4,
+            "whitespace": 2.2,
+            "length": 1.4,
+            "page": 0.7
+          },
+          "png": {
+            "bytes": 187635,
+            "answerTokens": 16
+          }
+        },
+        {
+          "kind": "sequence",
+          "name": "Seq - Device provisioning",
+          "viewpoint": "runtime",
+          "template": "runtime-sequence",
+          "score": 97,
+          "loop": 97,
+          "failures": [],
+          "penalties": {
+            "whitespace": 2.1,
+            "page": 0.7,
+            "length": 0.6
+          },
+          "png": {
+            "bytes": 168577,
+            "answerTokens": 16
+          }
+        },
+        {
+          "kind": "sequence",
+          "name": "Seq - Device claiming",
+          "viewpoint": "runtime",
+          "template": "runtime-sequence",
+          "score": 92,
+          "loop": 92,
+          "failures": [],
+          "penalties": {
+            "labels": 3,
+            "borders": 2.7,
+            "whitespace": 1.7,
+            "length": 0.9
+          },
+          "png": {
+            "bytes": 115517,
+            "answerTokens": 15
+          }
+        },
+        {
+          "kind": "sequence",
+          "name": "Seq - REST login",
+          "viewpoint": "runtime",
+          "template": "runtime-sequence",
+          "score": 94,
+          "loop": 94,
+          "failures": [],
+          "penalties": {
+            "borders": 2.7,
+            "whitespace": 2.2,
+            "length": 1.5,
+            "bends": 0.1
+          },
+          "png": {
+            "bytes": 120649,
+            "answerTokens": 15
+          }
+        },
+        {
+          "kind": "usecase",
+          "name": "Use Cases - Tenant Administrator",
+          "viewpoint": "actors-goals",
+          "template": "actors-goals-usecases",
+          "score": 85,
+          "loop": 85,
+          "failures": [],
+          "penalties": {
+            "nodeEdge": 13,
+            "borders": 1.3,
+            "length": 1,
+            "alignment": 0.1
+          },
+          "png": {
+            "bytes": 126829,
+            "answerTokens": 15
+          }
+        },
+        {
+          "kind": "usecase",
+          "name": "Use Cases - Customer User",
+          "viewpoint": "actors-goals",
+          "template": "actors-goals-usecases",
+          "score": 96,
+          "loop": 96,
+          "failures": [],
+          "penalties": {
+            "edgeEdge": 3.8,
+            "length": 0.6
+          },
+          "png": {
+            "bytes": 61641,
+            "answerTokens": 14
+          }
+        },
+        {
+          "kind": "usecase",
+          "name": "Use Cases - Device",
+          "viewpoint": "actors-goals",
+          "template": "actors-goals-usecases",
+          "score": 85,
+          "loop": 85,
+          "failures": [],
+          "penalties": {
+            "nodeEdge": 8.7,
+            "edgeEdge": 2.9,
+            "borders": 2.7,
+            "length": 0.9,
+            "alignment": 0.2
+          },
+          "png": {
+            "bytes": 84821,
+            "answerTokens": 14
+          }
+        },
+        {
+          "kind": "usecase",
+          "name": "Use Cases - System Administrator",
+          "viewpoint": "actors-goals",
+          "template": "actors-goals-usecases",
+          "score": 98,
+          "loop": 98,
+          "failures": [],
+          "penalties": {
+            "length": 1,
+            "alignment": 1
+          },
+          "png": {
+            "bytes": 41384,
+            "answerTokens": 14
+          }
+        },
+        {
+          "kind": "statemachine",
+          "name": "State - Device lifecycle",
+          "viewpoint": "lifecycle",
+          "template": "lifecycle-states",
+          "score": 85,
+          "loop": 85,
+          "failures": [],
+          "penalties": {
+            "labels": 6,
+            "edgeEdge": 4.4,
+            "whitespace": 2.8,
+            "length": 1.3,
+            "bends": 0.4
+          },
+          "png": {
+            "bytes": 88389,
+            "answerTokens": 14
+          }
+        },
+        {
+          "kind": "statemachine",
+          "name": "State - Alarm lifecycle",
+          "viewpoint": "lifecycle",
+          "template": "lifecycle-states",
+          "score": 96,
+          "loop": 96,
+          "failures": [],
+          "penalties": {
+            "whitespace": 2.1,
+            "length": 1,
+            "bends": 0.4
+          },
+          "png": {
+            "bytes": 61926,
+            "answerTokens": 14
+          }
+        },
+        {
+          "kind": "statemachine",
+          "name": "State - Rule node lifecycle",
+          "viewpoint": "lifecycle",
+          "template": "lifecycle-states",
+          "score": 92,
+          "loop": 92,
+          "failures": [],
+          "penalties": {
+            "whitespace": 3.2,
+            "edgeEdge": 2.7,
+            "length": 1.6,
+            "bends": 0.5
+          },
+          "png": {
+            "bytes": 90991,
+            "answerTokens": 15
+          }
+        },
+        {
+          "kind": "activity",
+          "name": "Activity - Rule chain execution",
+          "viewpoint": "runtime",
+          "template": "runtime-activity",
+          "score": 82,
+          "loop": 82,
+          "failures": [],
+          "penalties": {
+            "nodeEdge": 8.7,
+            "borders": 5.3,
+            "whitespace": 2.6,
+            "length": 1.4,
+            "alignment": 0.5
+          },
+          "png": {
+            "bytes": 161541,
+            "answerTokens": 16
+          }
+        },
+        {
+          "kind": "erd",
+          "name": "ThingsBoard data model",
+          "viewpoint": "data",
+          "template": "data-erd",
+          "score": 94,
+          "loop": 94,
+          "failures": [],
+          "penalties": {
+            "shared": 2.5,
+            "edgeEdge": 1.7,
+            "length": 1.4,
+            "bends": 0.4,
+            "alignment": 0.1
+          },
+          "png": {
+            "bytes": 256378,
+            "answerTokens": 16
+          }
+        },
+        {
+          "kind": "c4",
+          "name": "ThingsBoard containers",
+          "viewpoint": "container",
+          "template": "container-overview",
+          "score": 90,
+          "loop": 90,
+          "failures": [],
+          "penalties": {
+            "shared": 5,
+            "edgeEdge": 2.7,
+            "length": 1.5,
+            "bends": 0.5,
+            "alignment": 0.3
+          },
+          "png": {
+            "bytes": 283172,
+            "answerTokens": 16
+          }
+        },
+        {
+          "kind": "deployment",
+          "name": "Deployment - Microservices",
+          "viewpoint": "deployment",
+          "template": "deployment-nodes",
+          "score": 83,
+          "loop": 83,
+          "failures": [],
+          "penalties": {
+            "nodeEdge": 13,
+            "length": 2.1,
+            "edgeEdge": 1.3,
+            "bends": 0.3,
+            "alignment": 0.2
+          },
+          "png": {
+            "bytes": 151195,
+            "answerTokens": 15
+          }
+        },
+        {
+          "kind": "deployment",
+          "name": "Deployment - Monolith",
+          "viewpoint": "deployment",
+          "template": "deployment-nodes",
+          "score": 94,
+          "loop": 94,
+          "failures": [],
+          "penalties": {
+            "nodeEdge": 4.3,
+            "length": 1.4,
+            "alignment": 0.3,
+            "bends": 0.1
+          },
+          "png": {
+            "bytes": 68312,
+            "answerTokens": 14
+          }
+        },
+        {
+          "kind": "mindmap",
+          "name": "ThingsBoard Features",
+          "viewpoint": "actors-goals",
+          "template": "actors-goals-features",
+          "score": 86,
+          "loop": 86,
+          "failures": [],
+          "penalties": {
+            "nodeEdge": 13,
+            "length": 1,
+            "alignment": 0.1
+          },
+          "png": {
+            "bytes": 273724,
+            "answerTokens": 16
+          }
+        }
+      ]
+    },
+    {
+      "label": "perPackage",
+      "packages": 17,
+      "empty": [
+        "ThingsBoard/REST and WebSocket API \\(application\\.controller\\)",
+        "ThingsBoard/Microservice Packaging \\(msa\\)",
+        "ThingsBoard/Angular UI \\(ui-ngx\\)",
+        "ThingsBoard/Entity Data Query Service",
+        "ThingsBoard/Containers",
+        "ThingsBoard/Deployment"
+      ],
+      "quality": {
+        "min": 89,
+        "mean": 97,
+        "failing": []
+      },
+      "calls": 34,
+      "resultTokens": 3614,
+      "diagrams": [
+        {
+          "kind": "class",
+          "name": "Domain Model (common.data)",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 96,
+          "loop": 96,
+          "failures": [],
+          "penalties": {
+            "edgeEdge": 2.5,
+            "length": 1.1,
+            "bends": 0.3,
+            "alignment": 0.3
+          },
+          "png": {
+            "bytes": 188671,
+            "answerTokens": 16
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Messaging (common.message, common.queue)",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 99,
+          "loop": 99,
+          "failures": [],
+          "penalties": {
+            "whitespace": 0.7
+          },
+          "png": {
+            "bytes": 34282,
+            "answerTokens": 14
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Actor Framework (common.actor)",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 99,
+          "loop": 99,
+          "failures": [],
+          "penalties": {
+            "length": 1.1,
+            "bends": 0.1
+          },
+          "png": {
+            "bytes": 68015,
+            "answerTokens": 14
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Persistence (dao)",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 98,
+          "loop": 98,
+          "failures": [],
+          "penalties": {
+            "length": 0.9,
+            "alignment": 0.7,
+            "shared": 0.6,
+            "bends": 0.3
+          },
+          "png": {
+            "bytes": 154838,
+            "answerTokens": 15
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Rule Node Library",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 100,
+          "loop": 100,
+          "failures": [],
+          "png": {
+            "bytes": 36467,
+            "answerTokens": 14
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Rule Engine API",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 99,
+          "loop": 99,
+          "failures": [],
+          "penalties": {
+            "length": 0.4,
+            "alignment": 0.3
+          },
+          "png": {
+            "bytes": 79728,
+            "answerTokens": 14
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Transport API (common.transport)",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 99,
+          "loop": 99,
+          "failures": [],
+          "penalties": {
+            "length": 0.5,
+            "alignment": 0.4,
+            "bends": 0.3
+          },
+          "png": {
+            "bytes": 84350,
+            "answerTokens": 14
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Protocol Transports",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 99,
+          "loop": 99,
+          "failures": [],
+          "penalties": {
+            "length": 0.7,
+            "alignment": 0.4,
+            "bends": 0.3
+          },
+          "png": {
+            "bytes": 101608,
+            "answerTokens": 15
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Actor System (application.actors)",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 99,
+          "loop": 99,
+          "failures": [],
+          "penalties": {
+            "length": 1,
+            "alignment": 0.2,
+            "bends": 0.1
+          },
+          "png": {
+            "bytes": 57084,
+            "answerTokens": 14
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Application Services",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 94,
+          "loop": 94,
+          "failures": [],
+          "penalties": {
+            "nodeEdge": 4.3,
+            "length": 0.8,
+            "bends": 0.4,
+            "alignment": 0.2
+          },
+          "png": {
+            "bytes": 125368,
+            "answerTokens": 14
+          }
+        },
+        {
+          "kind": "class",
+          "name": "Security",
+          "viewpoint": "code",
+          "template": "code-classes",
+          "score": 89,
+          "loop": 89,
+          "failures": [],
+          "penalties": {
+            "nodeEdge": 8.7,
+            "length": 1.3,
+            "whitespace": 0.6,
+            "bends": 0.3
+          },
+          "png": {
+            "bytes": 135744,
+            "answerTokens": 15
+          }
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "calls": 86,
+    "callTokens": 17904,
+    "resultTokens": 7144,
+    "modelAndDerive": [
+      {
+        "tool": "build_model",
+        "resultTokens": 518
+      },
+      {
+        "tool": "derive_diagrams",
+        "resultTokens": 1243
+      },
+      {
+        "tool": "call_endpoint",
+        "resultTokens": 1077
+      },
+      {
+        "tool": "request_diagram",
+        "resultTokens": 170
+      },
+      {
+        "tool": "request_diagram",
+        "resultTokens": 175
+      },
+      {
+        "tool": "request_diagram",
+        "resultTokens": 169
+      },
+      {
+        "tool": "request_diagram",
+        "resultTokens": 171
+      },
+      {
+        "tool": "request_diagram",
+        "resultTokens": 166
+      },
+      {
+        "tool": "request_diagram",
+        "resultTokens": 170
+      },
+      {
+        "tool": "request_diagram",
+        "resultTokens": 171
+      },
+      {
+        "tool": "request_diagram",
+        "resultTokens": 167
+      },
+      {
+        "tool": "request_diagram",
+        "resultTokens": 171
+      },
+      {
+        "tool": "request_diagram",
+        "resultTokens": 166
+      },
+      {
+        "tool": "request_diagram",
+        "resultTokens": 165
+      }
+    ]
+  }
+}

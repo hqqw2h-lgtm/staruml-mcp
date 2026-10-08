@@ -1,0 +1,98 @@
+{
+  "versions": {
+    "staruml": {
+      "version": "7.1.1",
+      "apiVersion": "7.1.1"
+    },
+    "extension": {
+      "name": "staruml-mcp-extension",
+      "version": "0.3.0"
+    }
+  },
+  "mode": "replay of tests/fixtures/readability.messages.json; not model output unless that file was written by --record",
+  "spec": "ThingsBoard",
+  "model": "claude-haiku-4-5-20251001",
+  "threshold": 70,
+  "diagrams": [
+    {
+      "name": "Class - Rule Engine",
+      "kind": "class",
+      "viewpoint": "code",
+      "question": "Which types make up this part of the system, and how are they related?",
+      "score": 93,
+      "template": "code-classes",
+      "judgement": {
+        "answer": "[fixture] RuleChain owns RuleNodes; the relationships between the actors are hard to follow.",
+        "answerable": true,
+        "confidence": 55,
+        "missing": "[fixture] Multiplicities are too small to read."
+      },
+      "passed": false,
+      "tokens": {
+        "input": 1650,
+        "output": 41
+      }
+    },
+    {
+      "name": "Seq - Telemetry ingestion over MQTT",
+      "kind": "sequence",
+      "viewpoint": "runtime",
+      "question": "What happens, step by step and between which parts, when the scenario is triggered?",
+      "score": 94,
+      "template": "runtime-sequence",
+      "judgement": {
+        "answer": "[fixture] The device publishes over MQTT to MqttTransportHandler, which converts the payload and hands it to DefaultTransportService; the message is queued, consumed by the rule engine and saved by TimeseriesService.",
+        "answerable": true,
+        "confidence": 86,
+        "missing": ""
+      },
+      "passed": true,
+      "tokens": {
+        "input": 1720,
+        "output": 74
+      }
+    },
+    {
+      "name": "State - Alarm lifecycle",
+      "kind": "statemachine",
+      "viewpoint": "lifecycle",
+      "question": "Which states can this object be in, and what moves it between them?",
+      "score": 96,
+      "template": "lifecycle-states",
+      "judgement": {
+        "answer": "",
+        "answerable": false,
+        "confidence": 20,
+        "missing": "[fixture] The transitions carry no triggers."
+      },
+      "passed": false
+    }
+  ],
+  "passed": 1,
+  "failed": 2,
+  "meanConfidence": 54,
+  "notJudged": [
+    "ThingsBoard packages",
+    "Class - Entities and DAO",
+    "Class - Application Services",
+    "Class - Transport",
+    "Class - Actor System",
+    "Class - Security",
+    "Seq - Rule chain processing",
+    "Seq - Device provisioning",
+    "Seq - Device claiming",
+    "Seq - REST login",
+    "Use Cases - Tenant Administrator",
+    "Use Cases - Customer User",
+    "Use Cases - Device",
+    "Use Cases - System Administrator",
+    "State - Device lifecycle",
+    "State - Rule node lifecycle",
+    "Activity - Rule chain execution",
+    "ThingsBoard data model",
+    "ThingsBoard containers",
+    "Deployment - Microservices",
+    "Deployment - Monolith",
+    "ThingsBoard Features"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "staruml": {
+      "command": "npx",
+      "args": ["-y", "staruml-mcp"],
+      "env": { "STARUML_EXT_TOKEN": "${STARUML_EXT_TOKEN:-}" }
+    }
+  }
+}
